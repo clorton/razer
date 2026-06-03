@@ -16,6 +16,7 @@ path = 'document.rs'
 [dependencies]
 extendr-api = '*'
 rayon = "1"
+rand = "0.8"
 
 [profile.release]
 lto = true

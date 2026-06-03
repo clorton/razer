@@ -285,10 +285,10 @@ impl VectorProp {
 /// @export
 #[extendr]
 pub struct LaserFrame {
-    capacity: usize,
-    count: usize,
-    scalars: HashMap<String, ScalarProp>,
-    vectors: HashMap<String, VectorProp>,
+    pub(crate) capacity: usize,
+    pub(crate) count: usize,
+    pub(crate) scalars: HashMap<String, ScalarProp>,
+    pub(crate) vectors: HashMap<String, VectorProp>,
 }
 
 impl LaserFrame {

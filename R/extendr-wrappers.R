@@ -5,6 +5,135 @@
 #' @useDynLib razer, .registration = TRUE
 NULL
 
+#' Named integer vector of epidemic compartment state codes.
+#'
+#' Returns `c(S=0L, E=1L, I=2L, R=3L, D=-1L)`. Use these constants to set
+#' and test the `state` property on a people frame.
+#'
+#' @return Named integer vector with elements S, E, I, R, D.
+#' @export
+laser_states <- function() .Call(wrap__laser_states)
+
+#' Stochastic S→I transmission step (SI / SIR kernel).
+#'
+#' **Parallelism:** the active agent array is split into fixed chunks — one per
+#' Rayon worker thread — matching the `prange` pattern. The aggregation phase
+#' uses a thread-local fold then reduces by element-wise summation. The FOI
+#' phase runs each chunk independently; RNG is thread-local (`rand::thread_rng()`).
+#'
+#' All operations are performed in-place on the backing arrays; no copies are made.
+#'
+#' Node-level I counts are computed from current agent states and written to
+#' `nodes$I` (overwriting the previous value).
+#'
+#' **Required people properties:** `state` (integer), `node` (integer, 0-based),
+#' `timer` (integer).
+#' **Required nodes properties:** `N` (integer, total population per node),
+#' `I` (integer, will be overwritten).
+#'
+#' @param people       LaserFrame of agents.
+#' @param nodes        LaserFrame of patches/nodes.
+#' @param beta         Transmission rate (force of infection per infectious contact per tick).
+#' @param inf_duration Infectious period in ticks; written to `timer` on infection.
+#' @export
+step_transmission_si <- function(people, nodes, beta, inf_duration) .Call(wrap__step_transmission_si, people, nodes, beta, inf_duration)
+
+#' Stochastic S→E exposure step (SEIR kernel).
+#'
+#' Same FOI computation and parallelism as `step_transmission_si`, but newly
+#' exposed agents move to state E and `timer` is set to `exp_duration`
+#' (incubation period). Pair with `step_exposed_ei` to complete E→I.
+#'
+#' **Required people properties:** `state`, `node`, `timer` (all integer).
+#' **Required nodes properties:** `N`, `I` (integer; `I` is overwritten).
+#'
+#' @param people        LaserFrame of agents.
+#' @param nodes         LaserFrame of patches/nodes.
+#' @param beta          Transmission rate.
+#' @param exp_duration  Incubation period in ticks; written to `timer` on exposure.
+#' @export
+step_transmission_se <- function(people, nodes, beta, exp_duration) .Call(wrap__step_transmission_se, people, nodes, beta, exp_duration)
+
+#' Timer-based E→I transition (SEIR kernel).
+#'
+#' For each exposed agent, decrements `timer` by 1. When `timer` reaches 0
+#' the agent transitions to state I and `timer` is reset to `inf_duration`.
+#'
+#' @param people        LaserFrame of agents.
+#' @param inf_duration  Infectious period in ticks; written to `timer` on E→I.
+#' @export
+step_exposed_ei <- function(people, inf_duration) .Call(wrap__step_exposed_ei, people, inf_duration)
+
+#' Timer-based I→R transition (SIR / SEIR / SEIRS kernel).
+#'
+#' For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
+#' the agent transitions to state R and `timer` is reset to `imm_duration`.
+#'
+#' Setting `imm_duration = 0` is correct for SIR and SEIR (where
+#' `step_recovered_rs` is never called and the timer value after recovery does
+#' not matter). For SEIRS, pass the desired immunity period so that
+#' `step_recovered_rs` counts down from the correct starting value.
+#'
+#' @param people        LaserFrame of agents.
+#' @param imm_duration  Immunity period in ticks; written to `timer` on I→R.
+#'   Pass `0L` for SIR / SEIR models where waning is not modelled.
+#' @export
+step_infectious_ir <- function(people, imm_duration) .Call(wrap__step_infectious_ir, people, imm_duration)
+
+#' Timer-based I→S transition for SIS models (no immunity).
+#'
+#' For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
+#' the agent transitions directly back to state S.
+#'
+#' @param people LaserFrame of agents.
+#' @export
+step_infectious_is <- function(people) .Call(wrap__step_infectious_is, people)
+
+#' Timer-based R→S transition for waning-immunity models.
+#'
+#' For each recovered agent, decrements `timer` by 1. When `timer` reaches 0
+#' the agent becomes susceptible again (state S).
+#'
+#' @param people LaserFrame of agents.
+#' @export
+step_recovered_rs <- function(people) .Call(wrap__step_recovered_rs, people)
+
+#' Stochastic mortality step using a crude death rate.
+#'
+#' For each living (non-D) agent, draws Bernoulli(`cdr`) for death.
+#' Agents that die have their state set to D (-1) and `timer` set to 0.
+#' Dead agents remain in the frame — call `$squash(people$state >= 0L)`
+#' periodically to compact.
+#'
+#' Each agent's draw is independent; Rayon assigns a fixed slice to each worker
+#' thread. RNG is thread-local (no locking).
+#'
+#' @param people LaserFrame of agents.
+#' @param cdr    Crude death rate per agent per tick (probability in \[0, 1\]).
+#' @export
+step_mortality_cdr <- function(people, cdr) .Call(wrap__step_mortality_cdr, people, cdr)
+
+#' Stochastic birth step using a crude birth rate.
+#'
+#' **Parallelism:** the Bernoulli draw (does this agent give birth?) is
+#' parallelised across all active agents. The subsequent bookkeeping —
+#' incrementing `count` and writing new-agent properties — is serial because
+#' it modifies the frame's active count.
+#'
+#' For each active (non-D) agent, draws Bernoulli(`cbr`) for a birth event.
+#' Each birth creates one new agent that inherits the parent's `node` and
+#' starts in state S with `timer = 0`. Other scalar properties of new agents
+#' take the default value set at `add_scalar_property` time.
+#'
+#' Excess births beyond `capacity - count` are silently dropped.
+#'
+#' **Required people properties:** `state`, `node`, `timer` (all integer).
+#'
+#' @param people LaserFrame of agents.
+#' @param cbr    Crude birth rate per agent per tick (probability in \[0, 1\]).
+#' @export
+step_births_cbr <- function(people, cbr) .Call(wrap__step_births_cbr, people, cbr)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a
