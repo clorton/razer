@@ -5,8 +5,276 @@
 #' @useDynLib razer, .registration = TRUE
 NULL
 
-#' Return string `"Hello world!"` to R.
+#' Fixed-capacity struct-of-arrays population or patch data store.
+#'
+#' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a
+#' pre-allocated backing array; `count` tracks how many entries are active.
+#'
+#' **Scalar properties** store one value per entry (length = `capacity`).
+#'
+#' **Vector properties** store `length` values per entry, laid out column-major
+#' so that `get_col(name, col)` returns a contiguous memory slice. This is
+#' R's native matrix storage order and makes per-tick node-state updates fast.
+#'
 #' @export
-hello_world <- function() .Call(wrap__hello_world)
+#'
+#' @section Methods:
+#'\subsection{Method `new`}{
+#'Create a new `LaserFrame`.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`capacity`}{Maximum number of entries (agents or nodes). Must be positive.}
+#'\item{`initial_count`}{Number of entries active at construction. Pass `-1` (the default) to set active count equal to `capacity`.}
+#'}}
+#' \subsection{return}{
+#'A new `LaserFrame` object.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `count`}{
+#'Number of currently active entries.
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `capacity`}{
+#'Total capacity (fixed at construction).
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `scalar_names`}{
+#'Names of all scalar properties, sorted alphabetically.
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `vector_names`}{
+#'Names of all vector properties, sorted alphabetically.
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `vector_ncols`}{
+#'Number of columns in a named vector property.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Vector property name.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `describe`}{
+#'Human-readable summary of the frame's properties and memory layout.
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `add_scalar_property`}{
+#'Add a scalar property (one value per entry).
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Property name. Must not already exist.}
+#'\item{`dtype`}{`"integer"`, `"real"`, or `"logical"`.}
+#'\item{`default`}{Fill value for the backing array.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `add_vector_property`}{
+#'Add a vector property (`capacity × length`, column-major).
+#'
+#'The backing array has `capacity * length` elements.
+#'Element `[entry, col]` is stored at offset `entry + col * capacity`.
+#'Column `col` (all active entries for one time-step) is contiguous.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Property name. Must not already exist.}
+#'\item{`length`}{Number of columns (e.g., `nticks + 1` for a time-series).}
+#'\item{`dtype`}{`"integer"`, `"real"`, or `"logical"`.}
+#'\item{`default`}{Fill value.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `add`}{
+#'Activate `n` additional entries and return their 1-based index range.
+#'
+#'Returns `c(start, end)` (both inclusive, 1-based) so that
+#'`frame$get("prop")[start:end]` addresses the newly activated entries.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`n`}{Number of entries to activate.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `squash`}{
+#'Compact active entries, keeping only those where `mask` is `TRUE`.
+#'
+#'All scalar and vector properties are squashed in place.
+#'`count` is updated to the number of kept entries.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`mask`}{Logical vector of length `count`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `sort_by`}{
+#'Reorder active scalar properties by `perm` (1-based permutation of length `count`).
+#'
+#'Each property is permuted in parallel across available CPU threads via Rayon.
+#'Only scalar properties are reordered; vector properties (time-series) are left unchanged.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`perm`}{Integer vector of length `count`. Must be a valid permutation of `1:count`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `get`}{
+#'Return the active slice of a scalar property as an R vector.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Scalar property name.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `set`}{
+#'Overwrite the active slice of a scalar property from an R vector.
+#'
+#'Integer and real vectors are accepted for integer and real properties
+#'respectively; integer values are accepted for real properties (coerced).
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Scalar property name.}
+#'\item{`values`}{R vector of length `count`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `get_col`}{
+#'Return one column of a vector property as an R vector.
+#'
+#'The column is returned for active entries only (length = `count`).
+#'Columns are **1-based**: column 1 is the first column.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Vector property name.}
+#'\item{`col`}{Column index (1-based).}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `set_col`}{
+#'Overwrite one column of a vector property from an R vector.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Vector property name.}
+#'\item{`col`}{Column index (1-based).}
+#'\item{`values`}{R vector of length `count`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `get_matrix`}{
+#'Return a vector property as an R matrix of shape `(count, ncols)`.
+#'
+#'Because both R and the backing store use column-major layout, each
+#'column of the returned matrix is a direct contiguous copy.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`name`}{Vector property name.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+LaserFrame <- new.env(parent = emptyenv())
+
+LaserFrame$new <- function(capacity, initial_count) .Call(wrap__LaserFrame__new, capacity, initial_count)
+
+LaserFrame$count <- function() .Call(wrap__LaserFrame__count, self)
+
+LaserFrame$capacity <- function() .Call(wrap__LaserFrame__capacity, self)
+
+LaserFrame$scalar_names <- function() .Call(wrap__LaserFrame__scalar_names, self)
+
+LaserFrame$vector_names <- function() .Call(wrap__LaserFrame__vector_names, self)
+
+LaserFrame$vector_ncols <- function(name) .Call(wrap__LaserFrame__vector_ncols, self, name)
+
+LaserFrame$describe <- function() .Call(wrap__LaserFrame__describe, self)
+
+LaserFrame$add_scalar_property <- function(name, dtype, default) .Call(wrap__LaserFrame__add_scalar_property, self, name, dtype, default)
+
+LaserFrame$add_vector_property <- function(name, length, dtype, default) .Call(wrap__LaserFrame__add_vector_property, self, name, length, dtype, default)
+
+LaserFrame$add <- function(n) .Call(wrap__LaserFrame__add, self, n)
+
+LaserFrame$squash <- function(mask) .Call(wrap__LaserFrame__squash, self, mask)
+
+LaserFrame$sort_by <- function(perm) .Call(wrap__LaserFrame__sort_by, self, perm)
+
+LaserFrame$get <- function(name) .Call(wrap__LaserFrame__get, self, name)
+
+LaserFrame$set <- function(name, values) .Call(wrap__LaserFrame__set, self, name, values)
+
+LaserFrame$get_col <- function(name, col) .Call(wrap__LaserFrame__get_col, self, name, col)
+
+LaserFrame$set_col <- function(name, col, values) .Call(wrap__LaserFrame__set_col, self, name, col, values)
+
+LaserFrame$get_matrix <- function(name) .Call(wrap__LaserFrame__get_matrix, self, name)
+
+#' @rdname LaserFrame
+#' @usage NULL
+#' @export
+`$.LaserFrame` <- function (self, name) { func <- LaserFrame[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.LaserFrame` <- `$.LaserFrame`
 
 # nolint end
