@@ -7,8 +7,8 @@ test_that("new() with initial_count = -1 sets count equal to capacity", {
   # When: we construct a frame
   f <- LaserFrame$new(10L, -1L)
   # Then: both count and capacity are 10
-  expect_equal(f$count(), 10L)
-  expect_equal(f$capacity(), 10L)
+  expect_equal(f$count, 10L)
+  expect_equal(f$capacity, 10L)
 })
 
 test_that("new() with explicit initial_count initialises count correctly", {
@@ -16,8 +16,8 @@ test_that("new() with explicit initial_count initialises count correctly", {
   # When: we construct a frame
   f <- LaserFrame$new(20L, 5L)
   # Then: count is 5 and capacity is 20
-  expect_equal(f$count(), 5L)
-  expect_equal(f$capacity(), 20L)
+  expect_equal(f$count, 5L)
+  expect_equal(f$capacity, 20L)
 })
 
 test_that("new() panics on zero or negative capacity", {
@@ -117,7 +117,7 @@ test_that("add() activates entries and returns a 1-based inclusive range", {
   range <- f$add(3L)
   # Then: the returned range covers indices 6..8 and count becomes 8
   expect_equal(range, c(6L, 8L))
-  expect_equal(f$count(), 8L)
+  expect_equal(f$count, 8L)
 })
 
 test_that("add() leaves the existing active slice unchanged", {
@@ -152,7 +152,7 @@ test_that("squash() keeps only entries where mask is TRUE", {
   # When: we keep only odd-indexed entries
   f$squash(c(TRUE, FALSE, TRUE, FALSE, TRUE, FALSE))
   # Then: count is 3 and remaining ids are 1, 3, 5
-  expect_equal(f$count(), 3L)
+  expect_equal(f$count, 3L)
   expect_equal(f$get("id"), c(1L, 3L, 5L))
 })
 
@@ -161,7 +161,7 @@ test_that("squash() with all-TRUE mask is a no-op", {
   f$add_scalar_property("val", "integer", 0L)
   f$set("val", 1:5)
   f$squash(rep(TRUE, 5L))
-  expect_equal(f$count(), 5L)
+  expect_equal(f$count, 5L)
   expect_equal(f$get("val"), 1:5)
 })
 
@@ -169,7 +169,7 @@ test_that("squash() with all-FALSE mask empties the frame", {
   f <- LaserFrame$new(5L, 5L)
   f$add_scalar_property("val", "integer", 0L)
   f$squash(rep(FALSE, 5L))
-  expect_equal(f$count(), 0L)
+  expect_equal(f$count, 0L)
 })
 
 test_that("squash() panics when mask length does not match count", {
@@ -327,4 +327,88 @@ test_that("void-returning methods do not auto-print NULL", {
   expect_invisible(f$set_col("v", 1L, c(1.0, 2.0, 3.0)))
   expect_invisible(f$squash(rep(TRUE, 3L)))
   expect_invisible(f$sort_by(3:1))
+})
+
+# ── Direct property access via $ ──────────────────────────────────────────────
+
+test_that("frame$prop returns the active scalar property slice", {
+  # Given: a frame with an integer property set to known values
+  f <- LaserFrame$new(5L, 5L)
+  f$add_scalar_property("age", "integer", 0L)
+  f$set("age", c(10L, 20L, 30L, 40L, 50L))
+  # When: we access via $
+  result <- f$age
+  # Then: same as $get("age")
+  expect_equal(result, c(10L, 20L, 30L, 40L, 50L))
+})
+
+test_that("frame$prop returns only active entries after squash()", {
+  # Given: 6 entries, squash to 3
+  f <- LaserFrame$new(6L, 6L)
+  f$add_scalar_property("id", "integer", 0L)
+  f$set("id", 1:6)
+  f$squash(c(TRUE, FALSE, TRUE, FALSE, TRUE, FALSE))
+  # When: access via $
+  # Then: only 3 values
+  expect_equal(f$id, c(1L, 3L, 5L))
+})
+
+test_that("frame$mat_prop returns the full vector property matrix", {
+  # Given: a 3-entry frame with a 2-column vector property
+  f <- LaserFrame$new(3L, 3L)
+  f$add_vector_property("S", 2L, "integer", 0L)
+  f$set_col("S", 1L, c(1L, 2L, 3L))
+  f$set_col("S", 2L, c(4L, 5L, 6L))
+  # When: access via $
+  m <- f$S
+  # Then: identical to $get_matrix("S")
+  expect_equal(dim(m), c(3L, 2L))
+  expect_equal(m[, 1], c(1L, 2L, 3L))
+  expect_equal(m[, 2], c(4L, 5L, 6L))
+})
+
+test_that("frame$name returns NULL for an unknown name", {
+  f <- LaserFrame$new(3L, 3L)
+  expect_null(f$no_such_thing)
+})
+
+test_that("count and capacity are plain values, not functions", {
+  f <- LaserFrame$new(5L, 3L)
+  expect_equal(f$count,    3L)
+  expect_equal(f$capacity, 5L)
+  expect_false(is.function(f$count))
+  expect_false(is.function(f$capacity))
+})
+
+# ── Direct property assignment via $<- ───────────────────────────────────────
+
+test_that("frame$prop <- values sets a scalar property", {
+  # Given: a frame with an integer property initialised to zeros
+  f <- LaserFrame$new(4L, 4L)
+  f$add_scalar_property("age", "integer", 0L)
+  # When: we assign via $<-
+  f$age <- c(5L, 10L, 15L, 20L)
+  # Then: $get() reflects the new values
+  expect_equal(f$get("age"), c(5L, 10L, 15L, 20L))
+})
+
+test_that("frame$prop <- values round-trips for real and logical properties", {
+  f <- LaserFrame$new(3L, 3L)
+  f$add_scalar_property("weight", "real", 0.0)
+  f$add_scalar_property("flag", "logical", FALSE)
+  f$weight <- c(1.1, 2.2, 3.3)
+  f$flag   <- c(TRUE, FALSE, TRUE)
+  expect_equal(f$weight, c(1.1, 2.2, 3.3))
+  expect_equal(f$flag,   c(TRUE, FALSE, TRUE))
+})
+
+test_that("$<- on a vector property raises an informative error", {
+  f <- LaserFrame$new(3L, 3L)
+  f$add_vector_property("S", 2L, "real", 0.0)
+  expect_error(f$S <- matrix(0, 3, 2), "set_col")
+})
+
+test_that("$<- on an unknown name raises an error", {
+  f <- LaserFrame$new(3L, 3L)
+  expect_error(f$no_such_thing <- 42L)
 })

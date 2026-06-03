@@ -46,32 +46,32 @@ library(razer)
 # Create a frame: 1 000 agents, all active from the start
 pop <- LaserFrame$new(1000L, -1L)
 
-# Scalar property: one value per agent
+# Register properties (one value per agent)
 pop$add_scalar_property("age",   "integer", 0L)
 pop$add_scalar_property("alive", "logical", TRUE)
 
-# Assign ages drawn from a distribution
-pop$set("age", sample(0:80, 1000L, replace = TRUE))
+# $ shorthand: read and write scalar properties directly
+pop$age   <- sample(0:80, 1000L, replace = TRUE)
+pop$alive <- sample(c(TRUE, FALSE), 1000L, replace = TRUE, prob = c(0.99, 0.01))
 
 # Activate 50 more agents (capacity must allow it)
 large_pop <- LaserFrame$new(2000L, 1000L)
 large_pop$add_scalar_property("age", "integer", 0L)
-range <- large_pop$add(50L)          # returns c(1001L, 1050L)
-large_pop$set("age", c(large_pop$get("age"),
-                        sample(20:40, 50L, replace = TRUE)))
+range <- large_pop$add(50L)                   # returns c(1001L, 1050L)
+large_pop$age[range[1]:range[2]] <- sample(20:40, 50L, replace = TRUE)
 
-# Vector property: capacity × nticks column-major matrix
-#   get_col("S", tick) returns a contiguous slice — no copying
+# Vector property: capacity × nticks, column-major
+#   $S returns the full (count × ncols) matrix; $get_col("S", tick) is faster
+#   for single-tick access (one contiguous copy, no column gathering)
 nticks <- 365L
 pop$add_vector_property("S", nticks, "integer", 0L)
-pop$set_col("S", 1L, rep(950L, 1000L))   # initial susceptibles
+pop$set_col("S", 1L, rep(950L, pop$count))    # initial susceptibles
 
 # Compact: remove dead agents
-alive <- pop$get("alive")
-pop$squash(alive)                         # in-place; count updated
+pop$squash(pop$alive)                         # in-place; count updated
 
-# Sort agents by age (rayon-parallel across all scalar properties)
-pop$sort_by(order(pop$get("age")))
+# Sort agents by age (Rayon-parallel across all scalar properties)
+pop$sort_by(order(pop$age))
 
 # Describe the frame layout
 cat(pop$describe())
@@ -91,8 +91,8 @@ cat(pop$describe())
 
 | Call | Returns |
 |---|---|
-| `f$count()` | Number of currently active entries (`integer`) |
-| `f$capacity()` | Fixed capacity set at construction (`integer`) |
+| `f$count` | Number of currently active entries (`integer`) |
+| `f$capacity` | Fixed capacity set at construction (`integer`) |
 | `f$scalar_names()` | Alphabetically sorted names of scalar properties (`character`) |
 | `f$vector_names()` | Alphabetically sorted names of vector properties (`character`) |
 | `f$vector_ncols(name)` | Number of columns in a vector property (`integer`) |
@@ -113,6 +113,10 @@ Properties may not be added twice under the same name.
 |---|---|
 | `f$get(name)` | Return the active slice `[1:count]` as an R vector. |
 | `f$set(name, values)` | Overwrite the active slice from an R vector of length `count`. |
+| `f$prop` | Shorthand for `f$get("prop")`. |
+| `f$prop <- values` | Shorthand for `f$set("prop", values)`. |
+
+Method names take priority over property names — if a property is named `count`, use `f$get("count")` explicitly.
 
 ### Vector property access
 
@@ -121,6 +125,7 @@ Properties may not be added twice under the same name.
 | `f$get_col(name, col)` | Return column `col` (1-based) for active entries — a contiguous memory copy. |
 | `f$set_col(name, col, values)` | Overwrite column `col` (1-based) for active entries. |
 | `f$get_matrix(name)` | Return the full active portion as a `(count × ncols)` R matrix. |
+| `f$prop` | Shorthand for `f$get_matrix("prop")` when `prop` is a vector property. |
 
 ### Lifecycle
 
