@@ -32,6 +32,10 @@ All notable changes to this project are documented here.
   the step kernels, and `tests/testthat/test-distributions-validation.R` validating
   parameter wiring against R's reference implementations (`qnorm`, `qunif`,
   `qgamma`, `qpois`/`dpois`) over one million draws.
+- `examples/sir_attack_fraction.R` — a runnable SIR example that plots the S/I/R
+  trajectories and compares the simulated final attack fraction against the
+  Kermack–McKendrick final-size relation `A = 1 - exp(-R0 * A)` across an `R0`
+  sweep (with `examples/README.md` and sample output plots).
 
 ### Changed
 - Distributions return **floating-point** values; the integer rounding for state

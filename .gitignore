@@ -4,3 +4,4 @@ src/Makevars.win
 
 .RData
 .Rhistory
+.DS_Store
