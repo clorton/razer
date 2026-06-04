@@ -21,6 +21,9 @@ per-agent period. Draws are rounded to the nearest tick and clamped to a
 minimum of 1.
 }
 \details{
+A fixed-state shorthand for
+\code{\link[=step_timer_expire_set]{step_timer_expire_set()}}\verb{(people, E, I, inf_dist)}.
+
 \strong{RNG:} thread-local — each Rayon worker draws from its own \code{thread_rng}
 (Pattern B: the kernel owns the RNG and passes it into the sampler). The
 single \code{inf_dist} handle is shared across threads by reference.

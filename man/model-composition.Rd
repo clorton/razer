@@ -41,9 +41,24 @@ which runs before the transmission tally — yields the full \code{beta * D}.
 The \code{sir_attack_fraction.R} and \code{seir_attack_fraction.R} scripts in the
 package's \verb{examples/} directory demonstrate both, validating the simulated
 attack fraction against the Kermack-McKendrick final-size relation.
+
+\strong{Generalized timer kernels.} The four named timer transitions are
+fixed-state shorthands over two generalized kernels parameterized by the
+\code{from}/\code{to} state codes — use these directly to add transitions the named
+kernels do not cover:
+\describe{
+\item{\code{\link[=step_timer_expire]{step_timer_expire()}}\verb{(people, from, to)}}{transition into an
+\emph{absorbing} (untimed) state; the timer is left at 0. Generalizes
+\code{\link[=step_infectious_is]{step_infectious_is()}} (I->S) and \code{\link[=step_recovered_rs]{step_recovered_rs()}} (R->S).}
+\item{\code{\link[=step_timer_expire_set]{step_timer_expire_set()}}\verb{(people, from, to, dist)}}{transition into a
+state with \emph{its own} duration; a fresh per-agent timer is drawn from
+\code{dist}. Generalizes \code{\link[=step_exposed_ei]{step_exposed_ei()}} (E->I) and \code{\link[=step_infectious_ir]{step_infectious_ir()}}
+(I->R).}
+}
 }
 \seealso{
 \code{\link[=step_transmission_si]{step_transmission_si()}}, \code{\link[=step_transmission_se]{step_transmission_se()}},
+\code{\link[=step_timer_expire]{step_timer_expire()}}, \code{\link[=step_timer_expire_set]{step_timer_expire_set()}},
 \code{\link[=step_exposed_ei]{step_exposed_ei()}}, \code{\link[=step_infectious_ir]{step_infectious_ir()}}, \code{\link[=step_infectious_is]{step_infectious_is()}},
 \code{\link[=step_recovered_rs]{step_recovered_rs()}}
 }

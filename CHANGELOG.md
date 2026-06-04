@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- Two **generalized timer-expiry kernels** (mirroring laser-generic's
+  `nb_timer_update` and `nb_timer_update_timer_set`), parameterized by the
+  `from`/`to` state codes so any timer-driven transition can be expressed without
+  a bespoke kernel:
+  - `step_timer_expire(people, from_state, to_state)` — transition into an
+    *absorbing* (untimed) state; the timer is left at 0 on arrival (e.g. I→S, R→S).
+  - `step_timer_expire_set(people, from_state, to_state, duration_dist)` —
+    transition into a state with *its own* duration; a fresh per-agent timer is
+    drawn from `duration_dist` on arrival (e.g. E→I, I→R with waning).
+  The four named kernels (`step_exposed_ei`, `step_infectious_ir`,
+  `step_infectious_is`, `step_recovered_rs`) are now thin, fixed-state wrappers
+  over these two helpers, so the shared decrement/transition loop lives in one
+  place. Covered by `tests/testthat/test-timer-kernels.R`, which proves the
+  wrappers are equivalent to the generalized kernels.
 - `distributions` module exposing parameterized probability distributions to R as
   opaque `Distribution` handles. Constructors use a `dist_` prefix to avoid masking
   base/stats functions (e.g. `base::gamma`, `stats::poisson`):

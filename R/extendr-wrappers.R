@@ -58,6 +58,56 @@ step_transmission_si <- function(people, nodes, beta, inf_dist) .Call(wrap__step
 #' @export
 step_transmission_se <- function(people, nodes, beta, exp_dist) .Call(wrap__step_transmission_se, people, nodes, beta, exp_dist)
 
+#' Generalized timer-expiry transition into an *absorbing* (untimed) state.
+#'
+#' For each agent currently in `from_state`, decrements `timer` by 1; when the
+#' timer reaches 0 the agent moves to `to_state` and its timer is left at 0. The
+#' destination carries no duration of its own — this is the "transition to an
+#' absorbing state" generalization (laser-generic's `nb_timer_update`), e.g.
+#' I→S in SIS, I→R in SIR, or R→S waning.
+#'
+#' This is the engine behind [step_infectious_is()] (I→S) and
+#' [step_recovered_rs()] (R→S):
+#' `step_timer_expire(people, laser_states()[["I"]], laser_states()[["S"]])`
+#' is exactly `step_infectious_is(people)`.
+#'
+#' **Required people properties:** `state`, `timer` (both integer).
+#'
+#' @param people     LaserFrame of agents.
+#' @param from_state Integer state code an agent must currently occupy to be eligible.
+#' @param to_state   Integer state code an agent moves to when its timer expires.
+#' @export
+step_timer_expire <- function(people, from_state, to_state) .Call(wrap__step_timer_expire, people, from_state, to_state)
+
+#' Generalized timer-expiry transition into a state that has *its own* duration.
+#'
+#' For each agent currently in `from_state`, decrements `timer` by 1; when the
+#' timer reaches 0 the agent moves to `to_state` and `timer` is reset to a fresh
+#' per-agent draw from `duration_dist` (rounded to whole ticks, clamped to a
+#' minimum of 1). This is the "transition to a state with its own duration timer"
+#' generalization (laser-generic's `nb_timer_update_timer_set`), e.g. E→I in
+#' SEIR or I→R with waning in SEIRS.
+#'
+#' This is the engine behind [step_exposed_ei()] (E→I) and
+#' [step_infectious_ir()] (I→R):
+#' `step_timer_expire_set(people, laser_states()[["E"]], laser_states()[["I"]], inf_dist)`
+#' is exactly `step_exposed_ei(people, inf_dist)`.
+#'
+#' **RNG:** thread-local (Pattern B) — each Rayon worker draws from its own
+#' `thread_rng`; the single `duration_dist` handle is shared across threads by
+#' reference.
+#'
+#' **Required people properties:** `state`, `timer` (both integer).
+#'
+#' @param people        LaserFrame of agents.
+#' @param from_state    Integer state code an agent must currently occupy to be eligible.
+#' @param to_state      Integer state code an agent moves to when its timer expires.
+#' @param duration_dist A `Distribution` (e.g. `dist_constant()` or `dist_normal()`)
+#'   giving the destination state's duration in ticks; sampled per transitioning
+#'   agent and written to `timer`.
+#' @export
+step_timer_expire_set <- function(people, from_state, to_state, duration_dist) .Call(wrap__step_timer_expire_set, people, from_state, to_state, duration_dist)
+
 #' Timer-based E→I transition (SEIR kernel).
 #'
 #' For each exposed agent, decrements `timer` by 1. When `timer` reaches 0 the
@@ -66,6 +116,9 @@ step_transmission_se <- function(people, nodes, beta, exp_dist) .Call(wrap__step
 #' fixed period of `d` ticks, or e.g. `dist_normal(mean, variance)` for a stochastic
 #' per-agent period. Draws are rounded to the nearest tick and clamped to a
 #' minimum of 1.
+#'
+#' A fixed-state shorthand for
+#' [step_timer_expire_set()]`(people, E, I, inf_dist)`.
 #'
 #' **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
 #' (Pattern B: the kernel owns the RNG and passes it into the sampler). The
@@ -82,6 +135,9 @@ step_exposed_ei <- function(people, inf_dist) .Call(wrap__step_exposed_ei, peopl
 #' For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
 #' the agent transitions to state R and `timer` is set to a draw from `imm_dist`,
 #' the immunity (waning) period.
+#'
+#' A fixed-state shorthand for
+#' [step_timer_expire_set()]`(people, I, R, imm_dist)`.
 #'
 #' For SEIRS, pass the desired immunity distribution so that `step_recovered_rs`
 #' counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
@@ -103,6 +159,8 @@ step_infectious_ir <- function(people, imm_dist) .Call(wrap__step_infectious_ir,
 #' For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
 #' the agent transitions directly back to state S.
 #'
+#' A fixed-state shorthand for [step_timer_expire()]`(people, I, S)`.
+#'
 #' @param people LaserFrame of agents.
 #' @export
 step_infectious_is <- function(people) .Call(wrap__step_infectious_is, people)
@@ -111,6 +169,8 @@ step_infectious_is <- function(people) .Call(wrap__step_infectious_is, people)
 #'
 #' For each recovered agent, decrements `timer` by 1. When `timer` reaches 0
 #' the agent becomes susceptible again (state S).
+#'
+#' A fixed-state shorthand for [step_timer_expire()]`(people, R, S)`.
 #'
 #' @param people LaserFrame of agents.
 #' @export

@@ -38,7 +38,22 @@
 #' package's `examples/` directory demonstrate both, validating the simulated
 #' attack fraction against the Kermack-McKendrick final-size relation.
 #'
+#' **Generalized timer kernels.** The four named timer transitions are
+#' fixed-state shorthands over two generalized kernels parameterized by the
+#' `from`/`to` state codes — use these directly to add transitions the named
+#' kernels do not cover:
+#' \describe{
+#'   \item{[step_timer_expire()]`(people, from, to)`}{transition into an
+#'     *absorbing* (untimed) state; the timer is left at 0. Generalizes
+#'     [step_infectious_is()] (I->S) and [step_recovered_rs()] (R->S).}
+#'   \item{[step_timer_expire_set()]`(people, from, to, dist)`}{transition into a
+#'     state with *its own* duration; a fresh per-agent timer is drawn from
+#'     `dist`. Generalizes [step_exposed_ei()] (E->I) and [step_infectious_ir()]
+#'     (I->R).}
+#' }
+#'
 #' @seealso [step_transmission_si()], [step_transmission_se()],
+#'   [step_timer_expire()], [step_timer_expire_set()],
 #'   [step_exposed_ei()], [step_infectious_ir()], [step_infectious_is()],
 #'   [step_recovered_rs()]
 #' @name model-composition

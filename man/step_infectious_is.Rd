@@ -13,3 +13,6 @@ step_infectious_is(people)
 For each infectious agent, decrements \code{timer} by 1. When \code{timer} reaches 0
 the agent transitions directly back to state S.
 }
+\details{
+A fixed-state shorthand for \code{\link[=step_timer_expire]{step_timer_expire()}}\verb{(people, I, S)}.
+}

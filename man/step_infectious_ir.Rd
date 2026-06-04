@@ -19,6 +19,9 @@ the agent transitions to state R and \code{timer} is set to a draw from \code{im
 the immunity (waning) period.
 }
 \details{
+A fixed-state shorthand for
+\code{\link[=step_timer_expire_set]{step_timer_expire_set()}}\verb{(people, I, R, imm_dist)}.
+
 For SEIRS, pass the desired immunity distribution so that \code{step_recovered_rs}
 counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
 \code{step_recovered_rs} never called) the R timer is never read, so any

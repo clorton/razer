@@ -292,26 +292,58 @@ fn step_transmission_se(
 // Each of these functions is a pure per-agent operation with no inter-agent
 // dependencies, so the Rayon chunk pattern is both correct and optimal.
 // All writes are in-place; there is no copy-in / copy-out.
+//
+// Two generalized kernels (mirroring laser-generic's `nb_timer_update` and
+// `nb_timer_update_timer_set`) capture the full pattern of timer-driven state
+// change, parameterized by the `from`/`to` state codes:
+//
+//   * `step_timer_expire`     — transition into an *absorbing* (untimed) state;
+//                               the timer is left at 0 on arrival.
+//   * `step_timer_expire_set` — transition into a state that has *its own*
+//                               duration; a fresh per-agent timer is drawn from
+//                               a `Distribution` on arrival.
+//
+// The four named kernels below (`step_exposed_ei`, `step_infectious_ir`,
+// `step_infectious_is`, `step_recovered_rs`) are thin, fixed-state wrappers over
+// these two helpers, so the model-building vocabulary stays readable while the
+// core loop lives in exactly one place.
 
-/// Timer-based E→I transition (SEIR kernel).
-///
-/// For each exposed agent, decrements `timer` by 1. When `timer` reaches 0 the
-/// agent transitions to state I and `timer` is set to a fresh draw from
-/// `inf_dist`, the infectious-period distribution. Pass `dist_constant(d)` for a
-/// fixed period of `d` ticks, or e.g. `dist_normal(mean, variance)` for a stochastic
-/// per-agent period. Draws are rounded to the nearest tick and clamped to a
-/// minimum of 1.
-///
-/// **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
-/// (Pattern B: the kernel owns the RNG and passes it into the sampler). The
-/// single `inf_dist` handle is shared across threads by reference.
-///
-/// @param people    LaserFrame of agents.
-/// @param inf_dist  A `Distribution` (e.g. from `dist_constant()` or `dist_normal()`)
-///   giving the infectious period in ticks; sampled and written to `timer` on E→I.
-/// @export
-#[extendr]
-fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
+// Private core loop for the absorbing-state transition. Decrements the timer of
+// every agent in `from_state`; on expiry the agent moves to `to_state` with its
+// timer reset to 0 (the destination carries no duration of its own).
+fn timer_expire_impl(people: &mut LaserFrame, from_state: i32, to_state: i32) {
+    let count     = people.count;
+    let state_ptr = int_ptr_mut(people, "state");
+    let timer_ptr = int_ptr_mut(people, "timer");
+
+    // SAFETY: state and timer are distinct Vec allocations; Rayon gives each
+    // (s, t) pair to exactly one thread.
+    let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
+    let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
+
+    state
+        .par_iter_mut()
+        .zip(timer.par_iter_mut())
+        .for_each(|(s, t)| {
+            if *s == from_state {
+                *t -= 1;
+                if *t <= 0 {
+                    *s = to_state;
+                    *t = 0;
+                }
+            }
+        });
+}
+
+// Private core loop for the timed-destination transition. Like `timer_expire_impl`
+// but, on expiry, resets the timer to a fresh draw from `dist` (rounded to whole
+// ticks, clamped to a minimum of 1) — the destination state's own duration.
+fn timer_expire_set_impl(
+    people: &mut LaserFrame,
+    from_state: i32,
+    to_state: i32,
+    dist: &Distribution,
+) {
     let count     = people.count;
     let state_ptr = int_ptr_mut(people, "state");
     let timer_ptr = int_ptr_mut(people, "timer");
@@ -328,14 +360,100 @@ fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .for_each_init(rand::thread_rng, |rng, (s, t)| {
-            if *s == STATE_E {
+            if *s == from_state {
                 *t -= 1;
                 if *t <= 0 {
-                    *s = STATE_I;
-                    *t = duration_ticks(inf_dist.sample(rng));
+                    *s = to_state;
+                    *t = duration_ticks(dist.sample(rng));
                 }
             }
         });
+}
+
+/// Generalized timer-expiry transition into an *absorbing* (untimed) state.
+///
+/// For each agent currently in `from_state`, decrements `timer` by 1; when the
+/// timer reaches 0 the agent moves to `to_state` and its timer is left at 0. The
+/// destination carries no duration of its own — this is the "transition to an
+/// absorbing state" generalization (laser-generic's `nb_timer_update`), e.g.
+/// I→S in SIS, I→R in SIR, or R→S waning.
+///
+/// This is the engine behind [step_infectious_is()] (I→S) and
+/// [step_recovered_rs()] (R→S):
+/// `step_timer_expire(people, laser_states()[["I"]], laser_states()[["S"]])`
+/// is exactly `step_infectious_is(people)`.
+///
+/// **Required people properties:** `state`, `timer` (both integer).
+///
+/// @param people     LaserFrame of agents.
+/// @param from_state Integer state code an agent must currently occupy to be eligible.
+/// @param to_state   Integer state code an agent moves to when its timer expires.
+/// @export
+#[extendr]
+fn step_timer_expire(people: &mut LaserFrame, from_state: i32, to_state: i32) {
+    timer_expire_impl(people, from_state, to_state);
+}
+
+/// Generalized timer-expiry transition into a state that has *its own* duration.
+///
+/// For each agent currently in `from_state`, decrements `timer` by 1; when the
+/// timer reaches 0 the agent moves to `to_state` and `timer` is reset to a fresh
+/// per-agent draw from `duration_dist` (rounded to whole ticks, clamped to a
+/// minimum of 1). This is the "transition to a state with its own duration timer"
+/// generalization (laser-generic's `nb_timer_update_timer_set`), e.g. E→I in
+/// SEIR or I→R with waning in SEIRS.
+///
+/// This is the engine behind [step_exposed_ei()] (E→I) and
+/// [step_infectious_ir()] (I→R):
+/// `step_timer_expire_set(people, laser_states()[["E"]], laser_states()[["I"]], inf_dist)`
+/// is exactly `step_exposed_ei(people, inf_dist)`.
+///
+/// **RNG:** thread-local (Pattern B) — each Rayon worker draws from its own
+/// `thread_rng`; the single `duration_dist` handle is shared across threads by
+/// reference.
+///
+/// **Required people properties:** `state`, `timer` (both integer).
+///
+/// @param people        LaserFrame of agents.
+/// @param from_state    Integer state code an agent must currently occupy to be eligible.
+/// @param to_state      Integer state code an agent moves to when its timer expires.
+/// @param duration_dist A `Distribution` (e.g. `dist_constant()` or `dist_normal()`)
+///   giving the destination state's duration in ticks; sampled per transitioning
+///   agent and written to `timer`.
+/// @export
+#[extendr]
+fn step_timer_expire_set(
+    people: &mut LaserFrame,
+    from_state: i32,
+    to_state: i32,
+    duration_dist: &Distribution,
+) {
+    timer_expire_set_impl(people, from_state, to_state, duration_dist);
+}
+
+/// Timer-based E→I transition (SEIR kernel).
+///
+/// For each exposed agent, decrements `timer` by 1. When `timer` reaches 0 the
+/// agent transitions to state I and `timer` is set to a fresh draw from
+/// `inf_dist`, the infectious-period distribution. Pass `dist_constant(d)` for a
+/// fixed period of `d` ticks, or e.g. `dist_normal(mean, variance)` for a stochastic
+/// per-agent period. Draws are rounded to the nearest tick and clamped to a
+/// minimum of 1.
+///
+/// A fixed-state shorthand for
+/// [step_timer_expire_set()]`(people, E, I, inf_dist)`.
+///
+/// **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
+/// (Pattern B: the kernel owns the RNG and passes it into the sampler). The
+/// single `inf_dist` handle is shared across threads by reference.
+///
+/// @param people    LaserFrame of agents.
+/// @param inf_dist  A `Distribution` (e.g. from `dist_constant()` or `dist_normal()`)
+///   giving the infectious period in ticks; sampled and written to `timer` on E→I.
+/// @export
+#[extendr]
+fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
+    timer_expire_set_impl(people, STATE_E, STATE_I, inf_dist);
 }
 
 /// Timer-based I→R transition (SIR / SEIR / SEIRS kernel).
@@ -343,6 +461,9 @@ fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
 /// For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
 /// the agent transitions to state R and `timer` is set to a draw from `imm_dist`,
 /// the immunity (waning) period.
+///
+/// A fixed-state shorthand for
+/// [step_timer_expire_set()]`(people, I, R, imm_dist)`.
 ///
 /// For SEIRS, pass the desired immunity distribution so that `step_recovered_rs`
 /// counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
@@ -359,26 +480,7 @@ fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
 /// @export
 #[extendr]
 fn step_infectious_ir(people: &mut LaserFrame, imm_dist: &Distribution) {
-    let count     = people.count;
-    let state_ptr = int_ptr_mut(people, "state");
-    let timer_ptr = int_ptr_mut(people, "timer");
-
-    // SAFETY: same as step_exposed_ei.
-    let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
-    let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
-
-    state
-        .par_iter_mut()
-        .zip(timer.par_iter_mut())
-        .for_each_init(rand::thread_rng, |rng, (s, t)| {
-            if *s == STATE_I {
-                *t -= 1;
-                if *t <= 0 {
-                    *s = STATE_R;
-                    *t = duration_ticks(imm_dist.sample(rng));
-                }
-            }
-        });
+    timer_expire_set_impl(people, STATE_I, STATE_R, imm_dist);
 }
 
 /// Timer-based I→S transition for SIS models (no immunity).
@@ -386,30 +488,13 @@ fn step_infectious_ir(people: &mut LaserFrame, imm_dist: &Distribution) {
 /// For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
 /// the agent transitions directly back to state S.
 ///
+/// A fixed-state shorthand for [step_timer_expire()]`(people, I, S)`.
+///
 /// @param people LaserFrame of agents.
 /// @export
 #[extendr]
 fn step_infectious_is(people: &mut LaserFrame) {
-    let count     = people.count;
-    let state_ptr = int_ptr_mut(people, "state");
-    let timer_ptr = int_ptr_mut(people, "timer");
-
-    // SAFETY: same as step_exposed_ei.
-    let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
-    let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
-
-    state
-        .par_iter_mut()
-        .zip(timer.par_iter_mut())
-        .for_each(|(s, t)| {
-            if *s == STATE_I {
-                *t -= 1;
-                if *t <= 0 {
-                    *s = STATE_S;
-                    *t = 0;
-                }
-            }
-        });
+    timer_expire_impl(people, STATE_I, STATE_S);
 }
 
 /// Timer-based R→S transition for waning-immunity models.
@@ -417,30 +502,13 @@ fn step_infectious_is(people: &mut LaserFrame) {
 /// For each recovered agent, decrements `timer` by 1. When `timer` reaches 0
 /// the agent becomes susceptible again (state S).
 ///
+/// A fixed-state shorthand for [step_timer_expire()]`(people, R, S)`.
+///
 /// @param people LaserFrame of agents.
 /// @export
 #[extendr]
 fn step_recovered_rs(people: &mut LaserFrame) {
-    let count     = people.count;
-    let state_ptr = int_ptr_mut(people, "state");
-    let timer_ptr = int_ptr_mut(people, "timer");
-
-    // SAFETY: same as step_exposed_ei.
-    let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
-    let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
-
-    state
-        .par_iter_mut()
-        .zip(timer.par_iter_mut())
-        .for_each(|(s, t)| {
-            if *s == STATE_R {
-                *t -= 1;
-                if *t <= 0 {
-                    *s = STATE_S;
-                    *t = 0;
-                }
-            }
-        });
+    timer_expire_impl(people, STATE_R, STATE_S);
 }
 
 // ── Demography ────────────────────────────────────────────────────────────────
@@ -572,6 +640,8 @@ extendr_module! {
     fn laser_states;
     fn step_transmission_si;
     fn step_transmission_se;
+    fn step_timer_expire;
+    fn step_timer_expire_set;
     fn step_exposed_ei;
     fn step_infectious_ir;
     fn step_infectious_is;
