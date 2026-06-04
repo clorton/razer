@@ -119,7 +119,13 @@ D <- 10L
 # ── 1. single-run trajectories ──────────────────────────────────────────────────
 beta_traj <- 0.25
 R0_traj   <- beta_traj * (D - 1)        # effective R0 (see header)
-traj <- run_sir_traj(N, n_seed = 100L, beta = beta_traj, inf_duration = D, nticks = 200L)
+nticks_traj <- 200L
+traj_time <- system.time(
+  traj <- run_sir_traj(N, n_seed = 100L, beta = beta_traj, inf_duration = D, nticks = nticks_traj)
+)
+cat(sprintf("run_sir_traj: %s agents x %d ticks took %.3f s (%.1f ns/agent-tick)\n",
+            format(N, big.mark = ","), nticks_traj, traj_time[["elapsed"]],
+            1e9 * traj_time[["elapsed"]] / (as.numeric(N) * nticks_traj)))
 
 png(file.path(out_dir, "sir_trajectories.png"), width = 1000, height = 650, res = 110)
 ticks <- 0:(nrow(traj) - 1L)
@@ -134,9 +140,13 @@ dev.off()
 
 # ── 2. attack-fraction sweep vs Kermack–McKendrick ───────────────────────────────
 R0_grid <- seq(0.5, 4.0, by = 0.25)
-sim_af  <- vapply(R0_grid, function(R0)
-  final_attack_fraction(N, n_seed = 50L, beta = R0 / (D - 1), inf_duration = D),
-  numeric(1))
+sweep_time <- system.time(
+  sim_af <- vapply(R0_grid, function(R0)
+    final_attack_fraction(N, n_seed = 50L, beta = R0 / (D - 1), inf_duration = D),
+    numeric(1))
+)
+cat(sprintf("attack-fraction sweep: %d runs to completion (N = %s each) took %.3f s\n",
+            length(R0_grid), format(N, big.mark = ","), sweep_time[["elapsed"]]))
 km_af   <- vapply(R0_grid, km_attack_fraction, numeric(1))
 
 png(file.path(out_dir, "sir_attack_fraction.png"), width = 1000, height = 650, res = 110)
