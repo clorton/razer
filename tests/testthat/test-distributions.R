@@ -4,6 +4,17 @@
 # The sampler RNG is thread-local (rand::thread_rng) and cannot be seeded from R,
 # so stochastic tests assert distributional properties over large samples with
 # wide margins rather than exact values.
+#
+# testthat idioms (for non-R readers): `test_that("desc", { ... })` is one test
+# case. Matchers used here: `expect_true(cond)` / `expect_gt(a, b)` (a > b) /
+# `expect_lt(a, b)` (a < b) / `expect_error(e)` (e raises — an extendr-surfaced
+# Rust panic). `d <- dist_*(...)` constructs a sampler; `d$sample_n(k)` draws a
+# length-k double vector.
+# Vectorized R helpers used in assertions: `all(v)` is TRUE iff every element of a
+# logical vector is TRUE; comparisons like `draws == 42`, `draws >= 3`,
+# `draws > 0 & draws < 1` produce element-wise logical vectors; `mean`/`var`/`sd`/
+# `median` are sample statistics; `abs(x) < tol` is the standard tolerance check.
+# `&` is the element-wise (vectorized) AND.
 
 # ── Constructors and $sample_one() ──────────────────────────────────────────────
 
@@ -15,6 +26,8 @@ test_that("dist_constant: every draw equals the supplied value", {
   # breaking its use as a fixed-duration drop-in.
   d <- dist_constant(42)
   draws <- d$sample_n(100L)
+  # `draws == 42` is an element-wise comparison giving a logical vector; `all(...)`
+  # is TRUE only if every element is TRUE.
   expect_true(all(draws == 42))
 })
 
@@ -28,6 +41,8 @@ test_that("dist_normal: sample mean and variance match the parameters", {
   # treating the second argument as a standard deviation).
   d <- dist_normal(10, 4)
   draws <- d$sample_n(20000L)
+  # `expect_gt`/`expect_lt` are strict >/< assertions; bracketing the sample mean
+  # in (9.8, 10.2) is the "approximately 10" check.
   expect_gt(mean(draws), 9.8)
   expect_lt(mean(draws), 10.2)
   expect_gt(var(draws), 3.0)
@@ -106,7 +121,7 @@ test_that("dist_poisson: draws are non-negative integers with mean and variance 
   d <- dist_poisson(5)
   draws <- d$sample_n(40000L)
   expect_true(all(draws >= 0))
-  expect_true(all(draws == round(draws)))   # integer-valued counts
+  expect_true(all(draws == round(draws)))   # integer-valued counts (draws are doubles)
   expect_gt(mean(draws), 4.8)
   expect_lt(mean(draws), 5.2)
   expect_gt(var(draws), 4.4)
@@ -129,7 +144,9 @@ test_that("dist_beta: draws lie in (0, 1) with the correct mean and variance", {
   # Failure would indicate the two shape parameters are swapped or mis-applied.
   d <- dist_beta(2, 5)
   draws <- d$sample_n(40000L)
+  # `draws > 0 & draws < 1` is element-wise (vectorized) AND across the sample.
   expect_true(all(draws > 0 & draws < 1))
+  # `abs(estimate - expected) < tol` is the two-sided tolerance check.
   expect_lt(abs(mean(draws) - 2 / 7),   0.01)
   expect_lt(abs(var(draws)  - 10 / 392), 0.005)
 })
@@ -205,6 +222,8 @@ test_that("dist_lognormal: negative sdlog is rejected", {
 
 # ── Use as the infectious-period distribution of step_exposed_ei ─────────────────
 
+# A local test fixture/factory. `function(args)` defines an anonymous function
+# bound to `make_exposed`; `timer = 1L` is a default argument.
 make_exposed <- function(n, timer = 1L) {
   # n exposed (state E) agents in a single node, each with the given timer so
   # that one step of step_exposed_ei expires the timer and forces E→I.
@@ -222,6 +241,8 @@ test_that("step_exposed_ei: constant distribution sets a fixed infectious timer"
   # Failure would mean the constant distribution is not being sampled as a fixed
   # duration on the E→I transition.
   ppl <- make_exposed(1000L, timer = 1L)
+  # `inf_dist =` passes the distribution by keyword argument. The frame `ppl` is a
+  # reference (external pointer), so the step mutates it in place.
   step_exposed_ei(ppl, inf_dist = dist_constant(9))
   expect_true(all(ppl$state == 2L))
   expect_true(all(ppl$timer == 9L))
@@ -241,6 +262,8 @@ test_that("step_exposed_ei: normal distribution produces varied integer timers",
 
   timers <- ppl$timer
   expect_true(all(ppl$state == 2L))
+  # `as.integer` truncates to whole numbers; equality with the originals asserts
+  # the durations are already whole ticks.
   expect_true(all(timers == as.integer(timers)))  # whole-tick durations
   expect_true(all(timers >= 1L))                   # clamped to a positive period
   expect_gt(sd(timers), 1)                         # genuinely stochastic spread
@@ -263,6 +286,9 @@ test_that("step_transmission_si: newly infected agents draw their timer from any
   ppl$add_scalar_property("state", "integer", 0L)              # S
   ppl$add_scalar_property("node",  "integer", 0L)
   ppl$add_scalar_property("timer", "integer", 0L)
+  # Build the initial state vector in R, then write it to the frame. `;` separates
+  # statements on one line; `seq_len(100L)` is 1:100 (but safe when the count is 0);
+  # `sv[1:100] <- 2L` assigns into a slice; `2L` is the I (infectious) state code.
   sv <- rep(0L, n); sv[seq_len(100L)] <- 2L; ppl$state <- sv   # 100 seeded I
 
   nd <- LaserFrame$new(1L, 1L)
@@ -272,6 +298,8 @@ test_that("step_transmission_si: newly infected agents draw their timer from any
   state_before <- ppl$state
   step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_uniform(10, 20))
 
+  # `which(logical_vec)` returns the 1-based indices where the condition is TRUE
+  # (here: was S, now I). `ppl$timer[newly_infected]` then gathers those agents' timers.
   newly_infected <- which(state_before == 0L & ppl$state == 2L)
   timers <- ppl$timer[newly_infected]
   expect_gt(length(newly_infected), 0L)

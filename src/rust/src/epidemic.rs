@@ -1,8 +1,40 @@
-use extendr_api::prelude::*;
-use rayon::prelude::*;
-use rand::Rng;
-use crate::laser_frame::{LaserFrame, PropData};
-use crate::distributions::Distribution;
+// ════════════════════════════════════════════════════════════════════════════
+// epidemic.rs — per-tick disease-dynamics kernels exported to R via extendr.
+//
+// Orientation for readers coming from C / C++ / C# / Python. The Rust idioms
+// that recur in this file:
+//
+//   * Ownership & borrowing. `&T` is a shared (read-only) borrow; `&mut T` is an
+//     exclusive (read-write) borrow. The compiler statically forbids two live
+//     `&mut` to the same data — this is why we drop to raw pointers below to
+//     hand Rayon several mutable views of one frame at once.
+//   * `fn f(x: &mut LaserFrame)` is "pass by reference, mutable" — like
+//     `LaserFrame&` in C++ or `ref`/`out` in C#. No GC; lifetimes are checked at
+//     compile time, not refcounted at runtime.
+//   * Closures `|args| body` are lambdas (cf. C++ `[](){}`, C# `=>`, Python
+//     `lambda`). They capture by reference unless `move` is used.
+//   * Iterators are lazy pipelines (like C# LINQ or Python generators):
+//     `.iter()` / `.map()` / `.filter_map()` / `.fold()` build a computation
+//     that only runs when consumed (`.collect()`, `.for_each()`, `.reduce()`).
+//   * `par_iter()` / `par_iter_mut()` (from Rayon) are the *parallel* versions:
+//     the same pipeline, automatically split across a worker-thread pool — think
+//     OpenMP `#pragma omp parallel for` or .NET `Parallel.For`.
+//   * `match` is a switch on steroids with exhaustiveness checking; `enum`
+//     variants (e.g. `PropData::Integer(v)`) are tagged unions you destructure.
+//   * `panic!(...)` aborts the current call like a C++ `throw`; extendr catches
+//     it at the FFI boundary and re-raises it as an R `stop()` error.
+//   * The `as` keyword is an explicit numeric cast (`x as f64`, `n as usize`),
+//     never an implicit promotion.
+//
+// `usize` is the pointer-sized unsigned integer used for indexing (like
+// `size_t`); `i32` is a 32-bit signed int, matching R's `integer` type.
+// ════════════════════════════════════════════════════════════════════════════
+
+use extendr_api::prelude::*;          // `#[extendr]`, `Robj`, R<->Rust conversions
+use rayon::prelude::*;                // data-parallel iterators (par_iter, fold, reduce)
+use rand::Rng;                        // the `.gen::<T>()` RNG trait, in scope for its methods
+use crate::laser_frame::{LaserFrame, PropData};   // the struct-of-arrays frame and its column enum
+use crate::distributions::Distribution;            // parameterized duration sampler (see distributions.rs)
 
 // ── State constants ───────────────────────────────────────────────────────────
 // -1 for D keeps the alive compartments in the non-negative range, so
@@ -22,17 +54,29 @@ pub const STATE_D: i32 = -1;
 ///
 /// @return Named integer vector with elements S, E, I, R, D.
 /// @export
+// `#[extendr]` is a procedural macro (an attribute, like a C# attribute or
+// Java/Python decorator) that generates the C-ABI shim and the R wrapper so this
+// Rust fn is callable from R. `Robj` is an owning handle to an R object (SEXP).
 #[extendr]
 fn laser_states() -> Robj {
+    // `vec![...]` is the Vec (growable array, ~ std::vector / List<T>) literal.
     let vals: Vec<i32> = vec![STATE_S, STATE_E, STATE_I, STATE_R, STATE_D];
+    // `.iter()` borrows each element; `collect_robj()` materializes the iterator
+    // into an R integer vector. `mut` marks the binding as reassignable/mutable
+    // (Rust bindings are immutable by default, the opposite of C/C#).
     let mut robj = vals.iter().collect_robj();
+    // Build the names vector. `["S",..]` is a fixed-size array; `.map(...)` is the
+    // lazy transform (LINQ `Select` / Python `map`); `.collect()` runs it into a
+    // `Vec<String>`. `s.to_string()` copies the `&str` literal into an owned String.
     let names: Vec<String> = ["S", "E", "I", "R", "D"]
         .iter()
         .map(|s| s.to_string())
         .collect();
     let names_robj = names.iter().map(|s| s.as_str()).collect_robj();
+    // `set_attrib` returns a `Result` (Ok/Err, Rust's checked-error type — there
+    // are no exceptions). `.expect(msg)` unwraps Ok or panics with `msg` on Err.
     robj.set_attrib("names", names_robj).expect("set names");
-    robj
+    robj            // trailing expression with no `;` is the return value
 }
 
 // ── Raw-pointer helpers ───────────────────────────────────────────────────────
@@ -48,18 +92,29 @@ fn laser_states() -> Robj {
 // Each function returns as soon as the internal borrow ends, so sequential
 // calls on the same frame compile without conflict.
 
+// Returns a raw mutable pointer (`*mut i32` ≡ C `int*`) to a frame's integer
+// column. `&mut LaserFrame` is an exclusive borrow held only for this call.
 fn int_ptr_mut(frame: &mut LaserFrame, name: &str) -> *mut i32 {
+    // `frame.scalars` is a HashMap. `.get_mut(name)` returns `Option<&mut V>`
+    // (Some(value) or None — like a nullable reference, but you must handle both).
+    // `.unwrap_or_else(closure)` yields the inner `&mut V`, or runs the closure on
+    // None; here the closure never returns (`panic!` diverges), satisfying the type.
     match &mut frame
         .scalars
         .get_mut(name)
         .unwrap_or_else(|| panic!("frame has no scalar property '{name}'"))
         .data
     {
-        PropData::Integer(v) => v.as_mut_ptr(), // equivalent to v.data() in C++
+        // `PropData` is an enum (tagged union). This arm matches the `Integer`
+        // variant and binds its payload Vec to `v`; `.as_mut_ptr()` is the Vec's
+        // raw data pointer (≡ `&v[0]` / `v.data()` in C++).
+        PropData::Integer(v) => v.as_mut_ptr(),
+        // `_` is the wildcard arm (default): any other variant is a type error here.
         _ => panic!("property '{name}' must be integer"),
     }
 }
 
+// Read-only counterpart: `*const i32` ≡ C `const int*`; takes a shared `&` borrow.
 fn int_ptr(frame: &LaserFrame, name: &str) -> *const i32 {
     match &frame
         .scalars
@@ -80,8 +135,11 @@ fn int_ptr(frame: &LaserFrame, name: &str) -> *const i32 {
 // would be decremented to a transition on the very next step). Rounding (rather
 // than truncation) keeps the realized mean duration unbiased relative to the
 // requested distribution mean.
+// `#[inline]` is a hint to inline this at call sites (like C++ `inline`).
 #[inline]
 fn duration_ticks(x: f64) -> i32 {
+    // f64 methods chain: round to nearest, clamp to >= 1.0, then `as i32`
+    // truncates the (now whole, >= 1) value to a 32-bit int.
     x.round().max(1.0) as i32
 }
 
@@ -137,6 +195,13 @@ fn step_transmission_si(
     // the Vecs cannot be reallocated or moved.
     // Rayon's par_iter_mut assigns each element to exactly one thread, so
     // concurrent writes to `state` and `timer` do not race.
+    //
+    // A Rust slice (`&[i32]` / `&mut [i32]`) is a fat pointer — a (data pointer,
+    // length) pair with bounds checking — not a bare C pointer. `from_raw_parts`
+    // rebuilds one from (ptr, len). It is `unsafe` because the compiler can no
+    // longer verify the borrow rules it normally enforces; the `unsafe { }` block
+    // is our explicit promise that the SAFETY contract above holds. (Nothing here
+    // is "turn off all checks" — only this specific reconstruction is unchecked.)
     let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
     let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
     let node  = unsafe { std::slice::from_raw_parts(node_ptr,  count) };
@@ -183,19 +248,31 @@ fn step_transmission_si(
     // for_each_init() builds one thread_rng per worker (Pattern B: the kernel
     // owns the RNG); the same rng drives both the Bernoulli infection draw and
     // the infectious-period draw from the shared `inf_dist`.
+    // The two `.zip(...)` calls nest the items as `((s, t), n_idx)`; the closure
+    // parameter `|rng, ((s, t), &n_idx)|` destructures that nesting in place
+    // (`s` and `t` are `&mut i32`, `&n_idx` binds the i32 *by value*, copying out
+    // of the `&i32` the iterator yields). `for_each_init(init, body)` calls `init`
+    // once per worker thread to make the per-thread state (`rng`) and passes it by
+    // `&mut` into every `body` call on that thread.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .zip(node.par_iter())
         .for_each_init(rand::thread_rng, |rng, ((s, t), &n_idx)| {
-            if *s == STATE_S {
+            if *s == STATE_S {                       // `*s` dereferences the &mut i32 to read it
                 let n = n_pop[n_idx as usize] as f64;
                 if n > 0.0 {
+                    // Force of infection λ, then per-tick infection probability
+                    // p = 1 - e^(-λ). `(-lambda).exp()` is method-call math:
+                    // negate, then `.exp()` (Rust has no global `exp()` function).
                     let lambda = beta * i_counts[n_idx as usize] as f64 / n;
                     let p = 1.0 - (-lambda).exp();
+                    // `gen::<f64>()` draws a uniform in [0, 1). The `::<f64>` is a
+                    // "turbofish" — explicit type argument for the generic method,
+                    // like `gen<double>()` in C++/C#.
                     if rng.gen::<f64>() < p {
-                        *s = STATE_I;
-                        *t = duration_ticks(inf_dist.sample(rng));
+                        *s = STATE_I;                // write through the &mut: S -> I
+                        *t = duration_ticks(inf_dist.sample(rng));   // set this agent's infectious timer
                     }
                 }
             }
@@ -268,6 +345,9 @@ fn step_transmission_se(
 
     i_out.copy_from_slice(&i_counts);
 
+    // Identical structure to step_transmission_si's FOI loop (see there for the
+    // closure-destructuring, turbofish, and `(-lambda).exp()` idiom notes); the
+    // only difference is the destination state E instead of I.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
@@ -279,8 +359,8 @@ fn step_transmission_se(
                     let lambda = beta * i_counts[n_idx as usize] as f64 / n;
                     let p = 1.0 - (-lambda).exp();
                     if rng.gen::<f64>() < p {
-                        *s = STATE_E;
-                        *t = duration_ticks(exp_dist.sample(rng));
+                        *s = STATE_E;                              // S -> E (exposed)
+                        *t = duration_ticks(exp_dist.sample(rng)); // set incubation timer
                     }
                 }
             }
@@ -321,15 +401,18 @@ fn timer_expire_impl(people: &mut LaserFrame, from_state: i32, to_state: i32) {
     let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
     let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
 
+    // `for_each` (no `_init`) is the parallel for-loop: it consumes the zipped
+    // (state, timer) pairs across worker threads. No RNG is needed here, so there
+    // is no per-thread init. `|(s, t)|` destructures each pair into two `&mut i32`.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .for_each(|(s, t)| {
-            if *s == from_state {
-                *t -= 1;
-                if *t <= 0 {
+            if *s == from_state {       // only agents currently in the source state
+                *t -= 1;                // decrement this agent's timer in place
+                if *t <= 0 {            // expired this tick
                     *s = to_state;
-                    *t = 0;
+                    *t = 0;             // absorbing destination: no new duration
                 }
             }
         });
@@ -536,11 +619,14 @@ fn step_mortality_cdr(people: &mut LaserFrame, cdr: f64) {
     let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
     let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
 
+    // `rand::thread_rng()` returns this worker thread's RNG handle (thread-local,
+    // so no lock). We call it inline per agent here rather than via `for_each_init`
+    // because there is no other per-thread state to thread through.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .for_each(|(s, t)| {
-            if *s != STATE_D && rand::thread_rng().gen::<f64>() < cdr {
+            if *s != STATE_D && rand::thread_rng().gen::<f64>() < cdr {  // `&&` short-circuits, as in C
                 *s = STATE_D;
                 *t = 0;
             }
@@ -577,6 +663,12 @@ fn step_births_cbr(people: &mut LaserFrame, cbr: f64) {
 
     // SAFETY: const slices; no mutable access to these properties while the
     // slices are live.  Both slices are dropped at the end of this block.
+    //
+    // `let (a, b): (TA, TB) = { ... };` binds a tuple from a *block expression* —
+    // in Rust a `{ }` block is an expression whose value is its final line. We use
+    // the block to scope the read-only borrows so they end (the slices `drop`)
+    // before we re-borrow `people` mutably in Phase 2. This is the manual
+    // equivalent of a C++ scope `{ }` used to bound a lock or pointer's lifetime.
     let (birth_parents, parent_nodes): (Vec<usize>, Vec<i32>) = {
         let state = unsafe { std::slice::from_raw_parts(state_ptr, count) };
         let node  = unsafe { std::slice::from_raw_parts(node_ptr,  count) };
@@ -595,10 +687,13 @@ fn step_births_cbr(people: &mut LaserFrame, cbr: f64) {
             })
             .collect();
 
+        // Cap births at remaining capacity. `.min(x)` is the method form of min;
+        // `capacity - count` is the number of free slots in the backing arrays.
         let n = parents.len().min(capacity - count);
-        // Collect parent node values before the const slices are dropped.
+        // `parents[..n]` is a sub-slice (range syntax, like Python `parents[:n]`).
+        // `|&idx|` copies each usize index out by-value; `node[idx]` indexes the slice.
         let pnodes: Vec<i32> = parents[..n].iter().map(|&idx| node[idx]).collect();
-        (parents, pnodes)
+        (parents, pnodes)   // this tuple is the block's value, assigned to the let above
         // `state` and `node` slices are dropped here — safe to take *mut next.
     };
 
@@ -621,10 +716,15 @@ fn step_births_cbr(people: &mut LaserFrame, cbr: f64) {
     // to `capacity` at construction, so this range is within bounds.
     // ptr::add(n) is equivalent to `ptr + n` in C pointer arithmetic.
     unsafe {
+        // `ptr.add(start_idx)` advances the pointer by start_idx elements (not
+        // bytes) — like `ptr + start_idx` in C. Each slice views only the newly
+        // appended range, so writing them does not touch existing agents.
         let new_states = std::slice::from_raw_parts_mut(state_ptr.add(start_idx), n_births);
         let new_nodes  = std::slice::from_raw_parts_mut(node_ptr.add(start_idx),  n_births);
         let new_timers = std::slice::from_raw_parts_mut(timer_ptr.add(start_idx), n_births);
 
+        // `0..n_births` is a half-open range (Python `range(n_births)`); serial
+        // loop because the writes are cheap and the count was already committed.
         for i in 0..n_births {
             new_states[i] = STATE_S;
             new_nodes[i]  = parent_nodes[i];
@@ -632,9 +732,13 @@ fn step_births_cbr(people: &mut LaserFrame, cbr: f64) {
         }
     }
 
-    let _ = birth_parents; // suppress unused-variable warning; len was used above
+    let _ = birth_parents; // bind to `_` to silence the unused-variable warning (its len was used above)
 }
 
+// `extendr_module!` is a macro that registers every `#[extendr]` item above for
+// export. `rextendr::document()` reads this list to generate the R wrappers in
+// `R/extendr-wrappers.R`, the NAMESPACE entries, and the `man/*.Rd` help pages —
+// so any new exported fn must be added here (mirrors a module's export table).
 extendr_module! {
     mod epidemic;
     fn laser_states;

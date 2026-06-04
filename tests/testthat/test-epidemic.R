@@ -1,16 +1,26 @@
 # Tests for epidemic model components.
 # State codes: S=0, E=1, I=2, R=3, D=-1 (matches laser_states()).
+#
+# testthat idioms: `test_that("desc", { ... })` blocks with `expect_*` assertions
+# (`expect_equal` compares with tolerance, `expect_identical` is exact including
+# type/attributes, `expect_true/false`, `expect_lt/gt/lte`). `L` = integer literal.
+# The step_* kernels take a Distribution object (e.g. dist_constant(14)).
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# Run-helpers: `name <- function(...) { ... }` with `=` defaults in the signature
+# (state = 0L, node = 0L are supplied only if the caller omits them).
 make_people <- function(n, state = 0L, node = 0L) {
-  p <- LaserFrame$new(n * 2L, n)   # capacity 2× so births have room
+  p <- LaserFrame$new(n * 2L, n)   # $new(capacity, count); capacity 2× so births have room
   p$add_scalar_property("state", "integer", 0L)
   p$add_scalar_property("node",  "integer", 0L)
   p$add_scalar_property("timer", "integer", 0L)
+  # `if (cond) expr` has no braces when single-statement. `state == 0L` is
+  # vectorized, so all(...) collapses to one logical. rep_len(x, n) recycles x to
+  # length n; as.integer() coerces (a bare scalar literal default may be a double).
   if (!all(state == 0L)) p$state <- rep_len(as.integer(state), n)
   if (!all(node  == 0L)) p$node  <- rep_len(as.integer(node),  n)
-  p
+  p   # last expression is the return value
 }
 
 make_nodes <- function(n_nodes = 1L, pop = 1000L) {
@@ -28,8 +38,10 @@ test_that("laser_states returns a named integer vector with correct codes", {
   # Then:  get a named integer vector with 5 elements and expected values
   states <- laser_states()
 
-  expect_type(states, "integer")
-  expect_named(states, c("S", "E", "I", "R", "D"))
+  expect_type(states, "integer")                          # asserts the base type
+  expect_named(states, c("S", "E", "I", "R", "D"))        # asserts the names() attribute
+  # unname() strips names so the comparison is values-only (named vs unnamed
+  # vectors are not identical in R).
   expect_equal(unname(states), c(0L, 1L, 2L, 3L, -1L))
 })
 
@@ -40,13 +52,16 @@ test_that("step_transmission_si: no infections when beta = 0", {
   # When:  run transmission step
   # Then:  state vector is unchanged
   n   <- 1000L
+  # c(rep(2L,100L), rep(0L,900L)) builds one length-1000 vector (100 I, then 900 S).
   ppl <- make_people(n, state = c(rep(2L, 100L), rep(0L, 900L)))
   nd  <- make_nodes(pop = n)
   nd$N <- n
 
-  state_before <- ppl$state
+  state_before <- ppl$state   # reads the column into an ordinary R vector (a copy)
   step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14))
 
+  # expect_identical is an exact compare (value + type), used here since the step
+  # must not have mutated the column at all.
   expect_identical(ppl$state, state_before)
 })
 
@@ -90,8 +105,11 @@ test_that("step_transmission_si: newly infected agents draw timer from inf_dist"
 
   step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14))
 
+  # which() returns the integer indices where the logical is TRUE; `&` is the
+  # vectorized elementwise AND (`&&` would be scalar-only).
   newly_infected <- which(state_before == 0L & ppl$state == 2L)
   expect_true(length(newly_infected) > 0L)
+  # ppl$timer[newly_infected] gathers the timer column at those indices.
   expect_true(all(ppl$timer[newly_infected] == 14L))
 })
 
@@ -127,6 +145,7 @@ test_that("step_transmission_si: multi-node FOI is node-local", {
 
   step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14))
 
+  # Logical indexing: ppl$state[nodes == 1L] keeps elements where the mask is TRUE.
   node1_states <- ppl$state[nodes == 1L]
   expect_true(all(node1_states == 0L))   # node 1: nobody infected
   node0_new_inf <- sum(ppl$state[nodes == 0L] == 2L) - 100L  # new infections in node 0
@@ -148,8 +167,9 @@ test_that("step_transmission_se: exposed agents move to E, not I", {
 
   new_exposures <- which(ppl$state == 1L)
   expect_true(length(new_exposures) > 0L)
+  # compares two vectors elementwise; rep(5L, k) builds the expected timer vector.
   expect_equal(ppl$timer[new_exposures], rep(5L, length(new_exposures)))
-  expect_false(any(ppl$state[201:2000] == 2L))  # none jumped directly to I
+  expect_false(any(ppl$state[201:2000] == 2L))  # none jumped directly to I (201:2000 = the originally-S agents)
 })
 
 # ── step_exposed_ei ───────────────────────────────────────────────────────────
@@ -159,12 +179,12 @@ test_that("step_exposed_ei: E agent with timer=1 transitions to I", {
   # When:  run exposed step with a dist_constant(10) infectious-period distribution
   # Then:  agent is in state I with timer = 10
   ppl <- make_people(1L)
-  ppl$state <- 1L
+  ppl$state <- 1L   # writes the (length-1) state column; RHS recycles to fill it
   ppl$timer <- 1L
 
   step_exposed_ei(ppl, inf_dist = dist_constant(10))
 
-  expect_equal(ppl$state[1L], 2L)
+  expect_equal(ppl$state[1L], 2L)   # [1L] reads the single agent's value
   expect_equal(ppl$timer[1L], 10L)
 })
 
@@ -251,6 +271,9 @@ test_that("step_infectious_ir: SIR model conserves population", {
   set.seed(99L)
   n   <- 2000L
   ppl <- make_people(n, state = c(rep(2L, 50L), rep(0L, 1950L)))
+  # Masked assignment: R rewrites `ppl$timer[mask] <- 14L` as get-modify-set, so
+  # it reads the whole timer column, sets the masked elements, then writes the
+  # full vector back via the `$<-` setter. `ppl$state == 2L` is the logical mask.
   ppl$timer[ppl$state == 2L] <- 14L
   nd  <- make_nodes(pop = n)
 
@@ -259,8 +282,9 @@ test_that("step_infectious_ir: SIR model conserves population", {
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
   }
 
-  expect_equal(ppl$count, n)
+  expect_equal(ppl$count, n)   # $count is the live agent count (a frame property)
   final_state <- ppl$state
+  # %in% is vectorized set membership (like Python `in`, applied elementwise).
   expect_true(all(final_state %in% c(0L, 2L, 3L)))
   # After 50 ticks the epidemic should have grown (fewer S than initial)
   expect_lt(sum(final_state == 0L), 1950L)
@@ -413,7 +437,7 @@ test_that("step_births_cbr: new agents start in state S with timer 0", {
 
   step_births_cbr(ppl, cbr = 1.0)
 
-  new_states <- ppl$state[101:200]
+  new_states <- ppl$state[101:200]   # `101:200` indexes the 100 newly-born agents
   new_timers <- ppl$timer[101:200]
   expect_true(all(new_states == 0L))
   expect_true(all(new_timers == 0L))
@@ -457,7 +481,7 @@ test_that("SEIR model: S only decreases, S+E+I+R is conserved over 100 ticks", {
   state <- c(rep(2L, 10L), rep(0L, 5000L))
   timer <- c(rep(7L, 10L),  rep(0L, 5000L))  # seeded I agents have 7 ticks left
   ppl   <- make_people(n, state = state)
-  ppl$timer <- as.integer(timer)
+  ppl$timer <- as.integer(timer)   # as.integer() guarantees the column's integer type
   nd    <- make_nodes(pop = n)
 
   prev_s <- sum(ppl$state == 0L)

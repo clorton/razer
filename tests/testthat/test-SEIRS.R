@@ -11,6 +11,11 @@
 # The R→S waning step distinguishes SEIRS from SEIR: recovered agents become
 # susceptible again after `imm_duration` ticks, allowing the epidemic to persist
 # and potentially produce multiple waves.
+#
+# testthat idioms: `test_that("desc", { ... })` blocks with `expect_*` assertions.
+# See test-SI.R for the shared run-helper conventions (default args, set.seed,
+# $new(capacity, count), the column-major dimnamed `traj` matrix, the seq_len()
+# tick loop, and sum(state == code) vectorized tallies).
 
 run_seirs <- function(n, n_seed = 200L, beta = 0.5, exp_duration = 3L,
                       inf_duration = 7L, imm_duration = 60L,
@@ -62,6 +67,8 @@ test_that("SEIRS: S increases at some point (waning immunity)", {
   # In SEIR this never happens; in SEIRS it must once the R pool builds and wanes.
   # Failure indicates step_recovered_rs is not transitioning R agents back to S.
   traj <- run_seirs(n = 20000L)
+  # any() reduces a logical vector to TRUE if at least one element is TRUE
+  # (the complement of all()).
   expect_true(any(diff(traj[, "S"]) > 0L))
 })
 
@@ -82,6 +89,7 @@ test_that("SEIRS: S does not stay at its post-wave minimum (recovery to S occurs
   # The epidemic depletes S in the first wave; waning then refills S above the
   # post-wave trough, which would not happen in SEIR.
   traj <- run_seirs(n = 20000L)
+  # `50:200` is an index range; traj[50:200, "S"] slices those rows of the S column.
   post_wave_trough <- min(traj[50:200, "S"])
   s_after_200      <- max(traj[201:501, "S"])
   expect_gt(s_after_200, post_wave_trough)

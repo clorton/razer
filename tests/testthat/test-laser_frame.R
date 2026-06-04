@@ -1,3 +1,21 @@
+# Tests for the LaserFrame struct-of-arrays (Rust-backed via extendr).
+#
+# testthat idioms used throughout (orientation for non-R readers):
+#   * `test_that("desc", { ... })` declares one test case; the `{ }` block is its
+#     body. Each `expect_*` inside is an assertion — the test fails if any fails.
+#   * `expect_equal(a, b)` asserts near-equality (with tolerance); `expect_error(e)`
+#     asserts that evaluating `e` raises (here, that the Rust side panics — extendr
+#     surfaces a Rust panic as an R error); `expect_length`, `expect_type`,
+#     `expect_match` (regex), `expect_null`, `expect_false`, `expect_invisible`
+#     are further matchers. Their first argument is the value/expression under test.
+#   * `<-` is assignment. `LaserFrame$new(...)` is the constructor; `f$method(...)`
+#     calls a method; `f$prop` / `f$prop <- v` read/write a property (see laser_frame.R).
+#   * `10L` is an *integer* literal (plain `10` is a double); the `L` suffix matters
+#     because these properties are typed "integer" vs "real" on the Rust side.
+#   * `c(...)` builds a vector; `rep(x, n)` repeats; `1:5` is the inclusive integer
+#     range 1,2,3,4,5; `seq(a, b, by=)` is a stepped sequence. Indexing is 1-based
+#     and `v[1:5]` slices; `m[, 1]` takes a whole matrix column.
+
 library(razer)
 
 # ── Construction ──────────────────────────────────────────────────────────────
@@ -40,7 +58,7 @@ test_that("add_scalar_property fills an integer property with the default value"
   f <- LaserFrame$new(5L, 5L)
   # When: we add an integer property with default 0
   f$add_scalar_property("age", "integer", 0L)
-  # Then: get() returns five zeros
+  # Then: get() returns five zeros. `rep(0L, 5L)` builds the expected vector c(0,0,0,0,0).
   expect_equal(f$get("age"), rep(0L, 5L))
 })
 
@@ -115,7 +133,8 @@ test_that("add() activates entries and returns a 1-based inclusive range", {
   f$add_scalar_property("age", "integer", 0L)
   # When: we activate 3 more
   range <- f$add(3L)
-  # Then: the returned range covers indices 6..8 and count becomes 8
+  # Then: the returned range is a 2-element (start, end) vector covering 6..8,
+  # and count becomes 8. Note 1-based, inclusive — unlike C/Python half-open ranges.
   expect_equal(range, c(6L, 8L))
   expect_equal(f$count, 8L)
 })
@@ -125,7 +144,8 @@ test_that("add() leaves the existing active slice unchanged", {
   f$add_scalar_property("id", "integer", 0L)
   f$set("id", 1:5)
   f$add(3L)
-  # Original five values must be intact
+  # Original five values must be intact. `f$get("id")[1:5]` fetches the property
+  # then slices the first five elements (1-based, inclusive).
   expect_equal(f$get("id")[1:5], 1:5)
 })
 
@@ -134,6 +154,8 @@ test_that("add() new entries carry the property default, not garbage", {
   f$add_scalar_property("score", "integer", -1L)
   range <- f$add(3L)
   result <- f$get("score")
+  # `range[1]:range[2]` turns the (start, end) pair into the index sequence used
+  # to slice out just the newly added entries.
   expect_equal(result[range[1]:range[2]], c(-1L, -1L, -1L))
 })
 
@@ -149,7 +171,8 @@ test_that("squash() keeps only entries where mask is TRUE", {
   f <- LaserFrame$new(10L, 6L)
   f$add_scalar_property("id", "integer", 0L)
   f$set("id", 1:6)
-  # When: we keep only odd-indexed entries
+  # When: we keep only odd-indexed entries. The argument is a logical *mask*
+  # (one TRUE/FALSE per active entry); TRUE means keep.
   f$squash(c(TRUE, FALSE, TRUE, FALSE, TRUE, FALSE))
   # Then: count is 3 and remaining ids are 1, 3, 5
   expect_equal(f$count, 3L)
@@ -200,9 +223,10 @@ test_that("sort_by() reorders all scalar properties by the given permutation", {
   f$add_scalar_property("b", "real", 0.0)
   f$set("a", c(5L, 3L, 1L, 4L, 2L))
   f$set("b", c(50.0, 30.0, 10.0, 40.0, 20.0))
-  # When: sort ascending by 'a'
+  # When: sort ascending by 'a'. `order(v)` returns the permutation of indices
+  # that would sort `v` ascending (an argsort), which sort_by then applies.
   f$sort_by(order(f$get("a")))
-  # Then: both properties are in ascending order
+  # Then: both properties are in ascending order. `seq(10, 50, by=10)` == c(10,20,30,40,50).
   expect_equal(f$get("a"), 1:5)
   expect_equal(f$get("b"), seq(10.0, 50.0, by = 10.0))
 })
@@ -257,12 +281,14 @@ test_that("get_matrix() returns the correct dimensions and column values", {
   # Given: 3 active entries, 4-column real vector property
   f <- LaserFrame$new(3L, 3L)
   f$add_vector_property("S", 4L, "real", 0.0)
+  # `for (x in v)` iterates the elements of a vector (a foreach, not a C index loop).
   for (col in 1:4) {
     f$set_col("S", col, c(col * 1.0, col * 2.0, col * 3.0))
   }
   # When: we fetch the full matrix
   m <- f$get_matrix("S")
-  # Then: dimensions are (3 entries × 4 cols) and column values are correct
+  # Then: dimensions are (3 entries × 4 cols). `dim(m)` is c(nrow, ncol); `m[, 1]`
+  # selects the entire first column (the comma's empty row slot means "all rows").
   expect_equal(dim(m), c(3L, 4L))
   expect_equal(m[, 1], c(1.0, 2.0, 3.0))
   expect_equal(m[, 4], c(4.0, 8.0, 12.0))
@@ -308,7 +334,8 @@ test_that("describe() includes capacity, count, and property names", {
   f$add_scalar_property("age", "integer", 0L)
   f$add_vector_property("S", 3L, "real", 0.0)
   d <- f$describe()
-  expect_type(d, "character")
+  expect_type(d, "character")   # asserts d is a string
+  # `expect_match` checks the string contains a (regex) substring.
   expect_match(d, "capacity=10")
   expect_match(d, "count=5")
   expect_match(d, "age")
@@ -320,7 +347,8 @@ test_that("describe() includes capacity, count, and property names", {
 test_that("void-returning methods do not auto-print NULL", {
   # Given: a fresh frame
   f <- LaserFrame$new(3L, 3L)
-  # When / Then: these calls should return NULL invisibly
+  # When / Then: `expect_invisible(e)` asserts the call returns invisibly — i.e.
+  # would not auto-print at the REPL (see the body<- rewriting in laser_frame.R).
   expect_invisible(f$add_scalar_property("x", "integer", 0L))
   expect_invisible(f$add_vector_property("v", 2L, "real", 0.0))
   expect_invisible(f$set("x", 1:3))
@@ -369,13 +397,15 @@ test_that("frame$mat_prop returns the full vector property matrix", {
 
 test_that("frame$name returns NULL for an unknown name", {
   f <- LaserFrame$new(3L, 3L)
-  expect_null(f$no_such_thing)
+  expect_null(f$no_such_thing)   # unknown $ name yields NULL (R's null/None)
 })
 
 test_that("count and capacity are plain values, not functions", {
   f <- LaserFrame$new(5L, 3L)
   expect_equal(f$count,    3L)
   expect_equal(f$capacity, 5L)
+  # `count`/`capacity` are exposed as bare values, not callables — `is.function`
+  # confirms `f$count` is not a method needing `f$count()`.
   expect_false(is.function(f$count))
   expect_false(is.function(f$capacity))
 })
@@ -405,6 +435,9 @@ test_that("frame$prop <- values round-trips for real and logical properties", {
 test_that("$<- on a vector property raises an informative error", {
   f <- LaserFrame$new(3L, 3L)
   f$add_vector_property("S", 2L, "real", 0.0)
+  # The 2nd arg to expect_error is a regex the error message must match — here we
+  # assert the message steers the user toward $set_col(). `matrix(0, 3, 2)` is a
+  # 3x2 zero matrix (fill value, nrow, ncol).
   expect_error(f$S <- matrix(0, 3, 2), "set_col")
 })
 

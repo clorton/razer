@@ -8,6 +8,11 @@
 # State codes: S=0, E=1, I=2, R=3
 # The incubation period (exp_duration) delays the infectious wave relative to SIR,
 # slowing the epidemic and lowering the peak I count.
+#
+# testthat idioms: `test_that("desc", { ... })` blocks with `expect_*` assertions.
+# See test-SI.R for the shared run-helper conventions (default args, set.seed,
+# $new(capacity, count), the column-major dimnamed `traj` matrix, the seq_len()
+# tick loop, and sum(state == code) vectorized tallies).
 
 run_seir <- function(n, n_seed = 100L, beta = 0.4, exp_duration = 5L,
                      inf_duration = 7L, nticks = 300L, seed = 42L) {
@@ -83,9 +88,10 @@ test_that("SEIR: E peak precedes I peak (incubation delay)", {
   # This is the defining signature of the latent period: exposed agents accumulate
   # before the infectious wave, so E peaks first.
   traj <- run_seir(n = 10000L)
+  # which.max() returns the 1-based index of the first maximum (the peak tick).
   e_peak_tick <- which.max(traj[, "E"])
   i_peak_tick <- which.max(traj[, "I"])
-  expect_lt(e_peak_tick, i_peak_tick)
+  expect_lt(e_peak_tick, i_peak_tick)   # expect_lt(a, b): assert a < b
 })
 
 test_that("SEIR: E is 0 when beta = 0", {

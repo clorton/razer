@@ -15,16 +15,28 @@
 # the tests are robust to ordinary sampling variation but still tight enough to
 # catch a misparameterization.
 
-N <- 1000000L
+# testthat idioms (for non-R readers): `test_that("desc", { ... })` is one test
+# case; matchers `expect_lt(a, b)` (a < b), `expect_gt`, `expect_gte`,
+# `expect_type`, `expect_length`, `expect_true`. R's reference quantile/density
+# functions are `q<dist>`/`d<dist>` (e.g. qnorm, qunif, qgamma, dpois) and live in
+# the `stats` package; `stats::quantile` is namespaced access (package::name).
 
-# Compare empirical quantiles to a theoretical quantile function at several probs.
+N <- 1000000L   # 1e6 draws per test; `L` makes it an integer count
+
+# A custom matcher: a plain function whose body ends in an `expect_*` call composes
+# fine inside `test_that`. Compare empirical quantiles to a theoretical quantile
+# function `qfun` at several probabilities `probs`.
 expect_quantiles_close <- function(draws, qfun, probs, tol) {
+  # `stats::quantile(draws, probs, ...)` returns the sample quantiles at `probs`;
+  # `names = FALSE` strips the "5%"/"50%" name attributes, `type = 7` picks R's
+  # default estimator; `as.numeric` coerces to a bare numeric vector.
   emp  <- as.numeric(stats::quantile(draws, probs, names = FALSE, type = 7))
-  theo <- qfun(probs)
+  theo <- qfun(probs)                 # qfun is vectorized: one theoretical value per prob
+  # `abs(emp - theo)` is element-wise; `max(...)` is the worst-case deviation.
   expect_lt(max(abs(emp - theo)), tol)
 }
 
-PROBS <- c(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
+PROBS <- c(0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)   # the probabilities tested everywhere
 
 # ── sampler plumbing ─────────────────────────────────────────────────────────────
 
@@ -37,12 +49,12 @@ test_that("sample_n / sample_one return doubles of the expected length", {
   # every downstream validation below.
   d <- dist_normal(0, 1)
   one <- d$sample_one()
-  expect_type(one, "double")
+  expect_type(one, "double")        # R's floating-point type tag
   expect_length(one, 1L)
-  expect_true(is.finite(one))
+  expect_true(is.finite(one))       # not NA/NaN/Inf
 
   expect_length(d$sample_n(1000L), 1000L)
-  expect_length(d$sample_n(0L), 0L)
+  expect_length(d$sample_n(0L), 0L)   # zero draws -> length-0 vector (not an error)
 })
 
 # ── normal: dist_normal(mean, variance) == N(mean, sd = sqrt(variance)) ───────────
@@ -54,9 +66,12 @@ test_that("dist_normal is wired as N(mean, variance) and matches qnorm", {
   #        empirical quantiles match qnorm(p, 10, 2)
   # The sd check is the key wiring assertion: if variance were treated as sd, the
   # sample sd would be ~4 and both it and the quantiles would fail by a wide margin.
+  # `dist_normal(10, 4)$sample_n(N)` constructs and immediately samples (method
+  # chaining on the temporary).
   draws <- dist_normal(10, 4)$sample_n(N)
   expect_lt(abs(mean(draws) - 10),  0.05)
   expect_lt(abs(sd(draws)   -  2),  0.02)
+  # The 2nd arg is an anonymous function adapting R's qnorm to a single-arg form.
   expect_quantiles_close(draws, function(p) qnorm(p, mean = 10, sd = 2), PROBS, tol = 0.05)
 })
 
@@ -68,8 +83,8 @@ test_that("dist_uniform is wired as U(low, high) and matches qunif", {
   # Then:  all draws lie in [2, 10), sample mean ~6, sample variance ~5.333, and
   #        empirical quantiles match qunif(p, 2, 10)
   draws <- dist_uniform(2, 10)$sample_n(N)
-  expect_gte(min(draws), 2)
-  expect_lt(max(draws), 10)
+  expect_gte(min(draws), 2)   # >= : closed lower bound
+  expect_lt(max(draws), 10)   # <  : open upper bound (half-open support)
   expect_lt(abs(mean(draws) - 6),         0.02)
   expect_lt(abs(var(draws)  - 64 / 12),   0.05)
   expect_quantiles_close(draws, function(p) qunif(p, min = 2, max = 10), PROBS, tol = 0.05)
@@ -106,7 +121,12 @@ test_that("dist_poisson is wired with rate lambda and matches dpois", {
   expect_lt(abs(mean(draws) - 7),  0.05)
   expect_lt(abs(var(draws)  - 7),  0.1)
 
-  ks  <- 0:18
+  ks  <- 0:18   # integer sequence 0,1,...,18
+  # `vapply(xs, f, template)` maps `f` over `xs` and returns a vector of the
+  # template's type/length (here `numeric(1)` = one double per element) — a typed
+  # `sapply`. For each count k, `mean(draws == k)` is the empirical PMF (the mean
+  # of a 0/1 logical vector is its proportion of TRUEs). `dpois(ks, 7)` is the
+  # theoretical Poisson PMF, also evaluated over the whole vector at once.
   emp <- vapply(ks, function(k) mean(draws == k), numeric(1))
   expect_lt(max(abs(emp - dpois(ks, lambda = 7))), 0.005)
 })

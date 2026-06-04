@@ -9,7 +9,12 @@
 #   step_infectious_ir(people, d)         == step_timer_expire_set(people, I, R, d)
 #
 # State codes come from laser_states(): S=0, E=1, I=2, R=3, D=-1.
+#
+# testthat idioms: `test_that("desc", { ... })` blocks; `expect_equal` compares
+# values; `L` suffixes are integer literals.
 
+# `[["name"]]` extracts one element of the named vector by name (no partial match),
+# binding module-level constants S/E/I/R used throughout the assertions.
 S <- laser_states()[["S"]]
 E <- laser_states()[["E"]]
 I <- laser_states()[["I"]]
@@ -21,9 +26,9 @@ make_people <- function(states, timers) {
   ppl <- LaserFrame$new(n, n)
   ppl$add_scalar_property("state", "integer", 0L)
   ppl$add_scalar_property("timer", "integer", 0L)
-  ppl$state <- as.integer(states)
+  ppl$state <- as.integer(states)   # `$prop <- v` writes the whole column; as.integer coerces type
   ppl$timer <- as.integer(timers)
-  ppl
+  ppl   # last expression is the return value
 }
 
 # ── Absorbing-state transition: step_timer_expire ───────────────────────────────
@@ -131,14 +136,14 @@ test_that("a single E agent walks E -> I -> R -> S using only generalized kernel
   # Then:  it occupies E for 2 ticks, I for 3, R for 2, then returns to S,
   #        demonstrating the two generalized kernels compose into a full model.
   ppl <- make_people(E, 2L)
-  observed <- integer(0)
+  observed <- integer(0)   # an empty integer vector, used as a growable accumulator
   for (tick in seq_len(8L)) {
     step_timer_expire(ppl, from_state = R, to_state = S)               # R -> S (absorbing)
     step_timer_expire_set(ppl, from_state = I, to_state = R,
                           duration_dist = dist_constant(2))            # I -> R (timed)
     step_timer_expire_set(ppl, from_state = E, to_state = I,
                           duration_dist = dist_constant(3))            # E -> I (timed)
-    observed <- c(observed, ppl$state[1L])
+    observed <- c(observed, ppl$state[1L])   # c() appends by building a new vector each tick
   }
   # Ticks:        1  2  3  4  5  6  7  8
   # Expected:     E  I  I  I  R  R  S  S

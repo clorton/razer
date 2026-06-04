@@ -38,6 +38,27 @@ Steps that transition into untimed states (`step_infectious_is`,
 themselves suffer the artifact, but `step_recovered_rs` is still an *outflow* of R
 and so leads in SEIRS.
 
+## Commenting conventions
+
+The audience for this codebase is a programmer fluent in **C / C++ / C# /
+Python** but **not** in Rust or R. Comment for that reader.
+
+- **Always comment Rust code (`.rs`) for this audience.** Explain Rust-specific
+  idioms a C/C#/Python programmer would not immediately recognize — ownership and
+  borrowing (`&`, `&mut`), slices vs. raw pointers, `match`/`enum` destructuring,
+  closures, lazy and parallel iterators (`iter`/`map`/`fold`/`par_iter`), `Option`
+  / `Result` / `?`, the turbofish (`::<T>`), `unsafe` blocks and their SAFETY
+  contracts, and what attribute macros like `#[extendr]` generate. Don't explain
+  general programming; explain what differs from the languages above.
+  `src/rust/src/epidemic.rs` is the reference exemplar for the level and style.
+- **Always comment R code (`.R`) for this audience.** Explain R idioms that trip
+  up non-R programmers — `<-` assignment, S3 dispatch (`generic.class`,
+  `` `$<-` `` replacement methods), `.Call` into compiled code, environments and
+  closure rebinding, vectors / `c()` / `%in%`, `[[` vs `$`, `invisible()`, `NULL`,
+  column-major matrices, and vectorized operations. `R/laser_frame.R` is the
+  reference exemplar. Note: `R/extendr-wrappers.R` and `tools/*.R` are
+  auto-generated — do not comment them (regeneration overwrites edits).
+
 ## Build / dev notes
 
 - `cargo` is at `~/.cargo/bin` (not on the default PATH); prepend

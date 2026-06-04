@@ -6,6 +6,11 @@
 #
 # State codes: S=0, I=2, R=3
 # R0 = beta * inf_duration (discrete-time approximation)
+#
+# testthat idioms: `test_that("desc", { ... })` blocks with `expect_*` assertions;
+# `L` suffixes are integer literals. See test-SI.R for the run-helper conventions
+# (default args, set.seed, $new(capacity, count), column-major dimnamed matrix,
+# the seq_len() tick loop, and sum(state == code) vectorized tallies).
 
 run_sir <- function(n, n_seed = 100L, beta = 0.3, inf_duration = 14L,
                     nticks = 300L, seed = 42L) {
@@ -16,8 +21,9 @@ run_sir <- function(n, n_seed = 100L, beta = 0.3, inf_duration = 14L,
   ppl$add_scalar_property("node",  "integer", 0L)
   ppl$add_scalar_property("timer", "integer", 0L)
 
-  sv <- rep(0L, n); sv[seq_len(n_seed)] <- 2L; ppl$state <- sv
-  tv <- rep(0L, n); tv[seq_len(n_seed)] <- inf_duration; ppl$timer <- tv
+  # `a <- x; b <- y; ...` are three statements on one line (`;` separator).
+  sv <- rep(0L, n); sv[seq_len(n_seed)] <- 2L; ppl$state <- sv          # seed agents as I
+  tv <- rep(0L, n); tv[seq_len(n_seed)] <- inf_duration; ppl$timer <- tv  # give them an infectious timer
 
   nd <- LaserFrame$new(1L, 1L)
   nd$add_scalar_property("N", "integer", n)
@@ -97,6 +103,9 @@ test_that("SIR: epidemic burns out (I returns to 0)", {
   # Then:  I == 0 at the final tick (epidemic cannot persist in a closed SIR system)
   # Failure would indicate recovery (I→R) is not occurring correctly.
   traj <- run_sir(n = 10000L)
+  # nrow(traj) is the last row index (final tick). ignore_attr = TRUE tells
+  # expect_equal to compare values only, ignoring the "I" column-name attribute
+  # that survives the single-cell extraction.
   expect_equal(traj[nrow(traj), "I"], 0L, ignore_attr = TRUE)
 })
 
@@ -116,7 +125,7 @@ test_that("SIR: I rises then falls (single epidemic wave)", {
   # When:  run 300 ticks
   # Then:  I peaks strictly above the seed count, then returns to 0
   traj <- run_sir(n = 10000L)
-  i_peak <- max(traj[, "I"])
+  i_peak <- max(traj[, "I"])        # max() over the whole I column
   expect_gt(i_peak, 100L)           # epidemic grew above seed
   expect_equal(traj[nrow(traj), "I"], 0L, ignore_attr = TRUE)  # and then burned out
 })
@@ -147,6 +156,9 @@ test_that("SIR: recovery timer is respected (I duration ≈ inf_duration)", {
   for (tick in seq_len(9L)) {
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
     step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10))
+    # ppl$state[1L] reads the first element of the state column. `info=` attaches
+    # a label to the failure message so a failing iteration is identifiable;
+    # paste() joins its args with a space.
     expect_equal(ppl$state[1L], 2L, info = paste("tick", tick))
   }
   step_infectious_ir(ppl, imm_dist = dist_constant(0))
@@ -162,5 +174,6 @@ test_that("SEIR: incubation delays epidemic peak versus SIR with same R0", {
   # Placed here (not test-SEIR.R) so that run_sir() is already defined.
   seir <- run_seir(n = 10000L, beta = 0.4, exp_duration = 5L, inf_duration = 7L, seed = 7L)
   sir  <- run_sir( n = 10000L, beta = 0.2,                    inf_duration = 14L, seed = 7L)
+  # which.max() returns the index (1-based) of the first maximum, i.e. the peak tick.
   expect_gt(which.max(seir[, "I"]), which.max(sir[, "I"]))
 })
