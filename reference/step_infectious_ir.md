@@ -28,6 +28,9 @@ step_infectious_ir(people, imm_dist)
 
 ## Details
 
+A fixed-state shorthand for
+[`step_timer_expire_set()`](https://clorton.github.io/razer/reference/step_timer_expire_set.md)`(people, I, R, imm_dist)`.
+
 For SEIRS, pass the desired immunity distribution so that
 `step_recovered_rs` counts down R→S from a fresh per-agent draw. For SIR
 and SEIR (no waning, `step_recovered_rs` never called) the R timer is

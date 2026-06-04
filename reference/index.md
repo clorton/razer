@@ -63,19 +63,39 @@ models: order of per-tick update operations” below.
 - [`model-composition`](https://clorton.github.io/razer/reference/model-composition.md)
   [`update-order`](https://clorton.github.io/razer/reference/model-composition.md)
   : Composing models: order of per-tick update operations
+
 - [`step_births_cbr()`](https://clorton.github.io/razer/reference/step_births_cbr.md)
   : Stochastic birth step using a crude birth rate.
+
 - [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md)
   : Timer-based E→I transition (SEIR kernel).
+
 - [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md)
   : Timer-based I→R transition (SIR / SEIR / SEIRS kernel).
+
 - [`step_infectious_is()`](https://clorton.github.io/razer/reference/step_infectious_is.md)
   : Timer-based I→S transition for SIS models (no immunity).
+
 - [`step_mortality_cdr()`](https://clorton.github.io/razer/reference/step_mortality_cdr.md)
   : Stochastic mortality step using a crude death rate.
+
 - [`step_recovered_rs()`](https://clorton.github.io/razer/reference/step_recovered_rs.md)
   : Timer-based R→S transition for waning-immunity models.
+
+- [`step_timer_expire()`](https://clorton.github.io/razer/reference/step_timer_expire.md)
+  :
+
+  Generalized timer-expiry transition into an *absorbing* (untimed)
+  state.
+
+- [`step_timer_expire_set()`](https://clorton.github.io/razer/reference/step_timer_expire_set.md)
+  :
+
+  Generalized timer-expiry transition into a state that has *its own*
+  duration.
+
 - [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md)
   : Stochastic S→E exposure step (SEIR kernel).
+
 - [`step_transmission_si()`](https://clorton.github.io/razer/reference/step_transmission_si.md)
   : Stochastic S→I transmission step (SI / SIR kernel).

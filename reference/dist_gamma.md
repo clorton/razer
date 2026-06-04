@@ -30,5 +30,5 @@ A `Distribution` object.
 ``` r
 d <- dist_gamma(2, 3)   # mean 6, variance 18
 d$sample_one()
-#> [1] 4.128752
+#> [1] 3.906411
 ```

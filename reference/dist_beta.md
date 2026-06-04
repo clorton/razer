@@ -28,5 +28,5 @@ A `Distribution` object.
 ``` r
 d <- dist_beta(2, 5)   # mean 2/7 ≈ 0.286, support (0, 1)
 d$sample_one()
-#> [1] 0.1753345
+#> [1] 0.4063659
 ```

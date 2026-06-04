@@ -71,7 +71,9 @@ giving the infectious period in ticks; sampled and written to <code>timer</code>
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p><strong>RNG:</strong> thread-local — each Rayon worker draws from its own <code>thread_rng</code>
+    <p>A fixed-state shorthand for
+<code><a href="step_timer_expire_set.html">step_timer_expire_set()</a></code><code>(people, E, I, inf_dist)</code>.</p>
+<p><strong>RNG:</strong> thread-local — each Rayon worker draws from its own <code>thread_rng</code>
 (Pattern B: the kernel owns the RNG and passes it into the sampler). The
 single <code>inf_dist</code> handle is shared across threads by reference.</p>
     </div>

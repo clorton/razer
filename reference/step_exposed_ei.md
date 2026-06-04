@@ -30,6 +30,9 @@ step_exposed_ei(people, inf_dist)
 
 ## Details
 
+A fixed-state shorthand for
+[`step_timer_expire_set()`](https://clorton.github.io/razer/reference/step_timer_expire_set.md)`(people, E, I, inf_dist)`.
+
 **RNG:** thread-local — each Rayon worker draws from its own
 `thread_rng` (Pattern B: the kernel owns the RNG and passes it into the
 sampler). The single `inf_dist` handle is shared across threads by

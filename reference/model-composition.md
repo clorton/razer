@@ -64,10 +64,35 @@ package's `examples/` directory demonstrate both, validating the
 simulated attack fraction against the Kermack-McKendrick final-size
 relation.
 
+**Generalized timer kernels.** The four named timer transitions are
+fixed-state shorthands over two generalized kernels parameterized by the
+`from`/`to` state codes — use these directly to add transitions the
+named kernels do not cover:
+
+- [`step_timer_expire()`](https://clorton.github.io/razer/reference/step_timer_expire.md)`(people, from, to)`:
+
+  transition into an *absorbing* (untimed) state; the timer is left
+  at 0. Generalizes
+  [`step_infectious_is()`](https://clorton.github.io/razer/reference/step_infectious_is.md)
+  (I-\>S) and
+  [`step_recovered_rs()`](https://clorton.github.io/razer/reference/step_recovered_rs.md)
+  (R-\>S).
+
+- [`step_timer_expire_set()`](https://clorton.github.io/razer/reference/step_timer_expire_set.md)`(people, from, to, dist)`:
+
+  transition into a state with *its own* duration; a fresh per-agent
+  timer is drawn from `dist`. Generalizes
+  [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md)
+  (E-\>I) and
+  [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md)
+  (I-\>R).
+
 ## See also
 
 [`step_transmission_si()`](https://clorton.github.io/razer/reference/step_transmission_si.md),
 [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md),
+[`step_timer_expire()`](https://clorton.github.io/razer/reference/step_timer_expire.md),
+[`step_timer_expire_set()`](https://clorton.github.io/razer/reference/step_timer_expire_set.md),
 [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md),
 [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md),
 [`step_infectious_is()`](https://clorton.github.io/razer/reference/step_infectious_is.md),

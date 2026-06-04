@@ -38,7 +38,13 @@
 <h2 id="unreleased">Unreleased<a class="anchor" aria-label="anchor" href="#unreleased"></a></h2>
 <div class="section level3">
 <h3 id="added">Added<a class="anchor" aria-label="anchor" href="#added"></a></h3>
+<ul><li>Two <strong>generalized timer-expiry kernels</strong> (mirroring laser-generic’s <code>nb_timer_update</code> and <code>nb_timer_update_timer_set</code>), parameterized by the <code>from</code>/<code>to</code> state codes so any timer-driven transition can be expressed without a bespoke kernel:
 <ul><li>
+<code>step_timer_expire(people, from_state, to_state)</code> — transition into an <em>absorbing</em> (untimed) state; the timer is left at 0 on arrival (e.g. I→S, R→S).</li>
+<li>
+<code>step_timer_expire_set(people, from_state, to_state, duration_dist)</code> — transition into a state with <em>its own</em> duration; a fresh per-agent timer is drawn from <code>duration_dist</code> on arrival (e.g. E→I, I→R with waning). The four named kernels (<code>step_exposed_ei</code>, <code>step_infectious_ir</code>, <code>step_infectious_is</code>, <code>step_recovered_rs</code>) are now thin, fixed-state wrappers over these two helpers, so the shared decrement/transition loop lives in one place. Covered by <code>tests/testthat/test-timer-kernels.R</code>, which proves the wrappers are equivalent to the generalized kernels.</li>
+</ul></li>
+<li>
 <code>distributions</code> module exposing parameterized probability distributions to R as opaque <code>Distribution</code> handles. Constructors use a <code>dist_</code> prefix to avoid masking base/stats functions (e.g. <code><a href="https://rdrr.io/r/base/Special.html" class="external-link">base::gamma</a></code>, <code><a href="https://rdrr.io/r/stats/family.html" class="external-link">stats::poisson</a></code>):
 <ul><li>
 <code>dist_normal(mean, variance)</code> — Gaussian (second argument is the variance σ², not the standard deviation).</li>

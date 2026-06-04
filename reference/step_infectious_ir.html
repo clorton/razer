@@ -63,7 +63,9 @@ whole ticks, clamped to a minimum of 1). Use <code>dist_constant(0)</code> for S
 </dl></div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>For SEIRS, pass the desired immunity distribution so that <code>step_recovered_rs</code>
+    <p>A fixed-state shorthand for
+<code><a href="step_timer_expire_set.html">step_timer_expire_set()</a></code><code>(people, I, R, imm_dist)</code>.</p>
+<p>For SEIRS, pass the desired immunity distribution so that <code>step_recovered_rs</code>
 counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
 <code>step_recovered_rs</code> never called) the R timer is never read, so any
 distribution works — <code>dist_constant(0)</code> is the conventional "don't care".</p>

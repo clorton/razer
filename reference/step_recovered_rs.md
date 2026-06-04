@@ -14,3 +14,8 @@ step_recovered_rs(people)
 - people:
 
   LaserFrame of agents.
+
+## Details
+
+A fixed-state shorthand for
+[`step_timer_expire()`](https://clorton.github.io/razer/reference/step_timer_expire.md)`(people, R, S)`.

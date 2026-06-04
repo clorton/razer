@@ -85,10 +85,26 @@ which runs before the transmission tally — yields the full <code>beta * D</cod
 <p>The <code>sir_attack_fraction.R</code> and <code>seir_attack_fraction.R</code> scripts in the
 package's <code>examples/</code> directory demonstrate both, validating the simulated
 attack fraction against the Kermack-McKendrick final-size relation.</p>
-    </div>
+<p><strong>Generalized timer kernels.</strong> The four named timer transitions are
+fixed-state shorthands over two generalized kernels parameterized by the
+<code>from</code>/<code>to</code> state codes — use these directly to add transitions the named
+kernels do not cover:</p><dl><dt><code><a href="step_timer_expire.html">step_timer_expire()</a></code><code>(people, from, to)</code></dt>
+<dd><p>transition into an
+<em>absorbing</em> (untimed) state; the timer is left at 0. Generalizes
+<code><a href="step_infectious_is.html">step_infectious_is()</a></code> (I-&gt;S) and <code><a href="step_recovered_rs.html">step_recovered_rs()</a></code> (R-&gt;S).</p></dd>
+
+<dt><code><a href="step_timer_expire_set.html">step_timer_expire_set()</a></code><code>(people, from, to, dist)</code></dt>
+<dd><p>transition into a
+state with <em>its own</em> duration; a fresh per-agent timer is drawn from
+<code>dist</code>. Generalizes <code><a href="step_exposed_ei.html">step_exposed_ei()</a></code> (E-&gt;I) and <code><a href="step_infectious_ir.html">step_infectious_ir()</a></code>
+(I-&gt;R).</p></dd>
+
+
+</dl></div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="step_transmission_si.html">step_transmission_si()</a></code>, <code><a href="step_transmission_se.html">step_transmission_se()</a></code>,
+<code><a href="step_timer_expire.html">step_timer_expire()</a></code>, <code><a href="step_timer_expire_set.html">step_timer_expire_set()</a></code>,
 <code><a href="step_exposed_ei.html">step_exposed_ei()</a></code>, <code><a href="step_infectious_ir.html">step_infectious_ir()</a></code>, <code><a href="step_infectious_is.html">step_infectious_is()</a></code>,
 <code><a href="step_recovered_rs.html">step_recovered_rs()</a></code></p></div>
     </div>
