@@ -168,6 +168,66 @@ Method names take priority over property names — if a property is named
   active entries for one time step) is a contiguous block, making
   `get_col` a single `memcpy`.
 
+## Epidemic model components
+
+Beyond the `LaserFrame` data structure, `razer` provides composable
+per-tick **step kernels** for building SI / SIR / SEIR / SEIRS-family
+compartmental models, together with **parameterized distributions**
+([`dist_normal()`](https://clorton.github.io/razer/reference/dist_normal.md),
+[`dist_gamma()`](https://clorton.github.io/razer/reference/dist_gamma.md),
+[`dist_poisson()`](https://clorton.github.io/razer/reference/dist_poisson.md),
+…) for drawing state-timer durations such as incubation and infectious
+periods. See the [function
+reference](https://clorton.github.io/razer/reference/) for the complete
+list.
+
+### Order of update operations
+
+Call the transitions **downstream-first** within each tick — move agents
+*out* of a timed compartment before moving agents *in*, walking the
+disease-progression chain backwards:
+
+| Model | Per-tick call order |
+|----|----|
+| SIR | [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_transmission_si()`](https://clorton.github.io/razer/reference/step_transmission_si.md) |
+| SEIR | [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md) → [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md) |
+| SEIRS | [`step_recovered_rs()`](https://clorton.github.io/razer/reference/step_recovered_rs.md) → [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md) → [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md) |
+
+This keeps each compartment’s residence time equal to its configured
+duration: a newly exposed or infectious agent would otherwise be
+decremented in the same tick it arrives, shortening its period by a
+tick. See the `model-composition` help topic (`?\`model-composition\`\`)
+for the full rationale and the SIR caveat.
+
+### Worked examples
+
+The [`examples/`](https://clorton.github.io/razer/examples/) directory
+has two runnable scripts that build a model, plot its trajectories, and
+validate the simulated final **attack fraction** against the classic
+**Kermack–McKendrick** final-size relation `A = 1 − exp(−R0·A)`. Both
+match the theory to within a few thousandths across the supercritical
+range. Run either with, e.g., `Rscript examples/sir_attack_fraction.R`.
+
+**[`sir_attack_fraction.R`](https://clorton.github.io/razer/examples/sir_attack_fraction.R)
+— SIR model**
+
+![SIR S/I/R trajectories](reference/figures/sir_trajectories.png)![SIR
+attack fraction vs
+Kermack–McKendrick](reference/figures/sir_attack_fraction.png)
+
+**[`seir_attack_fraction.R`](https://clorton.github.io/razer/examples/seir_attack_fraction.R)
+— SEIR model**
+
+![SEIR S/E/I/R
+trajectories](reference/figures/seir_trajectories.png)![SEIR attack
+fraction vs
+Kermack–McKendrick](reference/figures/seir_attack_fraction.png)
+
+See
+[`examples/README.md`](https://clorton.github.io/razer/examples/README.md)
+for details, including why the effective `R0` differs between SIR
+(`beta·(D−1)`) and SEIR (`beta·D`).
+
 ## Development
 
 ### Repository layout

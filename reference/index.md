@@ -57,9 +57,12 @@ durations (e.g. incubation and infectious periods).
 ## Model step kernels
 
 Per-tick transition kernels for composing SI / SIR / SEIR / SEIRS-family
-models. Call them downstream-first within a tick (see the README /
-repository notes).
+models. Call them downstream-first within a tick — see “Composing
+models: order of per-tick update operations” below.
 
+- [`model-composition`](https://clorton.github.io/razer/reference/model-composition.md)
+  [`update-order`](https://clorton.github.io/razer/reference/model-composition.md)
+  : Composing models: order of per-tick update operations
 - [`step_births_cbr()`](https://clorton.github.io/razer/reference/step_births_cbr.md)
   : Stochastic birth step using a crude birth rate.
 - [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md)

@@ -28,5 +28,5 @@ A `Distribution` object.
 ``` r
 d <- dist_logistic(4, 2)   # mean 4
 d$sample_one()
-#> [1] 8.320558
+#> [1] 2.385799
 ```

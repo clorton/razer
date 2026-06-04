@@ -321,6 +321,57 @@
 </div>
 </div>
 <div class="section level2">
+<h2 id="epidemic-model-components">Epidemic model components<a class="anchor" aria-label="anchor" href="#epidemic-model-components"></a>
+</h2>
+<p>Beyond the <code>LaserFrame</code> data structure, <code>razer</code> provides composable per-tick <strong>step kernels</strong> for building SI / SIR / SEIR / SEIRS-family compartmental models, together with <strong>parameterized distributions</strong> (<code><a href="reference/dist_normal.html">dist_normal()</a></code>, <code><a href="reference/dist_gamma.html">dist_gamma()</a></code>, <code><a href="reference/dist_poisson.html">dist_poisson()</a></code>, …) for drawing state-timer durations such as incubation and infectious periods. See the <a href="https://clorton.github.io/razer/reference/">function reference</a> for the complete list.</p>
+<div class="section level3">
+<h3 id="order-of-update-operations">Order of update operations<a class="anchor" aria-label="anchor" href="#order-of-update-operations"></a>
+</h3>
+<p>Call the transitions <strong>downstream-first</strong> within each tick — move agents <em>out</em> of a timed compartment before moving agents <em>in</em>, walking the disease-progression chain backwards:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr>
+<th>Model</th>
+<th>Per-tick call order</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>SIR</td>
+<td>
+<code><a href="reference/step_infectious_ir.html">step_infectious_ir()</a></code> → <code><a href="reference/step_transmission_si.html">step_transmission_si()</a></code>
+</td>
+</tr>
+<tr>
+<td>SEIR</td>
+<td>
+<code><a href="reference/step_infectious_ir.html">step_infectious_ir()</a></code> → <code><a href="reference/step_exposed_ei.html">step_exposed_ei()</a></code> → <code><a href="reference/step_transmission_se.html">step_transmission_se()</a></code>
+</td>
+</tr>
+<tr>
+<td>SEIRS</td>
+<td>
+<code><a href="reference/step_recovered_rs.html">step_recovered_rs()</a></code> → <code><a href="reference/step_infectious_ir.html">step_infectious_ir()</a></code> → <code><a href="reference/step_exposed_ei.html">step_exposed_ei()</a></code> → <code><a href="reference/step_transmission_se.html">step_transmission_se()</a></code>
+</td>
+</tr>
+</tbody>
+</table>
+<p>This keeps each compartment’s residence time equal to its configured duration: a newly exposed or infectious agent would otherwise be decremented in the same tick it arrives, shortening its period by a tick. See the <code>model-composition</code> help topic (<code>?\</code>model-composition``) for the full rationale and the SIR caveat.</p>
+</div>
+<div class="section level3">
+<h3 id="worked-examples">Worked examples<a class="anchor" aria-label="anchor" href="#worked-examples"></a>
+</h3>
+<p>The <a href="examples/"><code>examples/</code></a> directory has two runnable scripts that build a model, plot its trajectories, and validate the simulated final <strong>attack fraction</strong> against the classic <strong>Kermack–McKendrick</strong> final-size relation <code>A = 1 − exp(−R0·A)</code>. Both match the theory to within a few thousandths across the supercritical range. Run either with, e.g., <code>Rscript examples/sir_attack_fraction.R</code>.</p>
+<p><strong><a href="examples/sir_attack_fraction.R"><code>sir_attack_fraction.R</code></a> — SIR model</strong></p>
+<p><img src="reference/figures/sir_trajectories.png" alt="SIR S/I/R trajectories"><img src="reference/figures/sir_attack_fraction.png" alt="SIR attack fraction vs Kermack–McKendrick"></p>
+<p><strong><a href="examples/seir_attack_fraction.R"><code>seir_attack_fraction.R</code></a> — SEIR model</strong></p>
+<p><img src="reference/figures/seir_trajectories.png" alt="SEIR S/E/I/R trajectories"><img src="reference/figures/seir_attack_fraction.png" alt="SEIR attack fraction vs Kermack–McKendrick"></p>
+<p>See <a href="examples/README.html"><code>examples/README.md</code></a> for details, including why the effective <code>R0</code> differs between SIR (<code>beta·(D−1)</code>) and SEIR (<code>beta·D</code>).</p>
+</div>
+</div>
+<div class="section level2">
 <h2 id="development">Development<a class="anchor" aria-label="anchor" href="#development"></a>
 </h2>
 <div class="section level3">
