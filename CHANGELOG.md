@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- `run_sir()` — a high-level **model runner** that assembles the per-tick step
+  kernels and their parameters into a single call (`R/models.R`). It takes a node
+  data.frame (one row per node, an integer `population` column), builds an agent
+  `LaserFrame` sized to the total population, assigns each agent to its node,
+  seeds initial infections, and runs the downstream-first SIR loop (recovery I→R
+  before transmission S→I). It records per-node compartment trajectories (`S`,
+  `I`, `R`) and per-tick flows (`incidence` S→I, `recovery` I→R) into a node-level
+  report `LaserFrame` attached as `attr(model, "report")`, alongside `runtime`,
+  `nticks`, `model`, and `parameters` attributes. `infectious_period` accepts a
+  `Distribution` or a bare number (promoted to `dist_constant`), and `progress`
+  draws a text progress bar. Intended as the reference template for `run_seir()`,
+  `run_si()`, `run_sis()`, … Covered by `tests/testthat/test-run_sir.R`
+  (node assignment, seeding, population conservation, flow-vs-delta identities,
+  cross-node isolation, attribute surface, and argument validation).
 - Two **generalized timer-expiry kernels** (mirroring laser-generic's
   `nb_timer_update` and `nb_timer_update_timer_set`), parameterized by the
   `from`/`to` state codes so any timer-driven transition can be expressed without

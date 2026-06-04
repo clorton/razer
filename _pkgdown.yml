@@ -26,3 +26,10 @@ reference:
   contents:
   - model-composition
   - starts_with("step_")
+- title: Model runners
+  desc: >
+    High-level functions that assemble the step kernels and their parameters into
+    a single call: build the population from a node table, run the tick loop, and
+    return the people frame with per-node trajectories and flows attached.
+  contents:
+  - starts_with("run_")
