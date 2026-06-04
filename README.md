@@ -2,11 +2,11 @@
 
 **R**ust-backed **A**gent modeling with **Z**ero-copy struct-of-arrays for **E**radication **R**esearch
 
-`razer` is an R interface to the [LASER](https://github.com/InstituteforDiseaseModeling/laser) (Light Agent Spatial modeling for ERadication) toolkit. It provides high-performance, Rust-backed data structures for large-scale spatial agent-based disease models. The name is a deliberate pun: "raze" means to eradicate completely, "razor" echoes LASER, and the trailing R anchors it to R.
+`razer` is an R interface to the [LASER](https://github.com/laser-base) (Light Agent Spatial modeling for ERadication) toolkit. It provides high-performance, Rust-backed data structures for large-scale spatial agent-based disease models. The name is a deliberate pun: "raze" means to eradicate completely, "razor" echoes LASER, and the trailing R anchors it to R.
 
 ## Background: the Python LASER project
 
-[LASER](https://github.com/InstituteforDiseaseModeling/laser) is a Python framework developed at the Institute for Disease Modeling for building fast, composable agent-based disease models at national and global scale. Its core design insight is the **struct-of-arrays (SoA)** memory layout: instead of one object per agent, each agent *property* is a flat array of length `capacity`, and all active agents are a contiguous slice of that array. This layout is cache-friendly for the vectorised, Numba-JIT-compiled kernels that drive LASER's performance.
+[LASER](https://github.com/laser-base) is a Python framework developed at the Institute for Disease Modeling for building fast, composable agent-based disease models at national and global scale. Its core design insight is the **struct-of-arrays (SoA)** memory layout: instead of one object per agent, each agent *property* is a flat array of length `capacity`, and all active agents are a contiguous slice of that array. This layout is cache-friendly for the vectorised, Numba-JIT-compiled kernels that drive LASER's performance.
 
 `razer` ports this memory model to R, implementing the backing arrays in Rust (via the [extendr](https://extendr.github.io/) framework) and exposing a `LaserFrame` object that mirrors `laser.core.LaserFrame` from the Python package.
 
