@@ -1,0 +1,41 @@
+# Run R CMD check (which runs the full testthat suite via tests/testthat.R) on
+# every pull request and on pushes to main. Adapted from
+# r-lib/actions/examples/check-standard.yaml, with a Rust toolchain step because
+# razer is an extendr (Rust-backed) package and must compile during install.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+name: R-CMD-check.yaml
+
+permissions: read-all
+
+jobs:
+  R-CMD-check:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust (needed to compile the extendr crate)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual")'

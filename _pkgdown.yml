@@ -21,7 +21,8 @@ reference:
 - title: Model step kernels
   desc: >
     Per-tick transition kernels for composing SI / SIR / SEIR / SEIRS-family
-    models. Call them downstream-first within a tick (see the README / repository
-    notes).
+    models. Call them downstream-first within a tick — see "Composing models:
+    order of per-tick update operations" below.
   contents:
+  - model-composition
   - starts_with("step_")

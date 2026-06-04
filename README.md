@@ -140,6 +140,38 @@ Method names take priority over property names — if a property is named `count
 - **Scalar properties** — backing array of length `capacity`; active slice is `[1:count]`.
 - **Vector properties** — backing array of `capacity × length` elements stored **column-major** (R's native order). Element `[entry, col]` lives at byte offset `entry + col * capacity`. Column `col` (all active entries for one time step) is a contiguous block, making `get_col` a single `memcpy`.
 
+## Epidemic model components
+
+Beyond the `LaserFrame` data structure, `razer` provides composable per-tick **step kernels** for building SI / SIR / SEIR / SEIRS-family compartmental models, together with **parameterized distributions** (`dist_normal()`, `dist_gamma()`, `dist_poisson()`, …) for drawing state-timer durations such as incubation and infectious periods. See the [function reference](https://clorton.github.io/razer/reference/) for the complete list.
+
+### Order of update operations
+
+Call the transitions **downstream-first** within each tick — move agents *out* of a timed compartment before moving agents *in*, walking the disease-progression chain backwards:
+
+| Model | Per-tick call order |
+|---|---|
+| SIR | `step_infectious_ir()` → `step_transmission_si()` |
+| SEIR | `step_infectious_ir()` → `step_exposed_ei()` → `step_transmission_se()` |
+| SEIRS | `step_recovered_rs()` → `step_infectious_ir()` → `step_exposed_ei()` → `step_transmission_se()` |
+
+This keeps each compartment's residence time equal to its configured duration: a newly exposed or infectious agent would otherwise be decremented in the same tick it arrives, shortening its period by a tick. See the `model-composition` help topic (`?\`model-composition\``) for the full rationale and the SIR caveat.
+
+### Worked examples
+
+The [`examples/`](examples/) directory has two runnable scripts that build a model, plot its trajectories, and validate the simulated final **attack fraction** against the classic **Kermack–McKendrick** final-size relation `A = 1 − exp(−R0·A)`. Both match the theory to within a few thousandths across the supercritical range. Run either with, e.g., `Rscript examples/sir_attack_fraction.R`.
+
+**[`sir_attack_fraction.R`](examples/sir_attack_fraction.R) — SIR model**
+
+![SIR S/I/R trajectories](man/figures/sir_trajectories.png)
+![SIR attack fraction vs Kermack–McKendrick](man/figures/sir_attack_fraction.png)
+
+**[`seir_attack_fraction.R`](examples/seir_attack_fraction.R) — SEIR model**
+
+![SEIR S/E/I/R trajectories](man/figures/seir_trajectories.png)
+![SEIR attack fraction vs Kermack–McKendrick](man/figures/seir_attack_fraction.png)
+
+See [`examples/README.md`](examples/README.md) for details, including why the effective `R0` differs between SIR (`beta·(D−1)`) and SEIR (`beta·D`).
+
 ## Development
 
 ### Repository layout
