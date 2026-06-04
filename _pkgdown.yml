@@ -1,0 +1,27 @@
+url: https://clorton.github.io/razer/
+
+template:
+  bootstrap: 5
+
+reference:
+- title: Population frame
+  desc: >
+    Struct-of-arrays data store for agents and patches, and the epidemic state
+    codes used by the model kernels.
+  contents:
+  - LaserFrame
+  - laser_states
+- title: Distributions
+  desc: >
+    Parameterized probability distributions used to draw state-timer durations
+    (e.g. incubation and infectious periods).
+  contents:
+  - Distribution
+  - starts_with("dist_")
+- title: Model step kernels
+  desc: >
+    Per-tick transition kernels for composing SI / SIR / SEIR / SEIRS-family
+    models. Call them downstream-first within a tick (see the README / repository
+    notes).
+  contents:
+  - starts_with("step_")

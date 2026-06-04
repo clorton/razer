@@ -4,3 +4,10 @@
 ^src/Makevars$
 ^src/Makevars\.win$
 ^LICENSE\.md$
+^_pkgdown\.yml$
+^docs$
+^\.github$
+^CLAUDE\.md$
+^examples$
+^CHANGELOG\.md$
+^tmp$

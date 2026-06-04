@@ -9,6 +9,8 @@ Description: R interface to the LASER (Light Agent Spatial modeling for ERadicat
     models, including struct-of-arrays population frames, migration network
     models, and composable SEIR-family compartmental model components.
 License: MIT + file LICENSE
+URL: https://clorton.github.io/razer/, https://github.com/clorton/razer
+BugReports: https://github.com/clorton/razer/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3

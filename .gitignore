@@ -7,3 +7,6 @@ src/Makevars.win
 .DS_Store
 
 .claude/worktrees/
+
+# pkgdown site is built in CI and served from the gh-pages branch
+docs/
