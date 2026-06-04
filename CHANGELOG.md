@@ -32,12 +32,19 @@ All notable changes to this project are documented here.
   the step kernels, and `tests/testthat/test-distributions-validation.R` validating
   parameter wiring against R's reference implementations (`qnorm`, `qunif`,
   `qgamma`, `qpois`/`dpois`) over one million draws.
-- `examples/sir_attack_fraction.R` — a runnable SIR example that plots the S/I/R
-  trajectories and compares the simulated final attack fraction against the
-  Kermack–McKendrick final-size relation `A = 1 - exp(-R0 * A)` across an `R0`
-  sweep (with `examples/README.md` and sample output plots).
+- `examples/sir_attack_fraction.R` and `examples/seir_attack_fraction.R` —
+  runnable SIR and SEIR examples that plot the compartment trajectories and
+  compare the simulated final attack fraction against the Kermack–McKendrick
+  final-size relation `A = 1 - exp(-R0 * A)` across an `R0` sweep, with timing
+  output (with `examples/README.md` and sample output plots).
+- `CLAUDE.md` documenting the downstream-first transition-ordering convention for
+  composing models from the step kernels.
 
 ### Changed
+- Model compositions (SIR/SEIR/SEIRS test helpers and the examples) now call the
+  per-tick transitions **downstream-first** (out of each timed compartment before
+  into it: R→S, I→R, E→I, S→E) so that exposed/infectious periods reflect their
+  full configured duration rather than being shortened by one tick. See `CLAUDE.md`.
 - Distributions return **floating-point** values; the integer rounding for state
   timers now lives in the step kernels (a shared `duration_ticks` helper rounds to
   the nearest tick and clamps to a minimum of 1). `Distribution` no longer exposes

@@ -14,19 +14,30 @@
 #      whose non-trivial root gives the attack fraction for a large, well-mixed,
 #      fully susceptible population.
 #
-# Discrete-time mapping: with per-tick force of infection
-# p = 1 - exp(-beta * I / N), an infectious agent infects on the order of beta
-# susceptibles per tick while the population is still mostly susceptible. The
-# subtlety is *how many* ticks a secondary case transmits for. Within one tick the
-# order is transmission, then recovery: a newly infected agent is given a timer of
-# D during transmission and then immediately decremented by step_infectious_ir the
-# same tick, and it does not contribute to that tick's force of infection (the I
-# tally was taken before it was infected). So a secondary case transmits on D - 1
-# ticks, giving an effective basic reproduction number
+# Transition ordering: each tick runs transitions downstream-first (recovery
+# I->R before transmission S->I), so a newly infected agent is never decremented
+# in the same tick it is infected. See the package modeling note for why this
+# ordering matters in general.
+#
+# Discrete-time mapping: with per-tick force of infection p = 1 - exp(-beta*I/N),
+# an infectious agent infects on the order of beta susceptibles per tick while the
+# population is still mostly susceptible. The subtlety is *how many* ticks a
+# secondary case transmits for. In SIR the agent enters state I inside
+# step_transmission_si, which computes its infectious tally at the start of the
+# step — before that step's new infections — so a newly infected agent first
+# contributes to the force of infection on the *next* tick. It then recovers after
+# D ticks, and on its recovery tick it is moved to R (by step_infectious_ir, which
+# runs first) before the tally is taken. The net effect is that a secondary case
+# is counted in the force of infection on D - 1 ticks, giving an effective basic
+# reproduction number
 #
 #     R0 = beta * (D - 1).
 #
-# With that mapping the deterministic final size satisfies the equation above
+# (This one-tick offset is specific to direct S->I transmission, where infection
+# and the infectious tally share a step. In SEIR an agent enters I via a separate
+# step, so the full period D applies — see examples/seir_attack_fraction.R.)
+#
+# With this mapping the deterministic final size satisfies the equation above
 # exactly, provided the epidemic is run to completion — which the sweep below does
 # by iterating until no infectious agents remain.
 #
@@ -64,10 +75,12 @@ new_sir <- function(n, n_seed, inf_duration) {
        imm_dist = dist_constant(0))             # SIR: no waning, R timer unused
 }
 
-# Advance one tick: S->I transmission, then I->R recovery on timer expiry.
+# Advance one tick. Transitions run downstream-first: I->R recovery before S->I
+# transmission, so an agent infected this tick is not decremented by the recovery
+# step in the same tick (see header note on effective infectious period).
 sir_step <- function(sim, beta) {
-  step_transmission_si(sim$ppl, sim$nd, beta = beta, inf_dist = sim$inf_dist)
   step_infectious_ir(sim$ppl, imm_dist = sim$imm_dist)
+  step_transmission_si(sim$ppl, sim$nd, beta = beta, inf_dist = sim$inf_dist)
 }
 
 n_in_state <- function(sim, code) sum(sim$ppl$state == code)
