@@ -47,3 +47,10 @@ and so leads in SEIRS.
 - Distribution constructors use a `dist_` prefix (`dist_normal`, `dist_gamma`, …)
   to avoid masking base/stats functions such as `base::gamma` / `stats::poisson`.
 - Run tests with `Rscript -e 'devtools::test()'`.
+
+## Git workflow
+
+- **Integrate with fast-forward only — never create a merge commit.** Merge a
+  feature or worktree branch into `main` with `git merge --ff-only <branch>`;
+  if the branch has diverged, rebase it onto `main` first, then fast-forward.
+  Enforced repo-locally via `merge.ff = only` and `pull.ff = only` in git config.
