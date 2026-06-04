@@ -110,3 +110,66 @@ test_that("dist_poisson is wired with rate lambda and matches dpois", {
   emp <- vapply(ks, function(k) mean(draws == k), numeric(1))
   expect_lt(max(abs(emp - dpois(ks, lambda = 7))), 0.005)
 })
+
+# ── beta: dist_beta(alpha, beta) == Beta(shape1 = alpha, shape2 = beta) ───────────
+
+test_that("dist_beta is wired with shape parameters (alpha, beta) and matches qbeta", {
+  # Given: dist_beta(2, 5)  ->  support (0, 1), mean 2/7 ≈ 0.2857
+  # When:  one million draws are taken
+  # Then:  all draws lie in (0, 1), sample mean ~0.2857, and empirical quantiles
+  #        match qbeta(p, shape1 = 2, shape2 = 5)
+  # Matching qbeta with shape1=alpha, shape2=beta confirms the shapes are wired in
+  # the right order (swapping them would mirror the distribution about 0.5).
+  draws <- dist_beta(2, 5)$sample_n(N)
+  expect_gt(min(draws), 0)
+  expect_lt(max(draws), 1)
+  expect_lt(abs(mean(draws) - 2 / 7), 0.005)
+  expect_quantiles_close(draws, function(p) qbeta(p, shape1 = 2, shape2 = 5), PROBS, tol = 0.01)
+})
+
+# ── exponential: dist_exp(rate) == Exp(rate) ──────────────────────────────────────
+
+test_that("dist_exp is wired with rate lambda and matches qexp", {
+  # Given: dist_exp(0.5)  ->  mean 1/rate = 2, sd 2
+  # When:  one million draws are taken
+  # Then:  all draws > 0, sample mean ~2 and sd ~2, and empirical quantiles match
+  #        qexp(p, rate = 0.5)
+  # qexp uses the rate parameterization; matching it confirms `rate` is a rate and
+  # not a scale/mean (a scale reading of 0.5 would give mean 0.5).
+  draws <- dist_exp(0.5)$sample_n(N)
+  expect_gt(min(draws), 0)
+  expect_lt(abs(mean(draws) - 2), 0.02)
+  expect_lt(abs(sd(draws)   - 2), 0.02)
+  expect_quantiles_close(draws, function(p) qexp(p, rate = 0.5), PROBS, tol = 0.1)
+})
+
+# ── logistic: dist_logistic(location, scale) == Logistic(location, scale) ─────────
+
+test_that("dist_logistic is wired with (location, scale) and matches qlogis", {
+  # Given: dist_logistic(4, 2)  ->  mean/median 4, variance scale^2 * pi^2 / 3 ≈ 13.16
+  # When:  one million draws are taken
+  # Then:  sample mean ~4, sample variance ~13.16, and empirical quantiles match
+  #        qlogis(p, location = 4, scale = 2)
+  # Matching qlogis confirms the inverse-CDF sampler reproduces R's logistic with
+  # the location and scale wired correctly.
+  draws <- dist_logistic(4, 2)$sample_n(N)
+  expect_lt(abs(mean(draws) - 4), 0.05)
+  expect_lt(abs(var(draws) - 4 * pi^2 / 3), 0.5)
+  expect_quantiles_close(draws, function(p) qlogis(p, location = 4, scale = 2), PROBS, tol = 0.15)
+})
+
+# ── log-normal: dist_lognormal(meanlog, sdlog) == LogNormal(meanlog, sdlog) ───────
+
+test_that("dist_lognormal is wired with log-space (meanlog, sdlog) and matches qlnorm", {
+  # Given: dist_lognormal(0, 0.5)  ->  median exp(0) = 1, mean exp(0.125) ≈ 1.133
+  # When:  one million draws are taken
+  # Then:  all draws > 0, sample median ~1, sample mean ~1.133, and empirical
+  #        quantiles match qlnorm(p, meanlog = 0, sdlog = 0.5)
+  # Matching qlnorm confirms meanlog/sdlog are the log-space parameters, not the
+  # mean/sd of the distribution itself.
+  draws <- dist_lognormal(0, 0.5)$sample_n(N)
+  expect_gt(min(draws), 0)
+  expect_lt(abs(median(draws) - 1),             0.02)
+  expect_lt(abs(mean(draws)   - exp(0.5^2 / 2)), 0.02)
+  expect_quantiles_close(draws, function(p) qlnorm(p, meanlog = 0, sdlog = 0.5), PROBS, tol = 0.05)
+})

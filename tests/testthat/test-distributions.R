@@ -121,6 +121,88 @@ test_that("dist_poisson: non-positive lambda is rejected", {
   expect_error(dist_poisson(-2))
 })
 
+test_that("dist_beta: draws lie in (0, 1) with the correct mean and variance", {
+  # Given: a dist_beta(2, 5) distribution (mean 2/7, variance 10/392 ≈ 0.0255)
+  # When:  40 000 samples are drawn
+  # Then:  every draw is strictly inside (0, 1), the sample mean is ~0.286 and the
+  #        sample variance is ~0.0255
+  # Failure would indicate the two shape parameters are swapped or mis-applied.
+  d <- dist_beta(2, 5)
+  draws <- d$sample_n(40000L)
+  expect_true(all(draws > 0 & draws < 1))
+  expect_lt(abs(mean(draws) - 2 / 7),   0.01)
+  expect_lt(abs(var(draws)  - 10 / 392), 0.005)
+})
+
+test_that("dist_beta: non-positive shapes are rejected", {
+  # Given: invalid shape parameters
+  # When:  dist_beta() is called
+  # Then:  an error is raised (both shapes must be positive)
+  expect_error(dist_beta(0, 5))
+  expect_error(dist_beta(2, -1))
+})
+
+test_that("dist_exp: draws are positive with mean and sd equal to 1/rate", {
+  # Given: a dist_exp(0.5) distribution (mean 2, variance 4, sd 2)
+  # When:  40 000 samples are drawn
+  # Then:  all draws are positive and the sample mean and sd are both ~2
+  # Equal mean and sd is the exponential signature; both ~1/rate confirms the rate
+  # is wired as a rate (not a mean/scale, which would give mean 0.5).
+  d <- dist_exp(0.5)
+  draws <- d$sample_n(40000L)
+  expect_true(all(draws > 0))
+  expect_lt(abs(mean(draws) - 2), 0.06)
+  expect_lt(abs(sd(draws)   - 2), 0.06)
+})
+
+test_that("dist_exp: non-positive rate is rejected", {
+  # Given: an invalid rate
+  # When:  dist_exp() is called
+  # Then:  an error is raised (rate must be positive)
+  expect_error(dist_exp(0))
+  expect_error(dist_exp(-1))
+})
+
+test_that("dist_logistic: symmetric about location with variance s^2 * pi^2 / 3", {
+  # Given: a dist_logistic(4, 2) distribution (mean/median 4, variance 4*pi^2/3 ≈ 13.16)
+  # When:  40 000 samples are drawn
+  # Then:  the sample mean and median are ~4 and the sample variance is ~13.16
+  # Failure would indicate the location/scale are mis-wired (e.g. scale ignored).
+  d <- dist_logistic(4, 2)
+  draws <- d$sample_n(40000L)
+  expect_lt(abs(mean(draws)   - 4), 0.1)
+  expect_lt(abs(median(draws) - 4), 0.1)
+  expect_lt(abs(var(draws) - 4 * pi^2 / 3), 1.5)
+})
+
+test_that("dist_logistic: non-positive scale is rejected", {
+  # Given: an invalid scale
+  # When:  dist_logistic() is called
+  # Then:  an error is raised (scale must be positive)
+  expect_error(dist_logistic(4, 0))
+  expect_error(dist_logistic(4, -2))
+})
+
+test_that("dist_lognormal: positive draws with median exp(meanlog) and mean exp(meanlog + sdlog^2/2)", {
+  # Given: a dist_lognormal(0, 0.5) distribution (median exp(0) = 1, mean exp(0.125) ≈ 1.133)
+  # When:  40 000 samples are drawn
+  # Then:  all draws are positive, the sample median is ~1 and the sample mean is ~1.133
+  # The median/mean split is the log-normal signature and confirms meanlog and sdlog
+  # are treated as log-space parameters (matching R's qlnorm).
+  d <- dist_lognormal(0, 0.5)
+  draws <- d$sample_n(40000L)
+  expect_true(all(draws > 0))
+  expect_lt(abs(median(draws) - 1),               0.05)
+  expect_lt(abs(mean(draws)   - exp(0.5^2 / 2)),   0.05)
+})
+
+test_that("dist_lognormal: negative sdlog is rejected", {
+  # Given: an invalid (negative) log-space standard deviation
+  # When:  dist_lognormal() is called
+  # Then:  an error is raised (sdlog must be non-negative)
+  expect_error(dist_lognormal(0, -0.5))
+})
+
 # ── Use as the infectious-period distribution of step_exposed_ei ─────────────────
 
 make_exposed <- function(n, timer = 1L) {

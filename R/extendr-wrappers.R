@@ -221,6 +221,63 @@ dist_gamma <- function(shape, scale) .Call(wrap__dist_gamma, shape, scale)
 #' @export
 dist_poisson <- function(lambda) .Call(wrap__dist_poisson, lambda)
 
+#' Create a beta distribution on the open interval (0, 1).
+#'
+#' Parameterized by the two positive shape parameters α and β. The mean is
+#' `alpha / (alpha + beta)`.
+#'
+#' @param alpha  First shape parameter (α); must be finite and positive.
+#' @param beta   Second shape parameter (β); must be finite and positive.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_beta(2, 5)   # mean 2/7 ≈ 0.286, support (0, 1)
+#' d$sample_one()
+#' @export
+dist_beta <- function(alpha, beta) .Call(wrap__dist_beta, alpha, beta)
+
+#' Create an exponential distribution with rate `rate`.
+#'
+#' Draws are strictly positive with mean `1 / rate` and variance `1 / rate^2`.
+#'
+#' @param rate  Rate parameter λ; must be finite and positive.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_exp(0.5)   # mean 2
+#' d$sample_one()
+#' @export
+dist_exp <- function(rate) .Call(wrap__dist_exp, rate)
+
+#' Create a logistic distribution with the given location and scale.
+#'
+#' Symmetric about `location` (its mean and median); the variance is
+#' `scale^2 * pi^2 / 3`.
+#'
+#' @param location  Location parameter μ (the mean); must be finite.
+#' @param scale     Scale parameter s; must be finite and positive.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_logistic(4, 2)   # mean 4
+#' d$sample_one()
+#' @export
+dist_logistic <- function(location, scale) .Call(wrap__dist_logistic, location, scale)
+
+#' Create a log-normal distribution.
+#'
+#' A variable whose natural logarithm is `Normal(meanlog, sdlog)`. Draws are
+#' strictly positive. The median is `exp(meanlog)` and the mean is
+#' `exp(meanlog + sdlog^2 / 2)`. `meanlog` and `sdlog` are the log-space
+#' parameters, matching R's `qlnorm(p, meanlog, sdlog)`.
+#'
+#' @param meanlog  Mean of the underlying normal (in log space); must be finite.
+#' @param sdlog    Standard deviation of the underlying normal; must be finite
+#'   and non-negative.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_lognormal(0, 0.5)   # median 1
+#' d$sample_one()
+#' @export
+dist_lognormal <- function(meanlog, sdlog) .Call(wrap__dist_lognormal, meanlog, sdlog)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a

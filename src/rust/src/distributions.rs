@@ -1,8 +1,8 @@
 use extendr_api::prelude::*;
 use rand::Rng;
 use rand::distributions::Distribution as RandDistribution;
-use rand::distributions::Uniform;
-use rand_distr::{Gamma, Normal, Poisson};
+use rand::distributions::{Open01, Uniform};
+use rand_distr::{Beta, Exp, Gamma, LogNormal, Normal, Poisson};
 
 // ── Distribution families ───────────────────────────────────────────────────────
 //
@@ -24,6 +24,15 @@ enum DistKind {
     Gamma(Gamma<f64>),
     /// Poisson distribution with rate λ; draws are non-negative integer counts.
     Poisson(Poisson<f64>),
+    /// Beta distribution on (0, 1), stored as (α, β).
+    Beta(Beta<f64>),
+    /// Exponential distribution with rate λ (mean 1/λ).
+    Exp(Exp<f64>),
+    /// Logistic distribution with location μ and scale s. `rand_distr` has no
+    /// logistic sampler, so it is drawn by inverse-CDF transform of a uniform.
+    Logistic { location: f64, scale: f64 },
+    /// Log-normal distribution whose log is Normal(meanlog, sdlog).
+    LogNormal(LogNormal<f64>),
 }
 
 /// A parameterized probability distribution that can be sampled repeatedly.
@@ -60,6 +69,15 @@ impl Distribution {
             DistKind::Uniform(d) => d.sample(rng),
             DistKind::Gamma(d) => d.sample(rng),
             DistKind::Poisson(d) => d.sample(rng),
+            DistKind::Beta(d) => d.sample(rng),
+            DistKind::Exp(d) => d.sample(rng),
+            DistKind::Logistic { location, scale } => {
+                // Inverse-CDF transform: X = μ + s·logit(U), U ~ Uniform(0, 1).
+                // Open01 excludes 0 and 1, so logit(U) is always finite.
+                let u: f64 = rng.sample(Open01);
+                *location + *scale * (u / (1.0 - u)).ln()
+            }
+            DistKind::LogNormal(d) => d.sample(rng),
         }
     }
 }
@@ -224,6 +242,111 @@ fn dist_poisson(lambda: f64) -> Distribution {
     }
 }
 
+/// Create a beta distribution on the open interval (0, 1).
+///
+/// Parameterized by the two positive shape parameters α and β. The mean is
+/// `alpha / (alpha + beta)`.
+///
+/// @param alpha  First shape parameter (α); must be finite and positive.
+/// @param beta   Second shape parameter (β); must be finite and positive.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_beta(2, 5)   # mean 2/7 ≈ 0.286, support (0, 1)
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_beta(alpha: f64, beta: f64) -> Distribution {
+    assert!(
+        alpha.is_finite() && alpha > 0.0,
+        "beta alpha must be finite and positive, got {alpha}"
+    );
+    assert!(
+        beta.is_finite() && beta > 0.0,
+        "beta beta must be finite and positive, got {beta}"
+    );
+    let dist = Beta::new(alpha, beta)
+        .unwrap_or_else(|e| panic!("invalid beta parameters (alpha={alpha}, beta={beta}): {e}"));
+    Distribution {
+        kind: DistKind::Beta(dist),
+    }
+}
+
+/// Create an exponential distribution with rate `rate`.
+///
+/// Draws are strictly positive with mean `1 / rate` and variance `1 / rate^2`.
+///
+/// @param rate  Rate parameter λ; must be finite and positive.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_exp(0.5)   # mean 2
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_exp(rate: f64) -> Distribution {
+    assert!(
+        rate.is_finite() && rate > 0.0,
+        "exponential rate must be finite and positive, got {rate}"
+    );
+    let dist = Exp::new(rate)
+        .unwrap_or_else(|e| panic!("invalid exponential parameter (rate={rate}): {e}"));
+    Distribution {
+        kind: DistKind::Exp(dist),
+    }
+}
+
+/// Create a logistic distribution with the given location and scale.
+///
+/// Symmetric about `location` (its mean and median); the variance is
+/// `scale^2 * pi^2 / 3`.
+///
+/// @param location  Location parameter μ (the mean); must be finite.
+/// @param scale     Scale parameter s; must be finite and positive.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_logistic(4, 2)   # mean 4
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_logistic(location: f64, scale: f64) -> Distribution {
+    assert!(location.is_finite(), "logistic location must be finite, got {location}");
+    assert!(
+        scale.is_finite() && scale > 0.0,
+        "logistic scale must be finite and positive, got {scale}"
+    );
+    Distribution {
+        kind: DistKind::Logistic { location, scale },
+    }
+}
+
+/// Create a log-normal distribution.
+///
+/// A variable whose natural logarithm is `Normal(meanlog, sdlog)`. Draws are
+/// strictly positive. The median is `exp(meanlog)` and the mean is
+/// `exp(meanlog + sdlog^2 / 2)`. `meanlog` and `sdlog` are the log-space
+/// parameters, matching R's `qlnorm(p, meanlog, sdlog)`.
+///
+/// @param meanlog  Mean of the underlying normal (in log space); must be finite.
+/// @param sdlog    Standard deviation of the underlying normal; must be finite
+///   and non-negative.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_lognormal(0, 0.5)   # median 1
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_lognormal(meanlog: f64, sdlog: f64) -> Distribution {
+    assert!(meanlog.is_finite(), "lognormal meanlog must be finite, got {meanlog}");
+    assert!(
+        sdlog.is_finite() && sdlog >= 0.0,
+        "lognormal sdlog must be finite and non-negative, got {sdlog}"
+    );
+    let dist = LogNormal::new(meanlog, sdlog)
+        .unwrap_or_else(|e| panic!("invalid lognormal parameters (meanlog={meanlog}, sdlog={sdlog}): {e}"));
+    Distribution {
+        kind: DistKind::LogNormal(dist),
+    }
+}
+
 extendr_module! {
     mod distributions;
     impl Distribution;
@@ -232,4 +355,8 @@ extendr_module! {
     fn dist_uniform;
     fn dist_gamma;
     fn dist_poisson;
+    fn dist_beta;
+    fn dist_exp;
+    fn dist_logistic;
+    fn dist_lognormal;
 }

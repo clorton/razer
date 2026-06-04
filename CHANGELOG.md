@@ -16,6 +16,12 @@ All notable changes to this project are documented here.
     (mean `shape*scale`, variance `shape*scale^2`); strictly positive draws.
   - `dist_poisson(lambda)` — Poisson with rate/mean `lambda`; non-negative integer
     counts.
+  - `dist_beta(alpha, beta)` — beta on `(0, 1)` with shape parameters α, β.
+  - `dist_exp(rate)` — exponential with rate λ (mean `1/rate`).
+  - `dist_logistic(location, scale)` — logistic (mean `location`, variance
+    `scale^2·π²/3`); sampled by inverse-CDF transform.
+  - `dist_lognormal(meanlog, sdlog)` — log-normal with log-space parameters
+    (matches R's `qlnorm`).
 - `Distribution$sample_one()` and `Distribution$sample_n(n)` — draw one / a batch
   of floating-point samples with a thread-local RNG (for interactive use, testing,
   and statistical validation). All draws are doubles.
