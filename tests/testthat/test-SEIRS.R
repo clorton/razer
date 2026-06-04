@@ -1,9 +1,9 @@
 # SEIRS model: S → E → I → R → S  (waning immunity)
 #
 # Components (one tick, in order):
-#   1. step_transmission_se(people, nodes, beta, exp_duration)  — S→E
-#   2. step_exposed_ei(people, inf_duration)                     — E→I on timer expiry
-#   3. step_infectious_ir(people, imm_duration)                  — I→R, sets immunity timer
+#   1. step_transmission_se(people, nodes, beta, exp_dist)      — S→E
+#   2. step_exposed_ei(people, inf_dist)                         — E→I on timer expiry
+#   3. step_infectious_ir(people, imm_dist)                      — I→R, draws immunity timer
 #   4. step_recovered_rs(people)                                 — R→S on timer expiry
 #
 # State codes: S=0, E=1, I=2, R=3
@@ -34,10 +34,10 @@ run_seirs <- function(n, n_seed = 200L, beta = 0.5, exp_duration = 3L,
   traj[1L, ] <- c(n - n_seed, 0L, n_seed, 0L)
 
   for (tick in seq_len(nticks)) {
-    step_transmission_se(ppl, nd, beta = beta, exp_duration = exp_duration)
-    step_exposed_ei(ppl,    inf_duration = inf_duration)
-    step_infectious_ir(ppl, imm_duration = imm_duration)
-    step_recovered_rs(ppl)   # counts down R→S; timer was set to imm_duration by step_infectious_ir
+    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration))
+    step_exposed_ei(ppl,    inf_dist = dist_constant(inf_duration))
+    step_infectious_ir(ppl, imm_dist = dist_constant(imm_duration))
+    step_recovered_rs(ppl)   # counts down R→S; timer was drawn from imm_dist by step_infectious_ir
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 1L),
                             sum(ppl$state == 2L), sum(ppl$state == 3L))
   }

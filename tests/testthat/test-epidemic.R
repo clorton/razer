@@ -45,7 +45,7 @@ test_that("step_transmission_si: no infections when beta = 0", {
   nd$N <- n
 
   state_before <- ppl$state
-  step_transmission_si(ppl, nd, beta = 0.0, inf_duration = 14L)
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14))
 
   expect_identical(ppl$state, state_before)
 })
@@ -58,7 +58,7 @@ test_that("step_transmission_si: no infections when no infectious agents", {
   ppl <- make_people(n, state = 0L)
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 0.5, inf_duration = 14L)
+  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14))
 
   expect_true(all(ppl$state == 0L))
 })
@@ -72,23 +72,23 @@ test_that("step_transmission_si: near-certain infection with very high beta", {
   ppl <- make_people(n, state = c(rep(2L, 500L), rep(0L, 4500L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 100.0, inf_duration = 14L)
+  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14))
 
   n_remaining_s <- sum(ppl$state == 0L)
   expect_lt(n_remaining_s, 0.05 * 4500L)
 })
 
-test_that("step_transmission_si: newly infected agents have timer = inf_duration", {
+test_that("step_transmission_si: newly infected agents draw timer from inf_dist", {
   # Given: some infectious agents, positive beta
-  # When:  run one transmission step
-  # Then:  every newly infected agent (previously S, now I) has timer == inf_duration
+  # When:  run one transmission step with a dist_constant(14) infectious-period distribution
+  # Then:  every newly infected agent (previously S, now I) has timer == 14
   set.seed(1L)
   n   <- 2000L
   ppl <- make_people(n, state = c(rep(2L, 200L), rep(0L, 1800L)))
   nd  <- make_nodes(pop = n)
   state_before <- ppl$state
 
-  step_transmission_si(ppl, nd, beta = 0.5, inf_duration = 14L)
+  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14))
 
   newly_infected <- which(state_before == 0L & ppl$state == 2L)
   expect_true(length(newly_infected) > 0L)
@@ -105,7 +105,7 @@ test_that("step_transmission_si: updates nodes$I with infectious count", {
   ppl <- make_people(n, state = c(rep(2L, 50L), rep(0L, 450L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 0.0, inf_duration = 14L)  # beta=0 so no new infections
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14))  # beta=0 so no new infections
 
   expect_equal(nd$I, 50L)
 })
@@ -125,7 +125,7 @@ test_that("step_transmission_si: multi-node FOI is node-local", {
   nd$add_scalar_property("N", "integer", 500L)
   nd$add_scalar_property("I", "integer", 0L)
 
-  step_transmission_si(ppl, nd, beta = 100.0, inf_duration = 14L)
+  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14))
 
   node1_states <- ppl$state[nodes == 1L]
   expect_true(all(node1_states == 0L))   # node 1: nobody infected
@@ -144,7 +144,7 @@ test_that("step_transmission_se: exposed agents move to E, not I", {
   ppl <- make_people(n, state = c(rep(2L, 200L), rep(0L, 1800L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_se(ppl, nd, beta = 0.5, exp_duration = 5L)
+  step_transmission_se(ppl, nd, beta = 0.5, exp_dist = dist_constant(5))
 
   new_exposures <- which(ppl$state == 1L)
   expect_true(length(new_exposures) > 0L)
@@ -156,13 +156,13 @@ test_that("step_transmission_se: exposed agents move to E, not I", {
 
 test_that("step_exposed_ei: E agent with timer=1 transitions to I", {
   # Given: one agent in state E with timer = 1
-  # When:  run exposed step with inf_duration = 10
+  # When:  run exposed step with a dist_constant(10) infectious-period distribution
   # Then:  agent is in state I with timer = 10
   ppl <- make_people(1L)
   ppl$state <- 1L
   ppl$timer <- 1L
 
-  step_exposed_ei(ppl, inf_duration = 10L)
+  step_exposed_ei(ppl, inf_dist = dist_constant(10))
 
   expect_equal(ppl$state[1L], 2L)
   expect_equal(ppl$timer[1L], 10L)
@@ -176,7 +176,7 @@ test_that("step_exposed_ei: E agent with timer=3 decrements but stays E", {
   ppl$state <- 1L
   ppl$timer <- 3L
 
-  step_exposed_ei(ppl, inf_duration = 10L)
+  step_exposed_ei(ppl, inf_dist = dist_constant(10))
 
   expect_equal(ppl$state[1L], 1L)
   expect_equal(ppl$timer[1L], 2L)
@@ -191,7 +191,7 @@ test_that("step_exposed_ei: non-E agents are unaffected", {
   state_before <- ppl$state
   timer_before <- ppl$timer
 
-  step_exposed_ei(ppl, inf_duration = 10L)
+  step_exposed_ei(ppl, inf_dist = dist_constant(10))
 
   expect_identical(ppl$state, state_before)
   expect_identical(ppl$timer, timer_before)
@@ -199,18 +199,20 @@ test_that("step_exposed_ei: non-E agents are unaffected", {
 
 # ── step_infectious_ir ────────────────────────────────────────────────────────
 
-test_that("step_infectious_ir: I agent with timer=1 transitions to R", {
+test_that("step_infectious_ir: I agent with timer=1 transitions to R with immunity timer drawn from imm_dist", {
   # Given: one agent in state I with timer = 1
-  # When:  run infectious->recovered step
-  # Then:  agent is in state R with timer = 0
+  # When:  run infectious->recovered step with a dist_constant(7) immunity distribution
+  # Then:  agent is in state R with its waning timer set to the drawn value (7)
+  # Failure would mean the I→R transition does not seed the R waning timer from
+  # imm_dist, which step_recovered_rs later counts down in SEIRS.
   ppl <- make_people(1L)
   ppl$state <- 2L
   ppl$timer <- 1L
 
-  step_infectious_ir(ppl, 0L)
+  step_infectious_ir(ppl, imm_dist = dist_constant(7))
 
   expect_equal(ppl$state[1L], 3L)
-  expect_equal(ppl$timer[1L], 0L)
+  expect_equal(ppl$timer[1L], 7L)
 })
 
 test_that("step_infectious_ir: I agent with timer=5 decrements and stays I", {
@@ -221,7 +223,7 @@ test_that("step_infectious_ir: I agent with timer=5 decrements and stays I", {
   ppl$state <- 2L
   ppl$timer <- 5L
 
-  step_infectious_ir(ppl, 0L)
+  step_infectious_ir(ppl, imm_dist = dist_constant(0))
 
   expect_equal(ppl$state[1L], 2L)
   expect_equal(ppl$timer[1L], 4L)
@@ -236,7 +238,7 @@ test_that("step_infectious_ir: non-I agents are unaffected", {
   state_before <- ppl$state
   timer_before <- ppl$timer
 
-  step_infectious_ir(ppl, 0L)
+  step_infectious_ir(ppl, imm_dist = dist_constant(0))
 
   expect_identical(ppl$state, state_before)
   expect_identical(ppl$timer, timer_before)
@@ -253,8 +255,8 @@ test_that("step_infectious_ir: SIR model conserves population", {
   nd  <- make_nodes(pop = n)
 
   for (tick in seq_len(50L)) {
-    step_transmission_si(ppl, nd, beta = 0.3, inf_duration = 14L)
-    step_infectious_ir(ppl, 0L)
+    step_transmission_si(ppl, nd, beta = 0.3, inf_dist = dist_constant(14))
+    step_infectious_ir(ppl, imm_dist = dist_constant(0))
   }
 
   expect_equal(ppl$count, n)
@@ -460,9 +462,9 @@ test_that("SEIR model: S only decreases, S+E+I+R is conserved over 100 ticks", {
 
   prev_s <- sum(ppl$state == 0L)
   for (tick in seq_len(100L)) {
-    step_transmission_se(ppl, nd, beta = 0.4, exp_duration = 5L)
-    step_exposed_ei(ppl, inf_duration = 7L)
-    step_infectious_ir(ppl, 0L)
+    step_transmission_se(ppl, nd, beta = 0.4, exp_dist = dist_constant(5))
+    step_exposed_ei(ppl, inf_dist = dist_constant(7))
+    step_infectious_ir(ppl, imm_dist = dist_constant(0))
 
     s_now <- sum(ppl$state == 0L)
     expect_lte(s_now, prev_s)   # S never increases

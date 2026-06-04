@@ -1,10 +1,10 @@
 # SI model: S → I  (no recovery — infection is permanent)
 #
 # Components:
-#   step_transmission_si(people, nodes, beta, inf_duration)
+#   step_transmission_si(people, nodes, beta, inf_dist)
 #
 # State codes: S=0, I=2
-# The `inf_duration` argument sets the timer when S→I; because no recovery
+# The `inf_dist` argument sets the timer when S→I; because no recovery
 # step is called, the timer value has no effect on model dynamics.
 
 run_si <- function(n, n_seed = 100L, beta = 0.3, nticks = 200L, seed = 42L) {
@@ -28,7 +28,7 @@ run_si <- function(n, n_seed = 100L, beta = 0.3, nticks = 200L, seed = 42L) {
   traj[1L, ] <- c(n - n_seed, n_seed)
 
   for (tick in seq_len(nticks)) {
-    step_transmission_si(ppl, nd, beta = beta, inf_duration = n)
+    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(n))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 2L))
   }
 
@@ -102,6 +102,6 @@ test_that("SI: nodes$I reflects pre-step infectious count each tick", {
   nd <- LaserFrame$new(1L, 1L)
   nd$add_scalar_property("N", "integer", 1000L)
   nd$add_scalar_property("I", "integer", 0L)
-  step_transmission_si(ppl, nd, beta = 0.0, inf_duration = 1L)
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(1))
   expect_equal(nd$I, 200L)
 })

@@ -34,14 +34,16 @@ laser_states <- function() .Call(wrap__laser_states)
 #' @param people       LaserFrame of agents.
 #' @param nodes        LaserFrame of patches/nodes.
 #' @param beta         Transmission rate (force of infection per infectious contact per tick).
-#' @param inf_duration Infectious period in ticks; written to `timer` on infection.
+#' @param inf_dist     A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+#'   infectious period in ticks; sampled per newly infected agent and written to
+#'   `timer` on S→I (rounded to whole ticks, clamped to a minimum of 1).
 #' @export
-step_transmission_si <- function(people, nodes, beta, inf_duration) .Call(wrap__step_transmission_si, people, nodes, beta, inf_duration)
+step_transmission_si <- function(people, nodes, beta, inf_dist) .Call(wrap__step_transmission_si, people, nodes, beta, inf_dist)
 
 #' Stochastic S→E exposure step (SEIR kernel).
 #'
 #' Same FOI computation and parallelism as `step_transmission_si`, but newly
-#' exposed agents move to state E and `timer` is set to `exp_duration`
+#' exposed agents move to state E and `timer` is set to a draw from `exp_dist`
 #' (incubation period). Pair with `step_exposed_ei` to complete E→I.
 #'
 #' **Required people properties:** `state`, `node`, `timer` (all integer).
@@ -50,35 +52,51 @@ step_transmission_si <- function(people, nodes, beta, inf_duration) .Call(wrap__
 #' @param people        LaserFrame of agents.
 #' @param nodes         LaserFrame of patches/nodes.
 #' @param beta          Transmission rate.
-#' @param exp_duration  Incubation period in ticks; written to `timer` on exposure.
+#' @param exp_dist      A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+#'   incubation period in ticks; sampled per newly exposed agent and written to
+#'   `timer` on S→E (rounded to whole ticks, clamped to a minimum of 1).
 #' @export
-step_transmission_se <- function(people, nodes, beta, exp_duration) .Call(wrap__step_transmission_se, people, nodes, beta, exp_duration)
+step_transmission_se <- function(people, nodes, beta, exp_dist) .Call(wrap__step_transmission_se, people, nodes, beta, exp_dist)
 
 #' Timer-based E→I transition (SEIR kernel).
 #'
-#' For each exposed agent, decrements `timer` by 1. When `timer` reaches 0
-#' the agent transitions to state I and `timer` is reset to `inf_duration`.
+#' For each exposed agent, decrements `timer` by 1. When `timer` reaches 0 the
+#' agent transitions to state I and `timer` is set to a fresh draw from
+#' `inf_dist`, the infectious-period distribution. Pass `dist_constant(d)` for a
+#' fixed period of `d` ticks, or e.g. `dist_normal(mean, variance)` for a stochastic
+#' per-agent period. Draws are rounded to the nearest tick and clamped to a
+#' minimum of 1.
 #'
-#' @param people        LaserFrame of agents.
-#' @param inf_duration  Infectious period in ticks; written to `timer` on E→I.
+#' **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
+#' (Pattern B: the kernel owns the RNG and passes it into the sampler). The
+#' single `inf_dist` handle is shared across threads by reference.
+#'
+#' @param people    LaserFrame of agents.
+#' @param inf_dist  A `Distribution` (e.g. from `dist_constant()` or `dist_normal()`)
+#'   giving the infectious period in ticks; sampled and written to `timer` on E→I.
 #' @export
-step_exposed_ei <- function(people, inf_duration) .Call(wrap__step_exposed_ei, people, inf_duration)
+step_exposed_ei <- function(people, inf_dist) .Call(wrap__step_exposed_ei, people, inf_dist)
 
 #' Timer-based I→R transition (SIR / SEIR / SEIRS kernel).
 #'
 #' For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
-#' the agent transitions to state R and `timer` is reset to `imm_duration`.
+#' the agent transitions to state R and `timer` is set to a draw from `imm_dist`,
+#' the immunity (waning) period.
 #'
-#' Setting `imm_duration = 0` is correct for SIR and SEIR (where
-#' `step_recovered_rs` is never called and the timer value after recovery does
-#' not matter). For SEIRS, pass the desired immunity period so that
-#' `step_recovered_rs` counts down from the correct starting value.
+#' For SEIRS, pass the desired immunity distribution so that `step_recovered_rs`
+#' counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
+#' `step_recovered_rs` never called) the R timer is never read, so any
+#' distribution works — `dist_constant(0)` is the conventional "don't care".
 #'
-#' @param people        LaserFrame of agents.
-#' @param imm_duration  Immunity period in ticks; written to `timer` on I→R.
-#'   Pass `0L` for SIR / SEIR models where waning is not modelled.
+#' **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
+#' (Pattern B). The single `imm_dist` handle is shared across threads by reference.
+#'
+#' @param people    LaserFrame of agents.
+#' @param imm_dist  A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+#'   immunity period in ticks; sampled and written to `timer` on I→R (rounded to
+#'   whole ticks, clamped to a minimum of 1). Use `dist_constant(0)` for SIR / SEIR.
 #' @export
-step_infectious_ir <- function(people, imm_duration) .Call(wrap__step_infectious_ir, people, imm_duration)
+step_infectious_ir <- function(people, imm_dist) .Call(wrap__step_infectious_ir, people, imm_dist)
 
 #' Timer-based I→S transition for SIS models (no immunity).
 #'
@@ -133,6 +151,75 @@ step_mortality_cdr <- function(people, cdr) .Call(wrap__step_mortality_cdr, peop
 #' @param cbr    Crude birth rate per agent per tick (probability in \[0, 1\]).
 #' @export
 step_births_cbr <- function(people, cbr) .Call(wrap__step_births_cbr, people, cbr)
+
+#' Create a normal (Gaussian) distribution.
+#'
+#' The second argument is the **variance** (σ²), not the standard deviation, to
+#' match the way variance is usually quoted in statistical models. The standard
+#' deviation passed to the underlying sampler is `sqrt(variance)`.
+#'
+#' @param mean      Mean (μ) of the distribution.
+#' @param variance  Variance (σ²); must be non-negative.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_normal(7, 4)   # mean 7, variance 4 (sd 2)
+#' d$sample_one()
+#' @export
+dist_normal <- function(mean, variance) .Call(wrap__dist_normal, mean, variance)
+
+#' Create a degenerate (constant) distribution that always returns `value`.
+#'
+#' Use this as a fixed-duration drop-in wherever a `Distribution` is required —
+#' e.g. a deterministic infectious period of exactly `value` ticks.
+#'
+#' @param value The constant value returned by every draw.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_constant(10)   # always 10
+#' d$sample_one()
+#' @export
+dist_constant <- function(value) .Call(wrap__dist_constant, value)
+
+#' Create a continuous uniform distribution on the half-open interval [low, high).
+#'
+#' Every value in `[low, high)` is equally likely. The mean is `(low + high) / 2`.
+#'
+#' @param low   Inclusive lower bound.
+#' @param high  Exclusive upper bound; must be strictly greater than `low`.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_uniform(3, 8)   # values in [3, 8), mean 5.5
+#' d$sample_one()
+#' @export
+dist_uniform <- function(low, high) .Call(wrap__dist_uniform, low, high)
+
+#' Create a gamma distribution parameterized by shape and scale.
+#'
+#' Uses the shape–scale (k, θ) parameterization: the mean is `shape * scale` and
+#' the variance is `shape * scale^2`. Draws are strictly positive, which makes the
+#' gamma a natural choice for right-skewed, always-positive durations.
+#'
+#' @param shape  Shape parameter k; must be finite and positive.
+#' @param scale  Scale parameter θ; must be finite and positive.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_gamma(2, 3)   # mean 6, variance 18
+#' d$sample_one()
+#' @export
+dist_gamma <- function(shape, scale) .Call(wrap__dist_gamma, shape, scale)
+
+#' Create a Poisson distribution with rate (mean) `lambda`.
+#'
+#' Draws are non-negative integer counts (returned as doubles) with mean and
+#' variance both equal to `lambda`. Useful for count-valued durations.
+#'
+#' @param lambda  Rate / mean λ; must be finite and positive.
+#' @return A `Distribution` object.
+#' @examples
+#' d <- dist_poisson(5)   # mean 5, integer-valued draws
+#' d$sample_one()
+#' @export
+dist_poisson <- function(lambda) .Call(wrap__dist_poisson, lambda)
 
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
@@ -405,5 +492,69 @@ LaserFrame$get_matrix <- function(name) .Call(wrap__LaserFrame__get_matrix, self
 
 #' @export
 `[[.LaserFrame` <- `$.LaserFrame`
+
+#' A parameterized probability distribution that can be sampled repeatedly.
+#'
+#' Build one with a family constructor such as `dist_normal()` or `dist_constant()`,
+#' then either sample it from Rust via `sample()` (Pattern B: the caller owns the
+#' RNG and passes it in), or from R via `$sample_one()` / `$sample_n()`.
+#'
+#' Draws are always floating-point. Callers that need integer values (e.g. a
+#' whole-tick state timer) are responsible for rounding or truncating as
+#' appropriate — the simulation kernels round to the nearest tick.
+#'
+#' The handle is opaque to R — it is passed to simulation kernels (e.g.
+#' `step_exposed_ei`) by reference, so the same object can be reused every tick
+#' and shared across all worker threads.
+#'
+#' @export
+#'
+#' @section Methods:
+#'\subsection{Method `sample_one`}{
+#'Draw a single sample using a thread-local RNG.
+#'
+#'Convenience for interactive use. Simulation kernels do not call this — they
+#'use the internal sampler with an explicit, reusable RNG for performance.
+#'
+#' \subsection{return}{
+#'A single numeric (double) draw from the distribution.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `sample_n`}{
+#'Draw `n` samples using a thread-local RNG, returned as a numeric vector.
+#'
+#'Drawing a whole batch in one call avoids per-sample R↔Rust overhead, which
+#'makes it practical to validate the sampler against large empirical samples
+#'(e.g. one million draws) from R.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`n`}{Number of samples to draw; must be non-negative.}
+#'}}
+#' \subsection{return}{
+#'A numeric (double) vector of length `n`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+Distribution <- new.env(parent = emptyenv())
+
+Distribution$sample_one <- function() .Call(wrap__Distribution__sample_one, self)
+
+Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n)
+
+#' @rdname Distribution
+#' @usage NULL
+#' @export
+`$.Distribution` <- function (self, name) { func <- Distribution[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.Distribution` <- `$.Distribution`
 
 # nolint end

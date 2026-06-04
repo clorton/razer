@@ -4,7 +4,7 @@
 \alias{step_transmission_si}
 \title{Stochastic S→I transmission step (SI / SIR kernel).}
 \usage{
-step_transmission_si(people, nodes, beta, inf_duration)
+step_transmission_si(people, nodes, beta, inf_dist)
 }
 \arguments{
 \item{people}{LaserFrame of agents.}
@@ -13,7 +13,9 @@ step_transmission_si(people, nodes, beta, inf_duration)
 
 \item{beta}{Transmission rate (force of infection per infectious contact per tick).}
 
-\item{inf_duration}{Infectious period in ticks; written to \code{timer} on infection.}
+\item{inf_dist}{A \code{Distribution} (e.g. \code{dist_constant()} or \code{dist_normal()}) giving the
+infectious period in ticks; sampled per newly infected agent and written to
+\code{timer} on S→I (rounded to whole ticks, clamped to a minimum of 1).}
 }
 \description{
 \strong{Parallelism:} the active agent array is split into fixed chunks — one per

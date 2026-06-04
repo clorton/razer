@@ -1,0 +1,235 @@
+use extendr_api::prelude::*;
+use rand::Rng;
+use rand::distributions::Distribution as RandDistribution;
+use rand::distributions::Uniform;
+use rand_distr::{Gamma, Normal, Poisson};
+
+// ── Distribution families ───────────────────────────────────────────────────────
+//
+// `DistKind` is the closed set of supported families.  Each variant holds only a
+// small, immutable parameter struct (`Send + Sync`), so a `Distribution` can be
+// shared by reference across Rayon worker threads and sampled concurrently with no
+// locking and no allocation. Sampling matches on `&self.kind` and borrows the
+// inner sampler, so no variant is required to be `Copy`.
+
+#[derive(Clone)]
+enum DistKind {
+    /// Degenerate distribution: every draw returns the same value.
+    Constant(f64),
+    /// Normal (Gaussian) distribution, stored as (mean, std_dev).
+    Normal(Normal<f64>),
+    /// Continuous uniform distribution on a half-open interval [low, high).
+    Uniform(Uniform<f64>),
+    /// Gamma distribution, stored as (shape k, scale θ).
+    Gamma(Gamma<f64>),
+    /// Poisson distribution with rate λ; draws are non-negative integer counts.
+    Poisson(Poisson<f64>),
+}
+
+/// A parameterized probability distribution that can be sampled repeatedly.
+///
+/// Build one with a family constructor such as `dist_normal()` or `dist_constant()`,
+/// then either sample it from Rust via `sample()` (Pattern B: the caller owns the
+/// RNG and passes it in), or from R via `$sample_one()` / `$sample_n()`.
+///
+/// Draws are always floating-point. Callers that need integer values (e.g. a
+/// whole-tick state timer) are responsible for rounding or truncating as
+/// appropriate — the simulation kernels round to the nearest tick.
+///
+/// The handle is opaque to R — it is passed to simulation kernels (e.g.
+/// `step_exposed_ei`) by reference, so the same object can be reused every tick
+/// and shared across all worker threads.
+///
+/// @export
+#[extendr]
+pub struct Distribution {
+    kind: DistKind,
+}
+
+impl Distribution {
+    /// Draw a single `f64` sample using the supplied RNG.
+    ///
+    /// This is the Pattern B entry point used by simulation kernels: the caller
+    /// owns the RNG (typically a per-thread `thread_rng`) and passes a mutable
+    /// reference in, so one shared `&Distribution` can be sampled concurrently
+    /// from every Rayon worker.
+    pub fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+        match &self.kind {
+            DistKind::Constant(v) => *v,
+            DistKind::Normal(d) => d.sample(rng),
+            DistKind::Uniform(d) => d.sample(rng),
+            DistKind::Gamma(d) => d.sample(rng),
+            DistKind::Poisson(d) => d.sample(rng),
+        }
+    }
+}
+
+#[extendr]
+impl Distribution {
+    /// Draw a single sample using a thread-local RNG.
+    ///
+    /// Convenience for interactive use. Simulation kernels do not call this — they
+    /// use the internal sampler with an explicit, reusable RNG for performance.
+    ///
+    /// @return A single numeric (double) draw from the distribution.
+    /// @export
+    fn sample_one(&self) -> f64 {
+        self.sample(&mut rand::thread_rng())
+    }
+
+    /// Draw `n` samples using a thread-local RNG, returned as a numeric vector.
+    ///
+    /// Drawing a whole batch in one call avoids per-sample R↔Rust overhead, which
+    /// makes it practical to validate the sampler against large empirical samples
+    /// (e.g. one million draws) from R.
+    ///
+    /// @param n Number of samples to draw; must be non-negative.
+    /// @return A numeric (double) vector of length `n`.
+    /// @export
+    fn sample_n(&self, n: i32) -> Vec<f64> {
+        assert!(n >= 0, "n must be non-negative, got {n}");
+        let mut rng = rand::thread_rng();
+        (0..n).map(|_| self.sample(&mut rng)).collect()
+    }
+}
+
+// ── Family constructors (exposed to R as `dist_<name>`) ──────────────────────────
+//
+// The `dist_` prefix avoids masking base/stats functions (e.g. `base::gamma`,
+// `stats::poisson`) when the package is attached.
+
+/// Create a normal (Gaussian) distribution.
+///
+/// The second argument is the **variance** (σ²), not the standard deviation, to
+/// match the way variance is usually quoted in statistical models. The standard
+/// deviation passed to the underlying sampler is `sqrt(variance)`.
+///
+/// @param mean      Mean (μ) of the distribution.
+/// @param variance  Variance (σ²); must be non-negative.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_normal(7, 4)   # mean 7, variance 4 (sd 2)
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_normal(mean: f64, variance: f64) -> Distribution {
+    assert!(
+        variance >= 0.0 && variance.is_finite(),
+        "variance must be finite and non-negative, got {variance}"
+    );
+    assert!(mean.is_finite(), "mean must be finite, got {mean}");
+    let dist = Normal::new(mean, variance.sqrt())
+        .unwrap_or_else(|e| panic!("invalid normal parameters (mean={mean}, variance={variance}): {e}"));
+    Distribution {
+        kind: DistKind::Normal(dist),
+    }
+}
+
+/// Create a degenerate (constant) distribution that always returns `value`.
+///
+/// Use this as a fixed-duration drop-in wherever a `Distribution` is required —
+/// e.g. a deterministic infectious period of exactly `value` ticks.
+///
+/// @param value The constant value returned by every draw.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_constant(10)   # always 10
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_constant(value: f64) -> Distribution {
+    assert!(value.is_finite(), "value must be finite, got {value}");
+    Distribution {
+        kind: DistKind::Constant(value),
+    }
+}
+
+/// Create a continuous uniform distribution on the half-open interval [low, high).
+///
+/// Every value in `[low, high)` is equally likely. The mean is `(low + high) / 2`.
+///
+/// @param low   Inclusive lower bound.
+/// @param high  Exclusive upper bound; must be strictly greater than `low`.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_uniform(3, 8)   # values in [3, 8), mean 5.5
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_uniform(low: f64, high: f64) -> Distribution {
+    assert!(
+        low.is_finite() && high.is_finite(),
+        "uniform bounds must be finite, got low={low}, high={high}"
+    );
+    assert!(
+        high > low,
+        "uniform requires high > low, got low={low}, high={high}"
+    );
+    Distribution {
+        kind: DistKind::Uniform(Uniform::new(low, high)),
+    }
+}
+
+/// Create a gamma distribution parameterized by shape and scale.
+///
+/// Uses the shape–scale (k, θ) parameterization: the mean is `shape * scale` and
+/// the variance is `shape * scale^2`. Draws are strictly positive, which makes the
+/// gamma a natural choice for right-skewed, always-positive durations.
+///
+/// @param shape  Shape parameter k; must be finite and positive.
+/// @param scale  Scale parameter θ; must be finite and positive.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_gamma(2, 3)   # mean 6, variance 18
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_gamma(shape: f64, scale: f64) -> Distribution {
+    assert!(
+        shape.is_finite() && shape > 0.0,
+        "gamma shape must be finite and positive, got {shape}"
+    );
+    assert!(
+        scale.is_finite() && scale > 0.0,
+        "gamma scale must be finite and positive, got {scale}"
+    );
+    let dist = Gamma::new(shape, scale)
+        .unwrap_or_else(|e| panic!("invalid gamma parameters (shape={shape}, scale={scale}): {e}"));
+    Distribution {
+        kind: DistKind::Gamma(dist),
+    }
+}
+
+/// Create a Poisson distribution with rate (mean) `lambda`.
+///
+/// Draws are non-negative integer counts (returned as doubles) with mean and
+/// variance both equal to `lambda`. Useful for count-valued durations.
+///
+/// @param lambda  Rate / mean λ; must be finite and positive.
+/// @return A `Distribution` object.
+/// @examples
+/// d <- dist_poisson(5)   # mean 5, integer-valued draws
+/// d$sample_one()
+/// @export
+#[extendr]
+fn dist_poisson(lambda: f64) -> Distribution {
+    assert!(
+        lambda.is_finite() && lambda > 0.0,
+        "poisson lambda must be finite and positive, got {lambda}"
+    );
+    let dist = Poisson::new(lambda)
+        .unwrap_or_else(|e| panic!("invalid poisson parameter (lambda={lambda}): {e}"));
+    Distribution {
+        kind: DistKind::Poisson(dist),
+    }
+}
+
+extendr_module! {
+    mod distributions;
+    impl Distribution;
+    fn dist_normal;
+    fn dist_constant;
+    fn dist_uniform;
+    fn dist_gamma;
+    fn dist_poisson;
+}

@@ -2,6 +2,7 @@ use extendr_api::prelude::*;
 use rayon::prelude::*;
 use rand::Rng;
 use crate::laser_frame::{LaserFrame, PropData};
+use crate::distributions::Distribution;
 
 // ── State constants ───────────────────────────────────────────────────────────
 // -1 for D keeps the alive compartments in the non-negative range, so
@@ -71,6 +72,19 @@ fn int_ptr(frame: &LaserFrame, name: &str) -> *const i32 {
     }
 }
 
+// ── Duration helper ─────────────────────────────────────────────────────────────
+//
+// Distributions return floating-point draws; a state timer is a whole number of
+// ticks. Each step rounds its draw to the nearest tick and clamps to a minimum of
+// 1, so a freshly entered timed state always lasts at least one tick (a timer of 0
+// would be decremented to a transition on the very next step). Rounding (rather
+// than truncation) keeps the realized mean duration unbiased relative to the
+// requested distribution mean.
+#[inline]
+fn duration_ticks(x: f64) -> i32 {
+    x.round().max(1.0) as i32
+}
+
 // ── Transmission kernels ──────────────────────────────────────────────────────
 
 /// Stochastic S→I transmission step (SI / SIR kernel).
@@ -93,14 +107,16 @@ fn int_ptr(frame: &LaserFrame, name: &str) -> *const i32 {
 /// @param people       LaserFrame of agents.
 /// @param nodes        LaserFrame of patches/nodes.
 /// @param beta         Transmission rate (force of infection per infectious contact per tick).
-/// @param inf_duration Infectious period in ticks; written to `timer` on infection.
+/// @param inf_dist     A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+///   infectious period in ticks; sampled per newly infected agent and written to
+///   `timer` on S→I (rounded to whole ticks, clamped to a minimum of 1).
 /// @export
 #[extendr]
 fn step_transmission_si(
     people: &mut LaserFrame,
     nodes: &mut LaserFrame,
     beta: f64,
-    inf_duration: i32,
+    inf_dist: &Distribution,
 ) {
     let count   = people.count;
     let n_nodes = nodes.count;
@@ -164,21 +180,22 @@ fn step_transmission_si(
     // Rayon worker thread — matching numba's prange pattern.  zip() binds each
     // (s, t) pair with the corresponding n_idx; the compiler sees them as a
     // single unit owned by one thread.
-    // rand::thread_rng() is stored in thread-local storage; calling it inside
-    // the closure costs only a pointer dereference, with no locking.
+    // for_each_init() builds one thread_rng per worker (Pattern B: the kernel
+    // owns the RNG); the same rng drives both the Bernoulli infection draw and
+    // the infectious-period draw from the shared `inf_dist`.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .zip(node.par_iter())
-        .for_each(|((s, t), &n_idx)| {
+        .for_each_init(rand::thread_rng, |rng, ((s, t), &n_idx)| {
             if *s == STATE_S {
                 let n = n_pop[n_idx as usize] as f64;
                 if n > 0.0 {
                     let lambda = beta * i_counts[n_idx as usize] as f64 / n;
                     let p = 1.0 - (-lambda).exp();
-                    if rand::thread_rng().gen::<f64>() < p {
+                    if rng.gen::<f64>() < p {
                         *s = STATE_I;
-                        *t = inf_duration;
+                        *t = duration_ticks(inf_dist.sample(rng));
                     }
                 }
             }
@@ -190,7 +207,7 @@ fn step_transmission_si(
 /// Stochastic S→E exposure step (SEIR kernel).
 ///
 /// Same FOI computation and parallelism as `step_transmission_si`, but newly
-/// exposed agents move to state E and `timer` is set to `exp_duration`
+/// exposed agents move to state E and `timer` is set to a draw from `exp_dist`
 /// (incubation period). Pair with `step_exposed_ei` to complete E→I.
 ///
 /// **Required people properties:** `state`, `node`, `timer` (all integer).
@@ -199,14 +216,16 @@ fn step_transmission_si(
 /// @param people        LaserFrame of agents.
 /// @param nodes         LaserFrame of patches/nodes.
 /// @param beta          Transmission rate.
-/// @param exp_duration  Incubation period in ticks; written to `timer` on exposure.
+/// @param exp_dist      A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+///   incubation period in ticks; sampled per newly exposed agent and written to
+///   `timer` on S→E (rounded to whole ticks, clamped to a minimum of 1).
 /// @export
 #[extendr]
 fn step_transmission_se(
     people: &mut LaserFrame,
     nodes: &mut LaserFrame,
     beta: f64,
-    exp_duration: i32,
+    exp_dist: &Distribution,
 ) {
     let count   = people.count;
     let n_nodes = nodes.count;
@@ -253,15 +272,15 @@ fn step_transmission_se(
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .zip(node.par_iter())
-        .for_each(|((s, t), &n_idx)| {
+        .for_each_init(rand::thread_rng, |rng, ((s, t), &n_idx)| {
             if *s == STATE_S {
                 let n = n_pop[n_idx as usize] as f64;
                 if n > 0.0 {
                     let lambda = beta * i_counts[n_idx as usize] as f64 / n;
                     let p = 1.0 - (-lambda).exp();
-                    if rand::thread_rng().gen::<f64>() < p {
+                    if rng.gen::<f64>() < p {
                         *s = STATE_E;
-                        *t = exp_duration;
+                        *t = duration_ticks(exp_dist.sample(rng));
                     }
                 }
             }
@@ -276,14 +295,23 @@ fn step_transmission_se(
 
 /// Timer-based E→I transition (SEIR kernel).
 ///
-/// For each exposed agent, decrements `timer` by 1. When `timer` reaches 0
-/// the agent transitions to state I and `timer` is reset to `inf_duration`.
+/// For each exposed agent, decrements `timer` by 1. When `timer` reaches 0 the
+/// agent transitions to state I and `timer` is set to a fresh draw from
+/// `inf_dist`, the infectious-period distribution. Pass `dist_constant(d)` for a
+/// fixed period of `d` ticks, or e.g. `dist_normal(mean, variance)` for a stochastic
+/// per-agent period. Draws are rounded to the nearest tick and clamped to a
+/// minimum of 1.
 ///
-/// @param people        LaserFrame of agents.
-/// @param inf_duration  Infectious period in ticks; written to `timer` on E→I.
+/// **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
+/// (Pattern B: the kernel owns the RNG and passes it into the sampler). The
+/// single `inf_dist` handle is shared across threads by reference.
+///
+/// @param people    LaserFrame of agents.
+/// @param inf_dist  A `Distribution` (e.g. from `dist_constant()` or `dist_normal()`)
+///   giving the infectious period in ticks; sampled and written to `timer` on E→I.
 /// @export
 #[extendr]
-fn step_exposed_ei(people: &mut LaserFrame, inf_duration: i32) {
+fn step_exposed_ei(people: &mut LaserFrame, inf_dist: &Distribution) {
     let count     = people.count;
     let state_ptr = int_ptr_mut(people, "state");
     let timer_ptr = int_ptr_mut(people, "timer");
@@ -293,15 +321,18 @@ fn step_exposed_ei(people: &mut LaserFrame, inf_duration: i32) {
     let state = unsafe { std::slice::from_raw_parts_mut(state_ptr, count) };
     let timer = unsafe { std::slice::from_raw_parts_mut(timer_ptr, count) };
 
+    // for_each_init constructs one thread_rng per Rayon worker and threads it
+    // through that worker's chunk, so the thread-local lookup is paid once per
+    // chunk rather than once per agent.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
-        .for_each(|(s, t)| {
+        .for_each_init(rand::thread_rng, |rng, (s, t)| {
             if *s == STATE_E {
                 *t -= 1;
                 if *t <= 0 {
                     *s = STATE_I;
-                    *t = inf_duration;
+                    *t = duration_ticks(inf_dist.sample(rng));
                 }
             }
         });
@@ -310,19 +341,24 @@ fn step_exposed_ei(people: &mut LaserFrame, inf_duration: i32) {
 /// Timer-based I→R transition (SIR / SEIR / SEIRS kernel).
 ///
 /// For each infectious agent, decrements `timer` by 1. When `timer` reaches 0
-/// the agent transitions to state R and `timer` is reset to `imm_duration`.
+/// the agent transitions to state R and `timer` is set to a draw from `imm_dist`,
+/// the immunity (waning) period.
 ///
-/// Setting `imm_duration = 0` is correct for SIR and SEIR (where
-/// `step_recovered_rs` is never called and the timer value after recovery does
-/// not matter). For SEIRS, pass the desired immunity period so that
-/// `step_recovered_rs` counts down from the correct starting value.
+/// For SEIRS, pass the desired immunity distribution so that `step_recovered_rs`
+/// counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
+/// `step_recovered_rs` never called) the R timer is never read, so any
+/// distribution works — `dist_constant(0)` is the conventional "don't care".
 ///
-/// @param people        LaserFrame of agents.
-/// @param imm_duration  Immunity period in ticks; written to `timer` on I→R.
-///   Pass `0L` for SIR / SEIR models where waning is not modelled.
+/// **RNG:** thread-local — each Rayon worker draws from its own `thread_rng`
+/// (Pattern B). The single `imm_dist` handle is shared across threads by reference.
+///
+/// @param people    LaserFrame of agents.
+/// @param imm_dist  A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
+///   immunity period in ticks; sampled and written to `timer` on I→R (rounded to
+///   whole ticks, clamped to a minimum of 1). Use `dist_constant(0)` for SIR / SEIR.
 /// @export
 #[extendr]
-fn step_infectious_ir(people: &mut LaserFrame, imm_duration: i32) {
+fn step_infectious_ir(people: &mut LaserFrame, imm_dist: &Distribution) {
     let count     = people.count;
     let state_ptr = int_ptr_mut(people, "state");
     let timer_ptr = int_ptr_mut(people, "timer");
@@ -334,12 +370,12 @@ fn step_infectious_ir(people: &mut LaserFrame, imm_duration: i32) {
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
-        .for_each(|(s, t)| {
+        .for_each_init(rand::thread_rng, |rng, (s, t)| {
             if *s == STATE_I {
                 *t -= 1;
                 if *t <= 0 {
                     *s = STATE_R;
-                    *t = imm_duration; // 0 for SIR/SEIR; imm_duration for SEIRS
+                    *t = duration_ticks(imm_dist.sample(rng));
                 }
             }
         });

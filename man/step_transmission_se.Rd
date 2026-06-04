@@ -4,7 +4,7 @@
 \alias{step_transmission_se}
 \title{Stochastic S→E exposure step (SEIR kernel).}
 \usage{
-step_transmission_se(people, nodes, beta, exp_duration)
+step_transmission_se(people, nodes, beta, exp_dist)
 }
 \arguments{
 \item{people}{LaserFrame of agents.}
@@ -13,11 +13,13 @@ step_transmission_se(people, nodes, beta, exp_duration)
 
 \item{beta}{Transmission rate.}
 
-\item{exp_duration}{Incubation period in ticks; written to \code{timer} on exposure.}
+\item{exp_dist}{A \code{Distribution} (e.g. \code{dist_constant()} or \code{dist_normal()}) giving the
+incubation period in ticks; sampled per newly exposed agent and written to
+\code{timer} on S→E (rounded to whole ticks, clamped to a minimum of 1).}
 }
 \description{
 Same FOI computation and parallelism as \code{step_transmission_si}, but newly
-exposed agents move to state E and \code{timer} is set to \code{exp_duration}
+exposed agents move to state E and \code{timer} is set to a draw from \code{exp_dist}
 (incubation period). Pair with \code{step_exposed_ei} to complete E→I.
 }
 \details{

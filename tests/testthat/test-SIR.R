@@ -1,8 +1,8 @@
 # SIR model: S → I → R  (permanent immunity after recovery)
 #
 # Components (one tick, in order):
-#   1. step_transmission_si(people, nodes, beta, inf_duration)  — S→I
-#   2. step_infectious_ir(people)                                — I→R on timer expiry
+#   1. step_transmission_si(people, nodes, beta, inf_dist)      — S→I
+#   2. step_infectious_ir(people, imm_dist)                      — I→R on timer expiry
 #
 # State codes: S=0, I=2, R=3
 # R0 = beta * inf_duration (discrete-time approximation)
@@ -28,8 +28,8 @@ run_sir <- function(n, n_seed = 100L, beta = 0.3, inf_duration = 14L,
   traj[1L, ] <- c(n - n_seed, n_seed, 0L)
 
   for (tick in seq_len(nticks)) {
-    step_transmission_si(ppl, nd, beta = beta, inf_duration = inf_duration)
-    step_infectious_ir(ppl, 0L)
+    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(inf_duration))
+    step_infectious_ir(ppl, imm_dist = dist_constant(0))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L),
                             sum(ppl$state == 2L),
                             sum(ppl$state == 3L))
@@ -56,9 +56,9 @@ run_seir <- function(n, n_seed = 100L, beta = 0.4, exp_duration = 5L,
                  dimnames = list(NULL, c("S", "E", "I", "R")))
   traj[1L, ] <- c(n - n_seed, 0L, n_seed, 0L)
   for (tick in seq_len(nticks)) {
-    step_transmission_se(ppl, nd, beta = beta, exp_duration = exp_duration)
-    step_exposed_ei(ppl, inf_duration = inf_duration)
-    step_infectious_ir(ppl, 0L)
+    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration))
+    step_exposed_ei(ppl, inf_dist = dist_constant(inf_duration))
+    step_infectious_ir(ppl, imm_dist = dist_constant(0))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 1L),
                             sum(ppl$state == 2L), sum(ppl$state == 3L))
   }
@@ -145,12 +145,12 @@ test_that("SIR: recovery timer is respected (I duration ≈ inf_duration)", {
   nd$add_scalar_property("I", "integer", 0L)
 
   for (tick in seq_len(9L)) {
-    step_transmission_si(ppl, nd, beta = 0.0, inf_duration = 10L)
-    step_infectious_ir(ppl, 0L)
+    step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10))
+    step_infectious_ir(ppl, imm_dist = dist_constant(0))
     expect_equal(ppl$state[1L], 2L, info = paste("tick", tick))
   }
-  step_transmission_si(ppl, nd, beta = 0.0, inf_duration = 10L)
-  step_infectious_ir(ppl, 0L)
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10))
+  step_infectious_ir(ppl, imm_dist = dist_constant(0))
   expect_equal(ppl$state[1L], 3L)   # recovered on tick 10
 })
 

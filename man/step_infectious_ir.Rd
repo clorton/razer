@@ -4,21 +4,26 @@
 \alias{step_infectious_ir}
 \title{Timer-based I→R transition (SIR / SEIR / SEIRS kernel).}
 \usage{
-step_infectious_ir(people, imm_duration)
+step_infectious_ir(people, imm_dist)
 }
 \arguments{
 \item{people}{LaserFrame of agents.}
 
-\item{imm_duration}{Immunity period in ticks; written to \code{timer} on I→R.
-Pass \code{0L} for SIR / SEIR models where waning is not modelled.}
+\item{imm_dist}{A \code{Distribution} (e.g. \code{dist_constant()} or \code{dist_normal()}) giving the
+immunity period in ticks; sampled and written to \code{timer} on I→R (rounded to
+whole ticks, clamped to a minimum of 1). Use \code{dist_constant(0)} for SIR / SEIR.}
 }
 \description{
 For each infectious agent, decrements \code{timer} by 1. When \code{timer} reaches 0
-the agent transitions to state R and \code{timer} is reset to \code{imm_duration}.
+the agent transitions to state R and \code{timer} is set to a draw from \code{imm_dist},
+the immunity (waning) period.
 }
 \details{
-Setting \code{imm_duration = 0} is correct for SIR and SEIR (where
-\code{step_recovered_rs} is never called and the timer value after recovery does
-not matter). For SEIRS, pass the desired immunity period so that
-\code{step_recovered_rs} counts down from the correct starting value.
+For SEIRS, pass the desired immunity distribution so that \code{step_recovered_rs}
+counts down R→S from a fresh per-agent draw. For SIR and SEIR (no waning,
+\code{step_recovered_rs} never called) the R timer is never read, so any
+distribution works — \code{dist_constant(0)} is the conventional "don't care".
+
+\strong{RNG:} thread-local — each Rayon worker draws from its own \code{thread_rng}
+(Pattern B). The single \code{imm_dist} handle is shared across threads by reference.
 }
