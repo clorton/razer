@@ -12,22 +12,45 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
-- `bincount(values, nbins, counts)` — a parallel, NumPy-`bincount`-style histogram
-  over a [Column] (`src/rust/src/bincount.rs`). For each bin `b` in `0..nbins` it
-  counts how many elements of the integer-typed `values` Column equal `b` and
-  writes the result into the caller-provided `counts` Column (length `>= nbins`;
-  entries at/beyond `nbins` are left untouched). Each Rayon worker accumulates into
-  a private per-thread histogram (no shared-bin write collisions); the used range
-  of `counts` is then zeroed and the per-thread tallies are reduced into it. One
-  generic kernel serves every value width/signedness (`i8`..`u32`) and any numeric
-  `counts` type via traits. Counts 30.18M agents into 954 node bins in ~15 ms;
-  covered by `tests/testthat/test-bincount.R` (incl. a parallel-vs-`tabulate`
-  cross-check).
-- `bincountw(values, weights, nbins, counts)` — the weighted counterpart: sums
-  each element's weight into its bin (`counts[b] = Σ weights[i]` over `i` with
+- `sir_step(state, timer, nodeid, count, recoveries, tick)` — the per-tick SIR
+  recovery kernel over `Column` buffers (`src/rust/src/sir.rs`). For each of the
+  first `count` infectious agents it decrements the `u8` `timer`; when the timer
+  hits zero the agent moves to Recovered and a recovery is tallied for its node in
+  the `tick` column of the 2-D `recoveries` report. State/timer are `u8`, `nodeid`
+  is `u16` (0-based); the recovery count type is generic. Serial for now (the
+  per-node tally would race under naive parallelism). Covered by
+  `tests/testthat/test-sir-step.R`.
+- `allocate_vector(dtype, n_slices, slice_len)` — allocates a 2-D `Column` report
+  buffer of `n_slices × slice_len` elements, SLICE-MAJOR (row-major) so each slice
+  is a contiguous run: slice `s` is `s*slice_len .. (s+1)*slice_len`. The
+  conventional use is a time-series report with the **first dimension time, second
+  node** (`allocate_vector(dtype, n_ticks, n_nodes)`), so each tick's per-node
+  values are contiguous and a step kernel can fill one tick's slice with no
+  gather. `$values()` reads it back as an `n_slices × slice_len` (e.g.
+  `n_ticks × n_nodes`) R matrix (transposed on copy, since R is column-major), so
+  row `t` is tick `t`'s vector. `Column` carries `n_slices`/`slice_len` shape;
+  `allocate_scalar` is the `n_slices == 1` case. Covered by
+  `tests/testthat/test-allocation.R`.
+- `bincount(values, nbins, counts, slot = 0)` — a parallel, NumPy-`bincount`-style
+  histogram over a [Column] (`src/rust/src/bincount.rs`). For each bin `b` in
+  `0..nbins` it counts how many elements of the integer-typed `values` Column equal
+  `b` and writes the result into **slice `slot`** of the caller-provided `counts`
+  Column (the entries `slot*slice_len .. slot*slice_len + nbins`), zeroing then
+  accumulating. For a scalar `counts` the only slice is `slot = 0` (the whole
+  vector); for a 2-D report from [allocate_vector()] `slot` selects a tick's row —
+  so a per-tick loop can tally straight into the report with no extra buffer. Each
+  Rayon worker accumulates into a private per-thread histogram (no shared-bin write
+  collisions). One generic kernel serves every value width/signedness (`i8`..`u32`)
+  and any numeric `counts` type via traits. Counts 30.18M agents into 954 node bins
+  in ~15 ms; covered by `tests/testthat/test-bincount.R` (incl. a
+  parallel-vs-`tabulate` cross-check). `slot` defaults to 0 via a thin R wrapper
+  (`R/bincount.R`) over the extendr kernel, since extendr can't emit R-side default
+  arguments.
+- `bincountw(values, weights, nbins, counts, slot = 0)` — the weighted counterpart:
+  sums each element's weight into its bin (`counts[b] = Σ weights[i]` over `i` with
   `values[i] == b`), à la `numpy.bincount(values, weights=...)`. Same parallel,
-  collision-free, zero-then-accumulate design; `weights` may be any numeric
-  `Column` (signed, unsigned, or floating point — all widened to f64 for
+  collision-free, zero-then-accumulate design and `slot` targeting; `weights` may be
+  any numeric `Column` (signed, unsigned, or floating point — all widened to f64 for
   accumulation), and the value×weight type dispatch is macro-generated over one
   generic kernel so weights are read in place with no copy. Covered by
   `tests/testthat/test-bincount.R` (incl. a parallel-vs-serial weighted-tally

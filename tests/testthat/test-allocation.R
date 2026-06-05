@@ -75,6 +75,48 @@ test_that("$set overwrites from an R vector and round-trips through $values", {
   expect_equal(col$values(), c(1L, 2L, 3L, 250L))
 })
 
+test_that("allocate_vector makes a time-major (n_ticks x n_nodes) 2-D column", {
+  # Given a request for a 4-tick x 3-node report buffer (time first, node second)
+  # When allocate_vector is called
+  # Then it is a Column of 12 zero elements whose $values() reads back as a 4 x 3
+  #      matrix (rows = ticks, columns = nodes).
+  # Failure would mean the dimension order or 2-D shape handling is wrong.
+  vec <- allocate_vector("u32", 4L, 3L)
+
+  expect_s3_class(vec, "Column")
+  expect_equal(vec$length(), 12L)
+  v <- vec$values()
+  expect_equal(dim(v), c(4L, 3L))
+  expect_true(all(v == 0))
+})
+
+test_that("allocate_vector is slice-major so each tick (first dim) is contiguous", {
+  # Given a 4-tick x 3-node vector set from the sequence 1..12
+  # When read back as a matrix
+  # Then it matches a ROW-major fill — set() writes tick 0's 3 node values first
+  #      (1,2,3), then tick 1's (4,5,6), ... — so row t of $values() is tick t's
+  #      contiguous node block.
+  # Failure would mean time-slices are strided rather than contiguous.
+  vec <- allocate_vector("i32", 4L, 3L)
+
+  vec$set(1:12)
+
+  expect_equal(vec$values(), matrix(1:12, nrow = 4L, byrow = TRUE))
+  expect_equal(vec$values()[1L, ], c(1L, 2L, 3L))   # tick 0's node vector
+  expect_equal(vec$values()[2L, ], c(4L, 5L, 6L))   # tick 1's node vector
+})
+
+test_that("allocate_vector with a single tick behaves like a plain vector", {
+  # Given n_slices (ticks) = 1
+  # When allocated
+  # Then $values() is a plain length-slice_len vector (no dim attribute).
+  # Failure would mean a degenerate 2-D column wrongly carries a matrix dim.
+  vec <- allocate_vector("u8", 1L, 5L)
+
+  expect_null(dim(vec$values()))
+  expect_equal(vec$length(), 5L)
+})
+
 test_that("a large uint8 allocation has the exact requested length", {
   # Given a multi-million-element request (national-population scale)
   # When a u8 column is allocated

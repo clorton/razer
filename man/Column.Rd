@@ -4,7 +4,7 @@
 \name{Column}
 \alias{Column}
 \alias{$.Column}
-\title{A Rust-owned, dtype-tagged 1-D property array.}
+\title{A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).}
 \format{
 An object of class \code{environment} of length 5.
 }
@@ -12,11 +12,13 @@ An object of class \code{environment} of length 5.
 Column
 }
 \description{
-Allocate one with \code{\link[=allocate_scalar]{allocate_scalar()}}. The data is held in Rust and exposed to
+Allocate one with \code{\link[=allocate_scalar]{allocate_scalar()}} (\code{nrows} elements, \code{ncols == 1}) or
+\code{\link[=allocate_vector]{allocate_vector()}} (\code{nrows}-per-slot × \code{ncols} slots, stored COLUMN-MAJOR so a
+whole slot/time-slice is contiguous). The data is held in Rust and exposed to
 R only as an opaque handle; use \verb{$values()} to copy a snapshot back into an R
-vector for inspection, \verb{$fill()} / \verb{$set()} to write, and \verb{$length()} /
-\verb{$dtype()} to query. The simulation step kernels operate on the buffer in
-place with no copies.
+vector (or matrix, when \code{ncols > 1}) for inspection, \verb{$fill()} / \verb{$set()} to
+write, and \verb{$length()} / \verb{$dtype()} to query. The simulation step kernels
+operate on the buffer in place with no copies.
 }
 \section{Methods}{
 
@@ -47,8 +49,14 @@ Integer-width types (i8, u8, i16, u16, i32) widen to R \code{integer}; \code{u32
 \code{f32}, and \code{f64} widen to R \code{double} (since \code{u32} overflows R's signed
 32-bit integer). This O(n) copy is the only place data leaves Rust.
 
+For a 2-D column (\code{n_slices > 1}, from \code{\link[=allocate_vector]{allocate_vector()}}) the result carries
+a \code{dim} attribute and reads back as an \verb{n_slices × slice_len} R matrix (e.g.
+\verb{n_ticks × n_nodes}), so row \code{t} is tick \code{t}'s per-node vector; otherwise a
+plain vector. The snapshot is transposed during the copy (our buffer is
+slice-major, R matrices are column-major) — inexpensive, inspection-only.
+
 \subsection{return}{
-A numeric vector (integer or double) of length \code{length()}.
+A numeric vector (or matrix) — integer or double — of \code{length()} elements.
 }
 \subsection{export}{
 

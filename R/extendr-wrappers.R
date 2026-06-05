@@ -483,20 +483,49 @@ row_normalizer <- function(network, max_rowsum) .Call(wrap__row_normalizer, netw
 #' @export
 allocate_scalar <- function(dtype, count) .Call(wrap__allocate_scalar, dtype, count)
 
+#' Allocate a fresh, zero-filled 2-D property array (a per-slot report buffer).
+#'
+#' Returns an opaque [Column] of `n_slices * slice_len` elements laid out
+#' SLICE-MAJOR (row-major): `n_slices` slices, each a contiguous run of `slice_len`
+#' elements. Slice `s` is the block `s*slice_len .. (s+1)*slice_len`, so indexing
+#' the FIRST dimension yields a contiguous array. The conventional use is a
+#' time-series report with the **first dimension time and the second node** —
+#' `allocate_vector(dtype, n_ticks, n_nodes)` — so each tick's per-node values are
+#' contiguous (cache-friendly for the step kernels that fill one tick at a time).
+#' `$values()` reads it back as an `n_slices × slice_len` (e.g. `n_ticks × n_nodes`)
+#' R matrix, so row `t` is tick `t`'s vector.
+#'
+#' @param dtype     Element type (see [allocate_scalar()] for the accepted names).
+#' @param n_slices  Number of slices — the first/outer dimension (e.g. the tick
+#'   count). A non-negative integer.
+#' @param slice_len Contiguous length of each slice — the inner dimension (e.g. the
+#'   node count). A non-negative integer.
+#' @return A [Column] of shape `n_slices × slice_len`, all elements zero.
+#' @examples
+#' recoveries <- allocate_vector("u32", 4L, 3L)   # 4 ticks x 3 nodes
+#' dim(recoveries$values())                        # 4 3
+#' @export
+allocate_vector <- function(dtype, n_slices, slice_len) .Call(wrap__allocate_vector, dtype, n_slices, slice_len)
+
 #' Count occurrences of each value, NumPy `bincount`-style, into a buffer.
 #'
 #' For each bin `b` in `0..nbins`, computes how many elements of `values` equal
 #' `b` and writes that into `counts[b]`. `values` must be an integer-typed
 #' [Column] whose elements lie in `0..nbins` (they are used as bin indices);
-#' `counts` must be a numeric [Column] with at least `nbins` elements and is
-#' **overwritten** in its first `nbins` entries (entries at or beyond `nbins` are
-#' left untouched). The work is parallelized with private per-thread histograms,
-#' so there are no write collisions.
+#' `counts` is a numeric [Column] and the result is written into **slice `slot`**
+#' of it — the `nbins` entries `slot*slice_len .. slot*slice_len + nbins` —
+#' overwriting them while leaving the rest of the slice (and other slices)
+#' untouched. For a scalar `counts` (shape `(1, n)`) the only slice is `slot = 0`,
+#' the whole vector; for a 2-D report (e.g. `(n_ticks, n_nodes)`) `slot` selects a
+#' tick's row. The work is parallelized with private per-thread histograms, so
+#' there are no write collisions.
 #'
 #' @param values An integer-typed `Column` of bin indices (`i8`..`u32`).
-#' @param nbins  Number of bins; a non-negative integer `<= counts$length()`.
-#' @param counts A numeric `Column` (length `>= nbins`) that receives the counts.
-#'   It is modified in place; the function returns `NULL`.
+#' @param nbins  Number of bins; a non-negative integer `<= counts`'s slice length.
+#' @param counts A numeric `Column` that receives the counts (modified in place).
+#' @param slot   Which slice of `counts` to write; a non-negative integer
+#'   `< counts`'s slice count. Defaults to `0` (the whole vector for a scalar
+#'   `counts`, or the first tick of a report). `@param` is optional.
 #' @return `NULL` (invisibly); the result is written into `counts`.
 #' @examples
 #' values <- allocate_scalar("u16", 6L)
@@ -504,26 +533,28 @@ allocate_scalar <- function(dtype, count) .Call(wrap__allocate_scalar, dtype, co
 #' counts <- allocate_scalar("i32", 3L)
 #' bincount(values, 3L, counts)
 #' counts$values()   # 1 2 3
-#' @export
-bincount <- function(values, nbins, counts) .Call(wrap__bincount, values, nbins, counts)
+#' @noRd
+bincount_impl <- function(values, nbins, counts, slot) .Call(wrap__bincount_impl, values, nbins, counts, slot)
 
 #' Weighted bincount: sum each element's weight into its bin (NumPy
 #' `bincount(values, weights=...)`).
 #'
 #' For each bin `b` in `0..nbins`, computes `sum of weights[i] over all i with
-#' values[i] == b` and writes it into `counts[b]`. `values` must be an
-#' integer-typed [Column] of bin indices in `0..nbins`; `weights` is any numeric
+#' values[i] == b` and writes it into **slice `slot`** of `counts` (the entries
+#' `slot*slice_len .. slot*slice_len + nbins`), overwriting them. `values` must be
+#' an integer-typed [Column] of bin indices in `0..nbins`; `weights` is any numeric
 #' [Column] (signed, unsigned, or floating point) the SAME length as `values`;
-#' `counts` is a numeric [Column] with at least `nbins` elements, **overwritten**
-#' in its first `nbins` entries (entries at or beyond `nbins` are left untouched).
-#' Parallelized with private per-thread accumulators, so there are no write
-#' collisions.
+#' `counts` is a numeric [Column] whose slice length is `>= nbins`. For a scalar
+#' `counts` the only slice is `slot = 0` (the whole vector); for a 2-D report
+#' `slot` selects a tick's row. Parallelized with private per-thread accumulators,
+#' so there are no write collisions.
 #'
 #' @param values  An integer-typed `Column` of bin indices (`i8`..`u32`).
 #' @param weights A numeric `Column` (any type), the same length as `values`.
-#' @param nbins   Number of bins; a non-negative integer `<= counts$length()`.
-#' @param counts  A numeric `Column` (length `>= nbins`) that receives the sums.
-#'   It is modified in place; the function returns `NULL`.
+#' @param nbins   Number of bins; a non-negative integer `<= counts`'s slice length.
+#' @param counts  A numeric `Column` that receives the sums (modified in place).
+#' @param slot    Which slice of `counts` to write; a non-negative integer
+#'   `< counts`'s slice count. Defaults to `0`.
 #' @return `NULL` (invisibly); the result is written into `counts`.
 #' @examples
 #' values  <- allocate_scalar("u16", 5L); values$set(c(0, 0, 1, 2, 2))
@@ -531,8 +562,31 @@ bincount <- function(values, nbins, counts) .Call(wrap__bincount, values, nbins,
 #' counts  <- allocate_scalar("f64", 3L)
 #' bincountw(values, weights, 3L, counts)
 #' counts$values()   # 4 4 4
+#' @noRd
+bincountw_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bincountw_impl, values, weights, nbins, counts, slot)
+
+#' One SIR recovery step for a single tick.
+#'
+#' For each of the first `count` agents whose `state` is infectious (`I`),
+#' decrement its `timer` by one; when the timer reaches zero the agent becomes
+#' recovered (`R`) and a recovery is tallied for its node in `recoveries` at this
+#' `tick`. Susceptible and already-recovered agents are skipped.
+#'
+#' `state` and `timer` are per-agent `u8` Columns and are mutated in place;
+#' `nodeid` is the per-agent `u16` Column of 0-based node ids; `recoveries` is the
+#' 2-D node report from [allocate_vector()] (shape `n_nodes × n_ticks`), of which
+#' only the contiguous `n_nodes`-wide column for `tick` is written.
+#'
+#' @param state      Per-agent `u8` state Column (mutated).
+#' @param timer      Per-agent `u8` countdown Column (mutated).
+#' @param nodeid     Per-agent `u16` 0-based node-id Column.
+#' @param count      Number of active agents to process (e.g. `people$count`).
+#' @param recoveries A 2-D node report Column (`n_nodes × n_ticks`); its `tick`
+#'   column receives the per-node recovery counts (mutated).
+#' @param tick       0-based tick index selecting which column of `recoveries` to fill.
+#' @return `NULL` (invisibly); `state`, `timer`, and `recoveries` are modified in place.
 #' @export
-bincountw <- function(values, weights, nbins, counts) .Call(wrap__bincountw, values, weights, nbins, counts)
+sir_step <- function(state, timer, nodeid, count, recoveries, tick) .Call(wrap__sir_step, state, timer, nodeid, count, recoveries, tick)
 
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
@@ -870,13 +924,15 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #' @export
 `[[.Distribution` <- `$.Distribution`
 
-#' A Rust-owned, dtype-tagged 1-D property array.
+#' A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).
 #'
-#' Allocate one with [allocate_scalar()]. The data is held in Rust and exposed to
+#' Allocate one with [allocate_scalar()] (`nrows` elements, `ncols == 1`) or
+#' [allocate_vector()] (`nrows`-per-slot × `ncols` slots, stored COLUMN-MAJOR so a
+#' whole slot/time-slice is contiguous). The data is held in Rust and exposed to
 #' R only as an opaque handle; use `$values()` to copy a snapshot back into an R
-#' vector for inspection, `$fill()` / `$set()` to write, and `$length()` /
-#' `$dtype()` to query. The simulation step kernels operate on the buffer in
-#' place with no copies.
+#' vector (or matrix, when `ncols > 1`) for inspection, `$fill()` / `$set()` to
+#' write, and `$length()` / `$dtype()` to query. The simulation step kernels
+#' operate on the buffer in place with no copies.
 #'
 #' @export
 #'
@@ -908,8 +964,14 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'`f32`, and `f64` widen to R `double` (since `u32` overflows R's signed
 #'32-bit integer). This O(n) copy is the only place data leaves Rust.
 #'
+#'For a 2-D column (`n_slices > 1`, from [allocate_vector()]) the result carries
+#'a `dim` attribute and reads back as an `n_slices × slice_len` R matrix (e.g.
+#'`n_ticks × n_nodes`), so row `t` is tick `t`'s per-node vector; otherwise a
+#'plain vector. The snapshot is transposed during the copy (our buffer is
+#'slice-major, R matrices are column-major) — inexpensive, inspection-only.
+#'
 #' \subsection{return}{
-#'A numeric vector (integer or double) of length `length()`.
+#'A numeric vector (or matrix) — integer or double — of `length()` elements.
 #'}
 #' \subsection{export}{
 #'

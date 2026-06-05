@@ -15,11 +15,12 @@ library(razer)
 # `scenario` is a data.frame with one row per patch (name, population, latitude,
 # longitude); it is the model's geographic scaffold. `network` is the N x N
 # spatial coupling matrix (fraction of each patch's force of infection exported
-# to every other patch).
-run_sir_model <- function(scenario, network) {
+# to every other patch). `nticks` is the number of daily time steps to simulate.
+run_sir_model <- function(scenario, network, nticks) {
   # Total agent count = sum of every patch's population. `sum()` over an integer
-  # column returns an integer scalar.
-  n <- sum(scenario$population)
+  # column returns an integer scalar. `n_nodes` is the patch count.
+  n       <- sum(scenario$population)
+  n_nodes <- nrow(scenario)
 
   # `new.env()` makes a fresh ENVIRONMENT: unlike ordinary R values (which are
   # copy-on-modify), an environment has reference semantics — assigning into it
@@ -48,15 +49,40 @@ run_sir_model <- function(scenario, network) {
   # into the Rust buffer.
   people$nodeid$set(rep(seq_len(nrow(scenario)) - 1L, times = scenario$population))
 
-  # TODO: seed infections, build SIR parameters, run.
+  # Per-agent countdown timer (uint8), zero-initialized. The step kernels set it
+  # when an agent enters a timed compartment (e.g. the infectious period on S->I)
+  # and decrement it each tick; a uint8 holds durations up to 255 ticks.
+  people$timer    <- allocate_scalar("u8", n)
+
+  # `nodes` is the per-patch record holding per-tick REPORTS. `recoveries` is a
+  # 2-D buffer of shape (nticks, n_nodes) — time first, node second — laid out so
+  # each tick's per-node row is contiguous in memory; `sir_step` tallies recoveries
+  # into the current tick's slice.
+  nodes <- new.env()
+  nodes$count      <- n_nodes
+  nodes$recoveries <- allocate_vector("u32", nticks, n_nodes)
+
+  # TODO: seed infections, build the rest of the SIR parameters.
+
+  # `run` advances the simulation: each tick runs the per-tick step kernels (just
+  # the SIR recovery step for now; transmission etc. will join it here). `tick - 1L`
+  # converts R's 1-based loop counter to the 0-based time-slice index sir_step expects.
+  run <- function() {
+    for (tick in seq_len(nticks)) {
+      sir_step(people$state, people$timer, people$nodeid, people$count,
+               nodes$recoveries, tick - 1L)
+    }
+  }
+  run()
 
   # Report success. `cat()` writes to stdout; `sprintf` is C-style formatting.
-  # `invisible()` returns its argument WITHOUT auto-printing at the top level.
-  cat(sprintf("run_sir_model: %d patches, network %d x %d; people = {state %s, nodeid %s}[%d] (capacity %d).\n",
-              nrow(scenario), nrow(network), ncol(network),
-              people$state$dtype(), people$nodeid$dtype(),
-              people$state$length(), people$capacity))
-  invisible(people)
+  # `sum(nodes$recoveries$values())` totals the recovery report. `invisible()`
+  # returns its argument WITHOUT auto-printing at the top level.
+  cat(sprintf("run_sir_model: %d patches, %d ticks; people = {state %s, nodeid %s, timer %s}[%d]; total recoveries = %d.\n",
+              n_nodes, nticks,
+              people$state$dtype(), people$nodeid$dtype(), people$timer$dtype(),
+              people$count, sum(nodes$recoveries$values())))
+  invisible(list(people = people, nodes = nodes))
 }
 
 # ── setup ───────────────────────────────────────────────────────────────────────
@@ -94,8 +120,12 @@ network <- radiation(scenario$population, distance_matrix, k = 1, include_home =
 # 10% total emigration.
 network <- row_normalizer(network, max_rowsum = 0.1)
 
+# Number of daily time steps to simulate (placeholder until the full SIR loop and
+# seeding are wired up).
+nticks <- 10L
+
 # ── run ───────────────────────────────────────────────────────────────────────
 # `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
 # `[["elapsed"]]` name-indexes the wall-clock seconds field.
-timing <- system.time(run_sir_model(scenario, network))
+timing <- system.time(run_sir_model(scenario, network, nticks))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))

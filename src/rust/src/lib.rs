@@ -6,6 +6,7 @@ mod distributions;
 mod migration;
 mod column;
 mod bincount;
+mod sir;
 pub use laser_frame::LaserFrame;
 pub use distributions::Distribution;
 pub use column::Column;
@@ -18,4 +19,5 @@ extendr_module! {
     use migration;
     use column;
     use bincount;
+    use sir;
 }

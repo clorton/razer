@@ -124,15 +124,20 @@ fn write_counts_f64<C: BinCount>(counts: &mut [C], totals: &[f64], nbins: usize)
 /// For each bin `b` in `0..nbins`, computes how many elements of `values` equal
 /// `b` and writes that into `counts[b]`. `values` must be an integer-typed
 /// [Column] whose elements lie in `0..nbins` (they are used as bin indices);
-/// `counts` must be a numeric [Column] with at least `nbins` elements and is
-/// **overwritten** in its first `nbins` entries (entries at or beyond `nbins` are
-/// left untouched). The work is parallelized with private per-thread histograms,
-/// so there are no write collisions.
+/// `counts` is a numeric [Column] and the result is written into **slice `slot`**
+/// of it — the `nbins` entries `slot*slice_len .. slot*slice_len + nbins` —
+/// overwriting them while leaving the rest of the slice (and other slices)
+/// untouched. For a scalar `counts` (shape `(1, n)`) the only slice is `slot = 0`,
+/// the whole vector; for a 2-D report (e.g. `(n_ticks, n_nodes)`) `slot` selects a
+/// tick's row. The work is parallelized with private per-thread histograms, so
+/// there are no write collisions.
 ///
 /// @param values An integer-typed `Column` of bin indices (`i8`..`u32`).
-/// @param nbins  Number of bins; a non-negative integer `<= counts$length()`.
-/// @param counts A numeric `Column` (length `>= nbins`) that receives the counts.
-///   It is modified in place; the function returns `NULL`.
+/// @param nbins  Number of bins; a non-negative integer `<= counts`'s slice length.
+/// @param counts A numeric `Column` that receives the counts (modified in place).
+/// @param slot   Which slice of `counts` to write; a non-negative integer
+///   `< counts`'s slice count. Defaults to `0` (the whole vector for a scalar
+///   `counts`, or the first tick of a report). `@param` is optional.
 /// @return `NULL` (invisibly); the result is written into `counts`.
 /// @examples
 /// values <- allocate_scalar("u16", 6L)
@@ -140,16 +145,24 @@ fn write_counts_f64<C: BinCount>(counts: &mut [C], totals: &[f64], nbins: usize)
 /// counts <- allocate_scalar("i32", 3L)
 /// bincount(values, 3L, counts)
 /// counts$values()   # 1 2 3
-/// @export
+/// @noRd
 #[extendr]
-fn bincount(values: &Column, nbins: i32, counts: &mut Column) {
+fn bincount_impl(values: &Column, nbins: i32, counts: &mut Column, slot: i32) {
     assert!(nbins >= 0, "`nbins` must be non-negative, got {nbins}");
     let nbins = nbins as usize;
+    assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+    let slot = slot as usize;
     assert!(
-        counts.len() >= nbins,
-        "`counts` length ({}) must be at least `nbins` ({nbins})",
-        counts.len()
+        slot < counts.n_slices(),
+        "`slot` ({slot}) out of range for counts with {} slices",
+        counts.n_slices()
     );
+    let slice_len = counts.slice_len();
+    assert!(
+        nbins <= slice_len,
+        "`counts` slice length ({slice_len}) must be at least `nbins` ({nbins})"
+    );
+    let start = slot * slice_len;
 
     // Recover the concrete element type and run the single generic histogram.
     let totals: Vec<u64> = match values.storage() {
@@ -163,16 +176,18 @@ fn bincount(values: &Column, nbins: i32, counts: &mut Column) {
             panic!("`values` must be an integer-typed Column (bin indices), not float"),
     };
 
-    // Zero the used bins of `counts`, then add the totals in.
+    // Zero slice `slot`'s first `nbins` entries, then add the totals in. The
+    // sub-slice `[start .. start+nbins]` is the destination within `counts`.
+    let end = start + nbins;
     match counts.storage_mut() {
-        Storage::I8(c)  => write_counts_u64(c, &totals, nbins),
-        Storage::U8(c)  => write_counts_u64(c, &totals, nbins),
-        Storage::I16(c) => write_counts_u64(c, &totals, nbins),
-        Storage::U16(c) => write_counts_u64(c, &totals, nbins),
-        Storage::I32(c) => write_counts_u64(c, &totals, nbins),
-        Storage::U32(c) => write_counts_u64(c, &totals, nbins),
-        Storage::F32(c) => write_counts_u64(c, &totals, nbins),
-        Storage::F64(c) => write_counts_u64(c, &totals, nbins),
+        Storage::I8(c)  => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::U8(c)  => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::I16(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::U16(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::I32(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::U32(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::F32(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
+        Storage::F64(c) => write_counts_u64(&mut c[start..end], &totals, nbins),
     }
 }
 
@@ -228,19 +243,21 @@ fn histogram_weighted<V: BinIndex, W: ToWeight>(
 /// `bincount(values, weights=...)`).
 ///
 /// For each bin `b` in `0..nbins`, computes `sum of weights[i] over all i with
-/// values[i] == b` and writes it into `counts[b]`. `values` must be an
-/// integer-typed [Column] of bin indices in `0..nbins`; `weights` is any numeric
+/// values[i] == b` and writes it into **slice `slot`** of `counts` (the entries
+/// `slot*slice_len .. slot*slice_len + nbins`), overwriting them. `values` must be
+/// an integer-typed [Column] of bin indices in `0..nbins`; `weights` is any numeric
 /// [Column] (signed, unsigned, or floating point) the SAME length as `values`;
-/// `counts` is a numeric [Column] with at least `nbins` elements, **overwritten**
-/// in its first `nbins` entries (entries at or beyond `nbins` are left untouched).
-/// Parallelized with private per-thread accumulators, so there are no write
-/// collisions.
+/// `counts` is a numeric [Column] whose slice length is `>= nbins`. For a scalar
+/// `counts` the only slice is `slot = 0` (the whole vector); for a 2-D report
+/// `slot` selects a tick's row. Parallelized with private per-thread accumulators,
+/// so there are no write collisions.
 ///
 /// @param values  An integer-typed `Column` of bin indices (`i8`..`u32`).
 /// @param weights A numeric `Column` (any type), the same length as `values`.
-/// @param nbins   Number of bins; a non-negative integer `<= counts$length()`.
-/// @param counts  A numeric `Column` (length `>= nbins`) that receives the sums.
-///   It is modified in place; the function returns `NULL`.
+/// @param nbins   Number of bins; a non-negative integer `<= counts`'s slice length.
+/// @param counts  A numeric `Column` that receives the sums (modified in place).
+/// @param slot    Which slice of `counts` to write; a non-negative integer
+///   `< counts`'s slice count. Defaults to `0`.
 /// @return `NULL` (invisibly); the result is written into `counts`.
 /// @examples
 /// values  <- allocate_scalar("u16", 5L); values$set(c(0, 0, 1, 2, 2))
@@ -248,21 +265,29 @@ fn histogram_weighted<V: BinIndex, W: ToWeight>(
 /// counts  <- allocate_scalar("f64", 3L)
 /// bincountw(values, weights, 3L, counts)
 /// counts$values()   # 4 4 4
-/// @export
+/// @noRd
 #[extendr]
-fn bincountw(values: &Column, weights: &Column, nbins: i32, counts: &mut Column) {
+fn bincountw_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Column, slot: i32) {
     assert!(nbins >= 0, "`nbins` must be non-negative, got {nbins}");
     let nbins = nbins as usize;
+    assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+    let slot = slot as usize;
     assert!(
-        counts.len() >= nbins,
-        "`counts` length ({}) must be at least `nbins` ({nbins})",
-        counts.len()
+        slot < counts.n_slices(),
+        "`slot` ({slot}) out of range for counts with {} slices",
+        counts.n_slices()
+    );
+    let slice_len = counts.slice_len();
+    assert!(
+        nbins <= slice_len,
+        "`counts` slice length ({slice_len}) must be at least `nbins` ({nbins})"
     );
     assert_eq!(
         values.len(), weights.len(),
         "`values` ({}) and `weights` ({}) must have the same length",
         values.len(), weights.len()
     );
+    let start = slot * slice_len;
 
     // Recover BOTH concrete element types (values' integer index type and weights'
     // numeric type) and call the single generic kernel. The two nested macros
@@ -294,21 +319,22 @@ fn bincountw(values: &Column, weights: &Column, nbins: i32, counts: &mut Column)
             panic!("`values` must be an integer-typed Column (bin indices), not float"),
     };
 
-    // Zero the used bins of `counts`, then add the weighted totals in.
+    // Zero slice `slot`'s first `nbins` entries, then add the weighted totals in.
+    let end = start + nbins;
     match counts.storage_mut() {
-        Storage::I8(c)  => write_counts_f64(c, &totals, nbins),
-        Storage::U8(c)  => write_counts_f64(c, &totals, nbins),
-        Storage::I16(c) => write_counts_f64(c, &totals, nbins),
-        Storage::U16(c) => write_counts_f64(c, &totals, nbins),
-        Storage::I32(c) => write_counts_f64(c, &totals, nbins),
-        Storage::U32(c) => write_counts_f64(c, &totals, nbins),
-        Storage::F32(c) => write_counts_f64(c, &totals, nbins),
-        Storage::F64(c) => write_counts_f64(c, &totals, nbins),
+        Storage::I8(c)  => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::U8(c)  => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::I16(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::U16(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::I32(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::U32(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::F32(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
+        Storage::F64(c) => write_counts_f64(&mut c[start..end], &totals, nbins),
     }
 }
 
 extendr_module! {
     mod bincount;
-    fn bincount;
-    fn bincountw;
+    fn bincount_impl;
+    fn bincountw_impl;
 }

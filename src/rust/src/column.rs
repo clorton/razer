@@ -74,28 +74,74 @@ pub(crate) enum Storage {
     F32(Vec<f32>), F64(Vec<f64>),
 }
 
-/// A Rust-owned, dtype-tagged 1-D property array.
+// Allocate a zero-filled `Storage` of the given dtype and element count.
+fn zeroed_storage(dtype: DType, n: usize) -> Storage {
+    match dtype {
+        DType::I8  => Storage::I8(vec![0; n]),
+        DType::U8  => Storage::U8(vec![0; n]),
+        DType::I16 => Storage::I16(vec![0; n]),
+        DType::U16 => Storage::U16(vec![0; n]),
+        DType::I32 => Storage::I32(vec![0; n]),
+        DType::U32 => Storage::U32(vec![0; n]),
+        DType::F32 => Storage::F32(vec![0.0; n]),
+        DType::F64 => Storage::F64(vec![0.0; n]),
+    }
+}
+
+/// A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).
 ///
-/// Allocate one with [allocate_scalar()]. The data is held in Rust and exposed to
+/// Allocate one with [allocate_scalar()] (`nrows` elements, `ncols == 1`) or
+/// [allocate_vector()] (`nrows`-per-slot × `ncols` slots, stored COLUMN-MAJOR so a
+/// whole slot/time-slice is contiguous). The data is held in Rust and exposed to
 /// R only as an opaque handle; use `$values()` to copy a snapshot back into an R
-/// vector for inspection, `$fill()` / `$set()` to write, and `$length()` /
-/// `$dtype()` to query. The simulation step kernels operate on the buffer in
-/// place with no copies.
+/// vector (or matrix, when `ncols > 1`) for inspection, `$fill()` / `$set()` to
+/// write, and `$length()` / `$dtype()` to query. The simulation step kernels
+/// operate on the buffer in place with no copies.
 ///
 /// @export
 #[extendr]
 pub struct Column {
     data: Storage,
+    // Logical shape, SLICE-MAJOR (a.k.a. row-major): `n_slices` slices, each of
+    // `slice_len` contiguous elements. The backing Vec holds `n_slices * slice_len`
+    // elements; slice `s` is the contiguous range `s*slice_len .. (s+1)*slice_len`,
+    // so indexing the FIRST (slice) dimension returns a contiguous block. A scalar
+    // column has `n_slices == 1`. For a report buffer the first/slice dimension is
+    // TIME and the inner dimension is NODE — shape (n_ticks, n_nodes) — so a whole
+    // tick's per-node values are contiguous.
+    n_slices: usize,
+    slice_len: usize,
 }
 
 impl Column {
-    // Element count of the live variant. `pub(crate)` for sibling modules.
+    // Total element count (`n_slices * slice_len`). `pub(crate)` for sibling modules.
     pub(crate) fn len(&self) -> usize {
         match &self.data {
             Storage::I8(v) => v.len(),   Storage::U8(v) => v.len(),
             Storage::I16(v) => v.len(),  Storage::U16(v) => v.len(),
             Storage::I32(v) => v.len(),  Storage::U32(v) => v.len(),
             Storage::F32(v) => v.len(),  Storage::F64(v) => v.len(),
+        }
+    }
+
+    // Shape accessors for crate-internal kernels: number of slices (e.g. ticks),
+    // and the contiguous length of each slice (e.g. node count).
+    pub(crate) fn n_slices(&self) -> usize { self.n_slices }
+    pub(crate) fn slice_len(&self) -> usize { self.slice_len }
+
+    // Copy the data into an R vector, mapping each output position k through `idx`
+    // (a buffer index). Used by `values()`: identity for a scalar, transposed for a
+    // 2-D column. Integer widths widen to R `integer`, u32/f32/f64 to R `double`.
+    fn gather_to_robj(&self, n: usize, idx: impl Fn(usize) -> usize) -> Robj {
+        match &self.data {
+            Storage::I8(v)  => (0..n).map(|k| v[idx(k)] as i32).collect::<Vec<i32>>().iter().collect_robj(),
+            Storage::U8(v)  => (0..n).map(|k| v[idx(k)] as i32).collect::<Vec<i32>>().iter().collect_robj(),
+            Storage::I16(v) => (0..n).map(|k| v[idx(k)] as i32).collect::<Vec<i32>>().iter().collect_robj(),
+            Storage::U16(v) => (0..n).map(|k| v[idx(k)] as i32).collect::<Vec<i32>>().iter().collect_robj(),
+            Storage::I32(v) => (0..n).map(|k| v[idx(k)]).collect::<Vec<i32>>().iter().collect_robj(),
+            Storage::U32(v) => (0..n).map(|k| v[idx(k)] as f64).collect::<Vec<f64>>().iter().collect_robj(),
+            Storage::F32(v) => (0..n).map(|k| v[idx(k)] as f64).collect::<Vec<f64>>().iter().collect_robj(),
+            Storage::F64(v) => (0..n).map(|k| v[idx(k)]).collect::<Vec<f64>>().iter().collect_robj(),
         }
     }
 
@@ -106,6 +152,21 @@ impl Column {
 
     pub(crate) fn storage_mut(&mut self) -> &mut Storage {
         &mut self.data
+    }
+
+    // Typed slice accessors used by the step kernels; panic on a dtype mismatch.
+    pub(crate) fn as_u8_mut(&mut self) -> &mut [u8] {
+        match &mut self.data {
+            Storage::U8(v) => v,
+            _ => panic!("expected a u8 Column"),
+        }
+    }
+
+    pub(crate) fn as_u16(&self) -> &[u16] {
+        match &self.data {
+            Storage::U16(v) => v,
+            _ => panic!("expected a u16 Column"),
+        }
     }
 
     fn dtype_enum(&self) -> DType {
@@ -140,19 +201,26 @@ impl Column {
     /// `f32`, and `f64` widen to R `double` (since `u32` overflows R's signed
     /// 32-bit integer). This O(n) copy is the only place data leaves Rust.
     ///
-    /// @return A numeric vector (integer or double) of length `length()`.
+    /// For a 2-D column (`n_slices > 1`, from [allocate_vector()]) the result carries
+    /// a `dim` attribute and reads back as an `n_slices × slice_len` R matrix (e.g.
+    /// `n_ticks × n_nodes`), so row `t` is tick `t`'s per-node vector; otherwise a
+    /// plain vector. The snapshot is transposed during the copy (our buffer is
+    /// slice-major, R matrices are column-major) — inexpensive, inspection-only.
+    ///
+    /// @return A numeric vector (or matrix) — integer or double — of `length()` elements.
     /// @export
     fn values(&self) -> Robj {
-        match &self.data {
-            Storage::I8(v)  => v.iter().map(|&x| x as i32).collect::<Vec<i32>>().iter().collect_robj(),
-            Storage::U8(v)  => v.iter().map(|&x| x as i32).collect::<Vec<i32>>().iter().collect_robj(),
-            Storage::I16(v) => v.iter().map(|&x| x as i32).collect::<Vec<i32>>().iter().collect_robj(),
-            Storage::U16(v) => v.iter().map(|&x| x as i32).collect::<Vec<i32>>().iter().collect_robj(),
-            Storage::I32(v) => v.iter().collect_robj(),
-            Storage::U32(v) => v.iter().map(|&x| x as f64).collect::<Vec<f64>>().iter().collect_robj(),
-            Storage::F32(v) => v.iter().map(|&x| x as f64).collect::<Vec<f64>>().iter().collect_robj(),
-            Storage::F64(v) => v.iter().collect_robj(),
+        let (ns, sl) = (self.n_slices, self.slice_len);
+        // Scalar / single-slice: copy in natural order, return a plain vector.
+        if ns <= 1 {
+            return self.gather_to_robj(ns * sl, |k| k);
         }
+        // 2-D: emit column-major over (n_slices, slice_len). R reads output position
+        // k as element [s, i] with s = k % ns, i = k / ns; that element lives at
+        // buffer index s*sl + i (slice-major), so gather through that mapping.
+        let mut robj = self.gather_to_robj(ns * sl, |k| (k % ns) * sl + k / ns);
+        robj.set_attrib("dim", [ns as i32, sl as i32]).expect("set dim");
+        robj
     }
 
     /// Set every element to `value`, cast to the array's data type.
@@ -231,21 +299,46 @@ impl Column {
 fn allocate_scalar(dtype: &str, count: i32) -> Column {
     assert!(count >= 0, "`count` must be non-negative, got {count}");
     let n = count as usize;
-    let data = match DType::parse(dtype) {
-        DType::I8  => Storage::I8(vec![0; n]),
-        DType::U8  => Storage::U8(vec![0; n]),
-        DType::I16 => Storage::I16(vec![0; n]),
-        DType::U16 => Storage::U16(vec![0; n]),
-        DType::I32 => Storage::I32(vec![0; n]),
-        DType::U32 => Storage::U32(vec![0; n]),
-        DType::F32 => Storage::F32(vec![0.0; n]),
-        DType::F64 => Storage::F64(vec![0.0; n]),
-    };
-    Column { data }
+    Column { data: zeroed_storage(DType::parse(dtype), n), n_slices: 1, slice_len: n }
+}
+
+/// Allocate a fresh, zero-filled 2-D property array (a per-slot report buffer).
+///
+/// Returns an opaque [Column] of `n_slices * slice_len` elements laid out
+/// SLICE-MAJOR (row-major): `n_slices` slices, each a contiguous run of `slice_len`
+/// elements. Slice `s` is the block `s*slice_len .. (s+1)*slice_len`, so indexing
+/// the FIRST dimension yields a contiguous array. The conventional use is a
+/// time-series report with the **first dimension time and the second node** —
+/// `allocate_vector(dtype, n_ticks, n_nodes)` — so each tick's per-node values are
+/// contiguous (cache-friendly for the step kernels that fill one tick at a time).
+/// `$values()` reads it back as an `n_slices × slice_len` (e.g. `n_ticks × n_nodes`)
+/// R matrix, so row `t` is tick `t`'s vector.
+///
+/// @param dtype     Element type (see [allocate_scalar()] for the accepted names).
+/// @param n_slices  Number of slices — the first/outer dimension (e.g. the tick
+///   count). A non-negative integer.
+/// @param slice_len Contiguous length of each slice — the inner dimension (e.g. the
+///   node count). A non-negative integer.
+/// @return A [Column] of shape `n_slices × slice_len`, all elements zero.
+/// @examples
+/// recoveries <- allocate_vector("u32", 4L, 3L)   # 4 ticks x 3 nodes
+/// dim(recoveries$values())                        # 4 3
+/// @export
+#[extendr]
+fn allocate_vector(dtype: &str, n_slices: i32, slice_len: i32) -> Column {
+    assert!(n_slices >= 0, "`n_slices` must be non-negative, got {n_slices}");
+    assert!(slice_len >= 0, "`slice_len` must be non-negative, got {slice_len}");
+    let (n_slices, slice_len) = (n_slices as usize, slice_len as usize);
+    Column {
+        data: zeroed_storage(DType::parse(dtype), n_slices * slice_len),
+        n_slices,
+        slice_len,
+    }
 }
 
 extendr_module! {
     mod column;
     impl Column;
     fn allocate_scalar;
+    fn allocate_vector;
 }

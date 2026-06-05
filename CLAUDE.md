@@ -64,7 +64,11 @@ Python** but **not** in Rust or R. Comment for that reader.
 - `cargo` is at `~/.cargo/bin` (not on the default PATH); prepend
   `export PATH="$HOME/.cargo/bin:$PATH"` for cargo / rextendr / R CMD INSTALL.
 - After changing Rust signatures, regenerate the R wrappers, NAMESPACE, and man
-  pages with `Rscript -e 'rextendr::document()'` from the package root.
+  pages with `Rscript -e 'devtools::document()'` from the package root. This
+  recompiles the Rust, regenerates `R/extendr-wrappers.R` (via the `document`
+  cargo bin), and writes NAMESPACE + `man/*.Rd`. (Do **not** use
+  `rextendr::document()` — it was deprecated in rextendr 0.4.0 and merely wraps
+  `devtools::document()` after a config check.)
 - Distribution constructors use a `dist_` prefix (`dist_normal`, `dist_gamma`, …)
   to avoid masking base/stats functions such as `base::gamma` / `stats::poisson`.
 - Run tests with `Rscript -e 'devtools::test()'`.

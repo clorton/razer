@@ -194,6 +194,52 @@ test_that("bincountw on a large input matches a serial weighted tally", {
   expect_equal(counts$values(), ref, tolerance = 1e-9)
 })
 
+test_that("bincount writes into the requested slot of a 2-D counts buffer", {
+  # Given a 3-tick x 2-node report and values over 2 bins
+  # When bincount targets slot (tick) 1
+  # Then tick 1's row holds the counts and ticks 0 and 2 stay zero; calling with
+  #      the default slot writes tick 0 instead.
+  # Failure would mean the slot offset into the counts buffer is wrong.
+  values <- make("u16", c(0, 1, 1, 1))          # bin 0: one, bin 1: three
+  report <- allocate_vector("i32", 3L, 2L)      # 3 ticks x 2 nodes
+
+  bincount(values, 2L, report, 1L)
+  m <- report$values()
+  expect_equal(m[1L, ], c(0, 0))                # tick 0 untouched
+  expect_equal(m[2L, ], c(1, 3))                # tick 1 written
+  expect_equal(m[3L, ], c(0, 0))                # tick 2 untouched
+
+  report0 <- allocate_vector("i32", 3L, 2L)
+  bincount(values, 2L, report0)                 # slot defaults to 0
+  expect_equal(report0$values()[1L, ], c(1, 3))
+})
+
+test_that("bincountw writes into the requested slot of a 2-D counts buffer", {
+  # Given a 3-tick x 2-node report, values over 2 bins, and float weights
+  # When bincountw targets slot (tick) 2
+  # Then tick 2's row holds the per-bin weight sums and the other ticks stay zero.
+  # Failure would mean the weighted slot offset is wrong.
+  values  <- make("u16", c(0, 1, 1, 1))
+  weights <- make("f64", c(2, 3, 1, 1))         # bin 0: 2, bin 1: 3+1+1 = 5
+  report  <- allocate_vector("f64", 3L, 2L)
+
+  bincountw(values, weights, 2L, report, 2L)
+  m <- report$values()
+  expect_equal(m[1L, ], c(0, 0))
+  expect_equal(m[2L, ], c(0, 0))
+  expect_equal(m[3L, ], c(2, 5))
+})
+
+test_that("bincount rejects an out-of-range slot", {
+  # Given a 2-tick report and a slot index of 2 (valid slots are 0 and 1)
+  # When bincount is called
+  # Then it errors rather than writing past the buffer.
+  # Failure would risk an out-of-bounds write.
+  values <- make("u16", c(0, 1))
+  report <- allocate_vector("i32", 2L, 2L)
+  expect_error(bincount(values, 2L, report, 2L), "out of range")
+})
+
 test_that("bincountw validates lengths, nbins, buffer size, and value type", {
   # Given contract violations
   # When bincountw is called
