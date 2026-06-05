@@ -169,6 +169,41 @@ impl Column {
         }
     }
 
+    pub(crate) fn as_i32_mut(&mut self) -> &mut [i32] {
+        match &mut self.data {
+            Storage::I32(v) => v,
+            _ => panic!("expected an i32 Column"),
+        }
+    }
+
+    pub(crate) fn as_f64(&self) -> &[f64] {
+        match &self.data {
+            Storage::F64(v) => v,
+            _ => panic!("expected an f64 Column"),
+        }
+    }
+
+    pub(crate) fn as_f64_mut(&mut self) -> &mut [f64] {
+        match &mut self.data {
+            Storage::F64(v) => v,
+            _ => panic!("expected an f64 Column"),
+        }
+    }
+
+    // Copy the whole buffer into an owned Vec<f64> (any numeric dtype widens to f64).
+    pub(crate) fn to_f64(&self) -> Vec<f64> {
+        match &self.data {
+            Storage::I8(v)  => v.iter().map(|&x| x as f64).collect(),
+            Storage::U8(v)  => v.iter().map(|&x| x as f64).collect(),
+            Storage::I16(v) => v.iter().map(|&x| x as f64).collect(),
+            Storage::U16(v) => v.iter().map(|&x| x as f64).collect(),
+            Storage::I32(v) => v.iter().map(|&x| x as f64).collect(),
+            Storage::U32(v) => v.iter().map(|&x| x as f64).collect(),
+            Storage::F32(v) => v.iter().map(|&x| x as f64).collect(),
+            Storage::F64(v) => v.clone(),
+        }
+    }
+
     fn dtype_enum(&self) -> DType {
         match &self.data {
             Storage::I8(_) => DType::I8,   Storage::U8(_) => DType::U8,
@@ -336,9 +371,52 @@ fn allocate_vector(dtype: &str, n_slices: i32, slice_len: i32) -> Column {
     }
 }
 
+/// Carry a per-node counter forward one tick: copy column `tick` onto `tick + 1`.
+///
+/// For a 2-D report [Column] (e.g. `n_ticks+1 × n_nodes`), copies the contiguous
+/// slice for `tick` onto the slice for `tick + 1`. This seeds the next tick with the
+/// current counts so a dynamics kernel can then update it in place — keeping the
+/// census invariant `count[t+1] = count[t] ± delta`. Call it once per state that
+/// must persist across ticks (e.g. S, I, R for an SIR model; add E for SEIR, or a
+/// user-defined "V" vaccinated count). Works for any element type.
+///
+/// @param counter A 2-D Column to carry forward.
+/// @param tick    0-based source tick; column `tick` is copied onto column `tick+1`.
+/// @return `NULL` (invisibly); `counter` is modified in place.
+/// @examples
+/// counts <- allocate_vector("i32", 3L, 2L)   # 3 ticks x 2 nodes
+/// counts$set(c(5L, 7L, 0L, 0L, 0L, 0L))      # tick 0 = (5, 7)
+/// carry_forward(counts, 0L)
+/// counts$values()[2L, ]                       # 5 7  (carried to tick 1)
+/// @export
+#[extendr]
+fn carry_forward(counter: &mut Column, tick: i32) {
+    assert!(tick >= 0, "`tick` must be non-negative, got {tick}");
+    let tick = tick as usize;
+    let n = counter.slice_len();
+    assert!(
+        tick + 1 < counter.n_slices(),
+        "`tick`+1 ({}) out of range for a Column with {} slices",
+        tick + 1, counter.n_slices()
+    );
+    let (src, dst) = (tick * n, (tick + 1) * n);
+    // `copy_within(src_range, dest)` is an in-place memmove within the one buffer.
+    match counter.storage_mut() {
+        Storage::I8(v)  => v.copy_within(src..src + n, dst),
+        Storage::U8(v)  => v.copy_within(src..src + n, dst),
+        Storage::I16(v) => v.copy_within(src..src + n, dst),
+        Storage::U16(v) => v.copy_within(src..src + n, dst),
+        Storage::I32(v) => v.copy_within(src..src + n, dst),
+        Storage::U32(v) => v.copy_within(src..src + n, dst),
+        Storage::F32(v) => v.copy_within(src..src + n, dst),
+        Storage::F64(v) => v.copy_within(src..src + n, dst),
+    }
+}
+
 extendr_module! {
     mod column;
     impl Column;
     fn allocate_scalar;
     fn allocate_vector;
+    fn carry_forward;
 }

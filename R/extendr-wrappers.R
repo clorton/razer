@@ -507,6 +507,26 @@ allocate_scalar <- function(dtype, count) .Call(wrap__allocate_scalar, dtype, co
 #' @export
 allocate_vector <- function(dtype, n_slices, slice_len) .Call(wrap__allocate_vector, dtype, n_slices, slice_len)
 
+#' Carry a per-node counter forward one tick: copy column `tick` onto `tick + 1`.
+#'
+#' For a 2-D report [Column] (e.g. `n_ticks+1 × n_nodes`), copies the contiguous
+#' slice for `tick` onto the slice for `tick + 1`. This seeds the next tick with the
+#' current counts so a dynamics kernel can then update it in place — keeping the
+#' census invariant `count[t+1] = count[t] ± delta`. Call it once per state that
+#' must persist across ticks (e.g. S, I, R for an SIR model; add E for SEIR, or a
+#' user-defined "V" vaccinated count). Works for any element type.
+#'
+#' @param counter A 2-D Column to carry forward.
+#' @param tick    0-based source tick; column `tick` is copied onto column `tick+1`.
+#' @return `NULL` (invisibly); `counter` is modified in place.
+#' @examples
+#' counts <- allocate_vector("i32", 3L, 2L)   # 3 ticks x 2 nodes
+#' counts$set(c(5L, 7L, 0L, 0L, 0L, 0L))      # tick 0 = (5, 7)
+#' carry_forward(counts, 0L)
+#' counts$values()[2L, ]                       # 5 7  (carried to tick 1)
+#' @export
+carry_forward <- function(counter, tick) .Call(wrap__carry_forward, counter, tick)
+
 #' Count occurrences of each value, NumPy `bincount`-style, into a buffer.
 #'
 #' For each bin `b` in `0..nbins`, computes how many elements of `values` equal
@@ -565,28 +585,90 @@ bincount_impl <- function(values, nbins, counts, slot) .Call(wrap__bincount_impl
 #' @noRd
 bincountw_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bincountw_impl, values, weights, nbins, counts, slot)
 
-#' One SIR recovery step for a single tick.
+#' One SIR recovery step for tick `tick`: recover expired infectious agents.
 #'
 #' For each of the first `count` agents whose `state` is infectious (`I`),
-#' decrement its `timer` by one; when the timer reaches zero the agent becomes
-#' recovered (`R`) and a recovery is tallied for its node in `recoveries` at this
-#' `tick`. Susceptible and already-recovered agents are skipped.
+#' decrements its `u8` `timer`; when the timer reaches zero the agent becomes
+#' recovered (`R`). The number of recoveries per node is counted in parallel
+#' (private per-thread node buffers, summed at the end) and applied as a delta to
+#' column `tick + 1` of the census: `I` down, `R` up; the per-node recovery count is
+#' also recorded in column `tick` of the `recoveries` flow report.
 #'
-#' `state` and `timer` are per-agent `u8` Columns and are mutated in place;
-#' `nodeid` is the per-agent `u16` Column of 0-based node ids; `recoveries` is the
-#' 2-D node report from [allocate_vector()] (shape `n_nodes × n_ticks`), of which
-#' only the contiguous `n_nodes`-wide column for `tick` is written.
+#' The census is updated IN PLACE at column `tick + 1`, which the caller must have
+#' already seeded by calling [carry_forward()] on each census counter for this tick
+#' (S, I, R) — `sir_step` itself no longer carries the census forward.
+#'
+#' `i_count` / `r_count` are `n_ticks+1 × n_nodes` i32 census Columns; `recoveries`
+#' is an `n_ticks × n_nodes` i32 flow Column.
 #'
 #' @param state      Per-agent `u8` state Column (mutated).
 #' @param timer      Per-agent `u8` countdown Column (mutated).
 #' @param nodeid     Per-agent `u16` 0-based node-id Column.
-#' @param count      Number of active agents to process (e.g. `people$count`).
-#' @param recoveries A 2-D node report Column (`n_nodes × n_ticks`); its `tick`
-#'   column receives the per-node recovery counts (mutated).
-#' @param tick       0-based tick index selecting which column of `recoveries` to fill.
-#' @return `NULL` (invisibly); `state`, `timer`, and `recoveries` are modified in place.
+#' @param count      Number of active agents to process.
+#' @param i_count,r_count  `n_ticks+1 × n_nodes` i32 census Columns (mutated at `tick+1`).
+#' @param recoveries `n_ticks × n_nodes` i32 flow Column (mutated at `tick`).
+#' @param tick       0-based tick index; the recovery delta is applied to column `tick+1`.
+#' @return `NULL` (invisibly); the Columns are modified in place.
 #' @export
-sir_step <- function(state, timer, nodeid, count, recoveries, tick) .Call(wrap__sir_step, state, timer, nodeid, count, recoveries, tick)
+sir_step <- function(state, timer, nodeid, count, i_count, r_count, recoveries, tick) .Call(wrap__sir_step, state, timer, nodeid, count, i_count, r_count, recoveries, tick)
+
+#' Compute the per-node force of infection (FOI) for one tick.
+#'
+#' Reads the infectious count per node from the POST-RECOVERY census column
+#' `tick + 1` of `infected` (the working column this tick, after `carry_forward`
+#' and `sir_step` have run — so agents recovering this tick are excluded from the
+#' force of infection), and with a transmission coefficient `beta` and a spatial
+#' coupling `network`, computes the network-redistributed FOI **rate** into column
+#' `tick` of `foi`. The local rate is `r[k] = beta[k] * infected[k]`, redistributed
+#' as `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`.
+#' `sir_transmission()` turns this rate into a per-tick probability `1 - exp(-foi)`.
+#' Call it after `sir_step` and just before `sir_transmission`.
+#'
+#' `beta` is a single value (every node) or one per node; for frequency-dependent
+#' transmission pass `beta = global_beta / N` per node (folding in the `1/N`).
+#'
+#' @param infected An integer/numeric census Column (e.g. `nodes$I`) with
+#'   `slice_len == n_nodes`; column `tick + 1` (the post-recovery count) is read.
+#' @param beta     A numeric vector of length 1 (broadcast) or `n_nodes`.
+#' @param network  An `n_nodes x n_nodes` numeric coupling matrix.
+#' @param foi      A 2-D f64 Column (`n_ticks x n_nodes`); column `tick` is overwritten.
+#' @param tick     0-based tick index: reads `infected[tick+1]`, writes `foi[tick]`.
+#' @return `NULL` (invisibly); the result is written into `foi`.
+#' @export
+calc_foi <- function(infected, beta, network, foi, tick) .Call(wrap__calc_foi, infected, beta, network, foi, tick)
+
+#' Transmission step for tick `tick`: move susceptibles into a receiving state.
+#'
+#' Converts column `tick` of `foi` (a rate) to a per-node per-tick infection
+#' probability `p[k] = 1 - exp(-foi[k])` — computed ONCE per node, not per agent.
+#' Then, for each of the first `count` susceptible (`S`) agents, with probability
+#' `p[nodeid]` it moves the agent into `to_state` — `I` for an SIR model or `E` for
+#' SEIR — drawing the agent's `timer` for that state from `duration` (rounded to
+#' whole ticks, clamped to `[1, 255]`) and tallying the event for its node. The
+#' timer is whatever clock the receiving state uses next (incubation for `E`,
+#' infectious period for `I`); the caller passes the matching `timer` column and
+#' `duration`. New infections per node are counted in parallel (private per-thread
+#' buffers, summed at the end) and applied as a delta to column `tick + 1` of the
+#' census (`S` down, the receiving state's `to_count` up; the caller has already
+#' carried the census forward), and recorded in column `tick` of `incidence`.
+#'
+#' @param state      Per-agent `u8` state Column (mutated).
+#' @param timer      Per-agent `u8` countdown Column for the receiving state (mutated).
+#' @param nodeid     Per-agent `u16` 0-based node-id Column.
+#' @param count      Number of active agents to process.
+#' @param foi        `n_ticks x n_nodes` f64 FOI Column (from [calc_foi()]); column
+#'   `tick` is read.
+#' @param s_count    `n_ticks+1 × n_nodes` i32 census Column for `S` (mutated at `tick+1`).
+#' @param to_count   `n_ticks+1 × n_nodes` i32 census Column for the receiving state
+#'   `to_state` (mutated at `tick+1`).
+#' @param incidence  `n_ticks x n_nodes` i32 flow Column (mutated at `tick`).
+#' @param tick       0-based tick index.
+#' @param to_state   State code new infections enter (e.g. `laser_states()[["I"]]`
+#'   for SIR or `[["E"]]` for SEIR).
+#' @param duration   A Distribution from which the receiving state's timer is drawn.
+#' @return `NULL` (invisibly); the Columns are modified in place.
+#' @export
+transmission <- function(state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration) .Call(wrap__transmission, state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration)
 
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'

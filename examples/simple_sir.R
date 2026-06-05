@@ -18,9 +18,9 @@ library(razer)
 # `network` is the N x N spatial coupling matrix (fraction of each patch's force of
 # infection exported to every other patch). `nticks` is the number of daily time
 # steps to simulate. `inf_duration` is a Distribution (e.g. dist_gamma(2, 2)) from
-# which each infectious agent's recovery timer is drawn; it will also drive the
-# future sir_transmit() step.
-run_sir_model <- function(scenario, network, nticks, inf_duration) {
+# which each infectious agent's recovery timer is drawn. `beta` is the global
+# transmission coefficient; it is applied frequency-dependently (per node beta/N).
+run_sir_model <- function(scenario, network, nticks, inf_duration, beta) {
   # `inherits(x, "Distribution")` checks the S3 class of the extendr handle.
   if (!inherits(inf_duration, "Distribution"))
     stop("`inf_duration` must be a Distribution (e.g. dist_constant(7) or dist_gamma(2, 2))")
@@ -62,13 +62,23 @@ run_sir_model <- function(scenario, network, nticks, inf_duration) {
   # and decrement it each tick; a uint8 holds durations up to 255 ticks.
   people$timer    <- allocate_scalar("u8", n)
 
-  # `nodes` is the per-patch record holding per-tick REPORTS. `recoveries` is a
-  # 2-D buffer of shape (nticks, n_nodes) — time first, node second — laid out so
-  # each tick's per-node row is contiguous in memory; `sir_step` tallies recoveries
-  # into the current tick's slice.
+  # `nodes` is the per-patch record. `nticks` is the number of recorded time points
+  # (states 0..nticks-1): state 0 is the seeded initial condition and state nticks-1
+  # is the final state. The dynamics therefore run nticks-1 times (one per interval
+  # between consecutive states); running them on the last state would write a state
+  # nticks that falls outside the simulation window. So the S/I/R CENSUS buffers are
+  # nticks x n_nodes (maintained incrementally: each step carries column t forward to
+  # t+1 and applies only the deltas), and the `foi` / `recoveries` / `incidence`
+  # per-interval FLOW reports are (nticks-1) x n_nodes. All are time-major (each
+  # tick's per-node row is contiguous).
   nodes <- new.env()
   nodes$count      <- n_nodes
-  nodes$recoveries <- allocate_vector("u32", nticks, n_nodes)
+  nodes$S          <- allocate_vector("i32", nticks,      n_nodes)
+  nodes$I          <- allocate_vector("i32", nticks,      n_nodes)
+  nodes$R          <- allocate_vector("i32", nticks,      n_nodes)
+  nodes$foi        <- allocate_vector("f64", nticks - 1L, n_nodes)
+  nodes$recoveries <- allocate_vector("i32", nticks - 1L, n_nodes)
+  nodes$incidence  <- allocate_vector("i32", nticks - 1L, n_nodes)
 
   # ── seed initial infections / immunity from the scenario ──────────────────────
   # Agents are laid out node-by-node (see nodeid), so node k owns the contiguous
@@ -118,23 +128,55 @@ run_sir_model <- function(scenario, network, nticks, inf_duration) {
   }
   people$timer$set(timer0)
 
-  # `run` advances the simulation: each tick runs the per-tick step kernels (just
-  # the SIR recovery step for now; transmission etc. will join it here). `tick - 1L`
-  # converts R's 1-based loop counter to the 0-based time-slice index sir_step expects.
+  # Seed the census at tick 0 (S = population - I - R per node). `$set()` writes the
+  # whole buffer; column 0 is the first n_nodes entries, the remaining nticks-1
+  # columns start at 0.
+  nodes$S$set(c(pops - I_seed - R_seed, rep(0L, (nticks - 1L) * n_nodes)))
+  nodes$I$set(c(I_seed,                 rep(0L, (nticks - 1L) * n_nodes)))
+  nodes$R$set(c(R_seed,                 rep(0L, (nticks - 1L) * n_nodes)))
+
+  # Per-node transmission coefficient: frequency-dependent (beta / N), folding the
+  # 1/N into beta so calc_foi needs no separate population argument.
+  beta_node <- beta / pops
+
+  # `run` advances the simulation: each tick runs the per-tick step kernels in
+  # downstream-first order. `tick - 1L` converts R's 1-based loop counter to the
+  # 0-based tick index the kernels expect.
+  #   carry_forward:    seed tick t+1 of each census counter with tick t's value
+  #                     (an SEIR model would also carry E; users can carry e.g. V).
+  #   sir_step:         recover (I -> R), updating the carried-forward census at t+1.
+  #   calc_foi:         FOI[t] from the POST-recovery infectious census I[t+1], so
+  #                     agents recovering this tick are excluded from the force.
+  #   transmission:     infect susceptibles from FOI[t] (S -> I) at t+1. For SIR the
+  #                     receiving state is I directly (an SEIR model would pass E and
+  #                     an incubation-period distribution instead).
+  # Run dynamics nticks-1 times (the intervals between the nticks recorded states);
+  # the final state nticks-1 has nothing transitioning out of the window.
   run <- function() {
-    for (tick in seq_len(nticks)) {
+    for (tick in seq_len(nticks - 1L)) {
+      t0 <- tick - 1L
+      carry_forward(nodes$S, t0)
+      carry_forward(nodes$I, t0)
+      carry_forward(nodes$R, t0)
       sir_step(people$state, people$timer, people$nodeid, people$count,
-               nodes$recoveries, tick - 1L)
+               nodes$I, nodes$R, nodes$recoveries, t0)
+      calc_foi(nodes$I, beta_node, network, nodes$foi, t0)
+      transmission(people$state, people$timer, people$nodeid, people$count,
+                   nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
+                   states[["I"]], inf_duration)
     }
   }
   run()
 
-  # Report success. `cat()` writes to stdout; `sprintf` is C-style formatting.
-  # `sum(nodes$recoveries$values())` totals the recovery report. `invisible()`
-  # returns its argument WITHOUT auto-printing at the top level.
-  cat(sprintf("run_sir_model: %d patches, %d agents, %d ticks; seeded I=%d R=%d; total recoveries=%d.\n",
-              n_nodes, people$count, nticks,
-              sum(I_seed), sum(R_seed), sum(nodes$recoveries$values())))
+  # Report success. The final census is the last column (state nticks-1) of S/I/R;
+  # `$values()` returns an nticks x n_nodes matrix, so row `nticks` is it.
+  final <- nticks
+  cat(sprintf(paste0("run_sir_model: %d patches, %d agents, %d ticks; seeded I=%d R=%d; ",
+                     "final S=%d I=%d R=%d; total incidence=%d, recoveries=%d.\n"),
+              n_nodes, people$count, nticks, sum(I_seed), sum(R_seed),
+              sum(nodes$S$values()[final, ]), sum(nodes$I$values()[final, ]),
+              sum(nodes$R$values()[final, ]),
+              sum(nodes$incidence$values()), sum(nodes$recoveries$values())))
   invisible(list(people = people, nodes = nodes))
 }
 
@@ -181,8 +223,11 @@ scenario$R <- pmin(as.integer(0.05 * scenario$population),        # ~5% recovere
                    scenario$population - scenario$I)
 
 # Infectious-period distribution: each infected agent's recovery timer is drawn
-# from this (mean shape*scale = 4 ticks). Also the future sir_transmit() parameter.
+# from this (mean shape*scale = 4 ticks). Drives the recovery clock.
 inf_duration <- dist_gamma(2, 2)
+
+# Global transmission coefficient (applied frequency-dependently as beta/N per node).
+beta <- 0.5
 
 # Number of daily time steps to simulate.
 nticks <- 10L
@@ -190,5 +235,5 @@ nticks <- 10L
 # ── run ───────────────────────────────────────────────────────────────────────
 # `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
 # `[["elapsed"]]` name-indexes the wall-clock seconds field.
-timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration))
+timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, beta))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))

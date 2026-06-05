@@ -2,9 +2,9 @@
 % Please edit documentation in R/extendr-wrappers.R
 \name{sir_step}
 \alias{sir_step}
-\title{One SIR recovery step for a single tick.}
+\title{One SIR recovery step for tick \code{tick}: recover expired infectious agents.}
 \usage{
-sir_step(state, timer, nodeid, count, recoveries, tick)
+sir_step(state, timer, nodeid, count, i_count, r_count, recoveries, tick)
 }
 \arguments{
 \item{state}{Per-agent \code{u8} state Column (mutated).}
@@ -13,25 +13,30 @@ sir_step(state, timer, nodeid, count, recoveries, tick)
 
 \item{nodeid}{Per-agent \code{u16} 0-based node-id Column.}
 
-\item{count}{Number of active agents to process (e.g. \code{people$count}).}
+\item{count}{Number of active agents to process.}
 
-\item{recoveries}{A 2-D node report Column (\verb{n_nodes × n_ticks}); its \code{tick}
-column receives the per-node recovery counts (mutated).}
+\item{i_count, r_count}{\verb{n_ticks+1 × n_nodes} i32 census Columns (mutated at \code{tick+1}).}
 
-\item{tick}{0-based tick index selecting which column of \code{recoveries} to fill.}
+\item{recoveries}{\verb{n_ticks × n_nodes} i32 flow Column (mutated at \code{tick}).}
+
+\item{tick}{0-based tick index; the recovery delta is applied to column \code{tick+1}.}
 }
 \value{
-\code{NULL} (invisibly); \code{state}, \code{timer}, and \code{recoveries} are modified in place.
+\code{NULL} (invisibly); the Columns are modified in place.
 }
 \description{
 For each of the first \code{count} agents whose \code{state} is infectious (\code{I}),
-decrement its \code{timer} by one; when the timer reaches zero the agent becomes
-recovered (\code{R}) and a recovery is tallied for its node in \code{recoveries} at this
-\code{tick}. Susceptible and already-recovered agents are skipped.
+decrements its \code{u8} \code{timer}; when the timer reaches zero the agent becomes
+recovered (\code{R}). The number of recoveries per node is counted in parallel
+(private per-thread node buffers, summed at the end) and applied as a delta to
+column \code{tick + 1} of the census: \code{I} down, \code{R} up; the per-node recovery count is
+also recorded in column \code{tick} of the \code{recoveries} flow report.
 }
 \details{
-\code{state} and \code{timer} are per-agent \code{u8} Columns and are mutated in place;
-\code{nodeid} is the per-agent \code{u16} Column of 0-based node ids; \code{recoveries} is the
-2-D node report from \code{\link[=allocate_vector]{allocate_vector()}} (shape \verb{n_nodes × n_ticks}), of which
-only the contiguous \code{n_nodes}-wide column for \code{tick} is written.
+The census is updated IN PLACE at column \code{tick + 1}, which the caller must have
+already seeded by calling \code{\link[=carry_forward]{carry_forward()}} on each census counter for this tick
+(S, I, R) — \code{sir_step} itself no longer carries the census forward.
+
+\code{i_count} / \code{r_count} are \verb{n_ticks+1 × n_nodes} i32 census Columns; \code{recoveries}
+is an \verb{n_ticks × n_nodes} i32 flow Column.
 }

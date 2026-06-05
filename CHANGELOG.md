@@ -12,21 +12,53 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
-- `sir_step(state, timer, nodeid, count, recoveries, tick)` — the per-tick SIR
-  recovery kernel over `Column` buffers (`src/rust/src/sir.rs`). For each of the
-  first `count` infectious agents it decrements the `u8` `timer`; when the timer
-  hits zero the agent moves to Recovered and a recovery is tallied for its node in
-  the `tick` column of the 2-D `recoveries` report. State/timer are `u8`, `nodeid`
-  is `u16` (0-based); the recovery count type is generic. Serial for now (the
-  per-node tally would race under naive parallelism). Covered by
-  `tests/testthat/test-sir-step.R`. `examples/simple_sir.R`'s `run_sir_model()`
-  drives it from a per-tick `run` loop and gains an `inf_duration` Distribution
-  argument plus scenario-driven seeding: optional integer `I` / `R` columns on
-  `scenario` move each node's first `I[k]` agents to Infectious (with recovery
-  timers drawn from `inf_duration`) and the next `R[k]` to Recovered. Verified on
-  the full scenario that final R == seeded R + total recoveries and S is conserved
-  (no transmission yet); `inf_duration` will also parameterize the future
-  `sir_transmit()` step.
+- **Spatial SIR transmission + an incrementally-maintained node census** over
+  `Column` buffers (`src/rust/src/sir.rs`). All three kernels parallelize the
+  per-agent work across cores with private per-thread node accumulators (no shared
+  writes) reduced at the end:
+  - `calc_foi(infected, beta, network, foi, tick)` — per-node force of infection.
+    Reads the **post-recovery** infectious census `I[tick+1]` (the working column
+    after `carry_forward` + `sir_step`, so agents recovering this tick are excluded
+    from the force — it runs after `sir_step`, just before `sir_transmission`),
+    computes the network-redistributed FOI rate `r[k]·(1−ΣW[k,·]) + Σr[i]·W[i,k]`
+    with `r[k] = beta[k]·I[k]`, and writes it to `foi[tick]`. `beta` is scalar or
+    per-node (pass `β/N` for frequency-dependent transmission). Covered by
+    `tests/testthat/test-calc-foi.R`.
+  - `sir_step(state, timer, nodeid, count, I, R, recoveries, tick)` — recovery.
+    Recovers expired infectious agents and applies the I→R delta to column `tick+1`
+    of the census (and the per-node flow to `recoveries[tick]`). The caller seeds
+    column `tick+1` first via `carry_forward` (below), keeping the census
+    incremental (`count[t+1] = count[t] ± delta`) with no per-step re-census.
+  - `transmission(state, timer, nodeid, count, foi, S, to_count, incidence, tick, to_state, duration)`
+    — infection, generalized over the receiving state. Converts `foi[tick]` to a
+    per-node probability `1−exp(−foi)` **once per node** (≈3× faster than recomputing
+    `exp` per susceptible — benchmarked at 30.18M agents / 954 nodes / ~95%
+    susceptible), and moves susceptibles into `to_state` (`I` for SIR or `E` for
+    SEIR), drawing each agent's `timer` for that state from `duration` (incubation
+    for `E`, infectious period for `I`). Applies the S→`to_state` delta to column
+    `tick+1` of the `S` and `to_count` census (flow to `incidence[tick]`). The caller
+    passes the matching `to_count` census, `to_state` code, and `duration` — and the
+    `timer` column for whichever clock the receiving state uses, so incubation /
+    infectious / waning durations can be tracked in separate timer vectors.
+  Each kernel has a test asserting the parallel per-node accumulation matches a
+  serial census of the resulting agent states at 1M agents / 200 nodes
+  (`test-sir-step.R`, `test-transmission.R`). `examples/simple_sir.R`'s
+  `run_sir_model()` gains `inf_duration` and `beta` arguments, seeds the census +
+  agents from optional `scenario$I` / `scenario$R` columns, and runs the
+  downstream-first per-tick loop `carry_forward → sir_step → calc_foi →
+  transmission`. `nticks` is the number of recorded states (0..nticks-1; state 0 is
+  the seeded initial, state nticks-1 the final), so dynamics run **nticks-1 times**
+  (the intervals between states — no step on the final state, which would run off
+  the window); the S/I/R census is `nticks × n_nodes` and the foi/recoveries/
+  incidence flows are `(nticks-1) × n_nodes`. Verified that `S+I+R == population`
+  per node at every state and the census matches a direct agent census (30.18M
+  agents, ~0.5 s).
+- `carry_forward(counter, tick)` — copies column `tick` of a 2-D report `Column`
+  onto column `tick+1` (any dtype), seeding the next tick so a dynamics kernel can
+  update it in place. Called once per census state that must persist across ticks —
+  S, I, R for SIR; add E for SEIR; users can carry their own states (e.g. a "V"
+  vaccinated count). Extracted from `sir_step` so the census carry-forward is
+  model-agnostic. Covered by `tests/testthat/test-carry-forward.R`.
 - `allocate_vector(dtype, n_slices, slice_len)` — allocates a 2-D `Column` report
   buffer of `n_slices × slice_len` elements, SLICE-MAJOR (row-major) so each slice
   is a contiguous run: slice `s` is `s*slice_len .. (s+1)*slice_len`. The
