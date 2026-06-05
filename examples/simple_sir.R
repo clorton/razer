@@ -18,12 +18,18 @@ library(razer)
 # `network` is the N x N spatial coupling matrix (fraction of each patch's force of
 # infection exported to every other patch). `nticks` is the number of daily time
 # steps to simulate. `inf_duration` is a Distribution (e.g. dist_gamma(2, 2)) from
-# which each infectious agent's recovery timer is drawn. `beta` is the global
-# transmission coefficient; it is applied frequency-dependently (per node beta/N).
-run_sir_model <- function(scenario, network, nticks, inf_duration, beta) {
+# which each infectious agent's recovery timer is drawn. `r0` is the basic
+# reproduction number; the transmission coefficient is `beta = r0 / mean(inf_duration)`.
+# `seasonality` is a transmission modifier accepted in any broadcastable form (a
+# scalar, a per-node or per-tick vector, or a full nticks x nnodes matrix).
+run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonality = 1) {
   # `inherits(x, "Distribution")` checks the S3 class of the extendr handle.
   if (!inherits(inf_duration, "Distribution"))
     stop("`inf_duration` must be a Distribution (e.g. dist_constant(7) or dist_gamma(2, 2))")
+
+  # beta from R0: R0 = beta * mean infectious duration, so beta = R0 / mean. Estimate
+  # the mean by sampling the distribution (a large batch; `mean()` averages it).
+  beta <- r0 / mean(inf_duration$sample_n(100000L))
 
   # Total agent count = sum of every patch's population. `sum()` over an integer
   # column returns an integer scalar. `n_nodes` is the patch count.
@@ -79,6 +85,14 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, beta) {
   nodes$foi        <- allocate_vector("f64", nticks - 1L, n_nodes)
   nodes$recoveries <- allocate_vector("i32", nticks - 1L, n_nodes)
   nodes$incidence  <- allocate_vector("i32", nticks - 1L, n_nodes)
+  # Per-node population (the FOI denominator): constant here, but kept as a full
+  # time x node grid because vital dynamics will eventually make it vary by tick.
+  nodes$N          <- values_map(scenario$population, nticks, n_nodes)
+  # Transmission inputs as time x node grids (built by values_map from whatever
+  # shape was supplied): the beta coefficient and the seasonal modifier. calc_foi
+  # multiplies them into the local force of infection.
+  nodes$beta        <- values_map(beta,        nticks, n_nodes)
+  nodes$seasonality <- values_map(seasonality, nticks, n_nodes)
 
   # ── seed initial infections / immunity from the scenario ──────────────────────
   # Agents are laid out node-by-node (see nodeid), so node k owns the contiguous
@@ -135,10 +149,6 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, beta) {
   nodes$I$set(c(I_seed,                 rep(0L, (nticks - 1L) * n_nodes)))
   nodes$R$set(c(R_seed,                 rep(0L, (nticks - 1L) * n_nodes)))
 
-  # Per-node transmission coefficient: frequency-dependent (beta / N), folding the
-  # 1/N into beta so calc_foi needs no separate population argument.
-  beta_node <- beta / pops
-
   # `run` advances the simulation: each tick runs the per-tick step kernels in
   # downstream-first order. `tick - 1L` converts R's 1-based loop counter to the
   # 0-based tick index the kernels expect.
@@ -160,7 +170,7 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, beta) {
       carry_forward(nodes$R, t0)
       sir_step(people$state, people$timer, people$nodeid, people$count,
                nodes$I, nodes$R, nodes$recoveries, t0)
-      calc_foi(nodes$I, beta_node, network, nodes$foi, t0)
+      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       transmission(people$state, people$timer, people$nodeid, people$count,
                    nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
                    states[["I"]], inf_duration)
@@ -226,14 +236,19 @@ scenario$R <- pmin(as.integer(0.05 * scenario$population),        # ~5% recovere
 # from this (mean shape*scale = 4 ticks). Drives the recovery clock.
 inf_duration <- dist_gamma(2, 2)
 
-# Global transmission coefficient (applied frequency-dependently as beta/N per node).
-beta <- 0.5
+# Basic reproduction number; run_sir_model derives beta = R0 / mean(inf_duration).
+R0 <- 2
 
 # Number of daily time steps to simulate.
 nticks <- 10L
 
+# Seasonal transmission modifier: here a per-tick value (length nticks) — a gentle
+# sinusoid for illustration. values_map() would equally accept a scalar, a
+# per-node vector, or a full nticks x nnodes matrix.
+seasonality <- 1 + 0.3 * sin(2 * pi * (seq_len(nticks) - 1L) / nticks)
+
 # ── run ───────────────────────────────────────────────────────────────────────
 # `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
 # `[["elapsed"]]` name-indexes the wall-clock seconds field.
-timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, beta))
+timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, R0, seasonality))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))

@@ -16,14 +16,16 @@ All notable changes to this project are documented here.
   `Column` buffers (`src/rust/src/sir.rs`). All three kernels parallelize the
   per-agent work across cores with private per-thread node accumulators (no shared
   writes) reduced at the end:
-  - `calc_foi(infected, beta, network, foi, tick)` — per-node force of infection.
-    Reads the **post-recovery** infectious census `I[tick+1]` (the working column
-    after `carry_forward` + `sir_step`, so agents recovering this tick are excluded
-    from the force — it runs after `sir_step`, just before `sir_transmission`),
-    computes the network-redistributed FOI rate `r[k]·(1−ΣW[k,·]) + Σr[i]·W[i,k]`
-    with `r[k] = beta[k]·I[k]`, and writes it to `foi[tick]`. `beta` is scalar or
-    per-node (pass `β/N` for frequency-dependent transmission). Covered by
-    `tests/testthat/test-calc-foi.R`.
+  - `calc_foi(infected, population, beta, seasonality, network, foi, tick)` —
+    per-node force of infection. Frequency-dependent local rate
+    `r[k] = beta[k]·seasonality[k]·I[k]/N[k]`, redistributed through the network as
+    `r[k]·(1−ΣW[k,·]) + Σr[i]·W[i,k]`, written to `foi[tick]`. Reads the
+    **post-recovery** census `I[tick+1]` and `N[tick+1]` (the working columns after
+    `carry_forward` + `sir_step`, so this tick's recoveries are excluded and the
+    denominator is the current — eventually vital-dynamics-varying — population),
+    and the exogenous `beta`/`seasonality` modifier grids at the interval column
+    `tick`. `beta` and `seasonality` are `n_ticks × n_nodes` grids built by
+    `values_map` (below). Covered by `tests/testthat/test-calc-foi.R`.
   - `sir_step(state, timer, nodeid, count, I, R, recoveries, tick)` — recovery.
     Recovers expired infectious agents and applies the I→R delta to column `tick+1`
     of the census (and the per-node flow to `recoveries[tick]`). The caller seeds
@@ -43,8 +45,10 @@ All notable changes to this project are documented here.
   Each kernel has a test asserting the parallel per-node accumulation matches a
   serial census of the resulting agent states at 1M agents / 200 nodes
   (`test-sir-step.R`, `test-transmission.R`). `examples/simple_sir.R`'s
-  `run_sir_model()` gains `inf_duration` and `beta` arguments, seeds the census +
-  agents from optional `scenario$I` / `scenario$R` columns, and runs the
+  `run_sir_model()` gains `inf_duration`, `r0` (beta = `r0 / mean(inf_duration)`),
+  and `seasonality` arguments, builds per-node population (`nodes$N`) and `beta` /
+  `seasonality` modifier grids via `values_map`, seeds the census + agents from
+  optional `scenario$I` / `scenario$R` columns, and runs the
   downstream-first per-tick loop `carry_forward → sir_step → calc_foi →
   transmission`. `nticks` is the number of recorded states (0..nticks-1; state 0 is
   the seeded initial, state nticks-1 the final), so dynamics run **nticks-1 times**
@@ -53,6 +57,12 @@ All notable changes to this project are documented here.
   incidence flows are `(nticks-1) × n_nodes`. Verified that `S+I+R == population`
   per node at every state and the census matches a direct agent census (30.18M
   agents, ~0.5 s).
+- `values_map(value, n_ticks, n_nodes)` (`R/grid.R`) — expands a flexible
+  per-time and/or per-node `value` into a full `n_ticks × n_nodes` f64 `Column`: a
+  scalar (constant), a length-`n_nodes` vector (per-node, constant over time), a
+  length-`n_ticks` vector (per-tick, constant over space), or an `n_ticks × n_nodes`
+  matrix (both). Used to build `calc_foi`'s `beta` and `seasonality` grids from
+  whatever shape the modeler supplies. Covered by `tests/testthat/test-grid.R`.
 - `carry_forward(counter, tick)` — copies column `tick` of a 2-D report `Column`
   onto column `tick+1` (any dtype), seeding the next tick so a dynamics kernel can
   update it in place. Called once per census state that must persist across ticks —

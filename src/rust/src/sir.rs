@@ -148,56 +148,74 @@ fn read_square_matrix(m: &Robj, n: usize) -> Vec<f64> {
     data
 }
 
+// Copy one column (`slot`) of a 2-D Column into an owned Vec<f64> (small buffers,
+// inspection-style copy — fine for the per-node modifier grids).
+fn read_col(col: &Column, slot: usize, n: usize) -> Vec<f64> {
+    col.to_f64()[slot * n..(slot + 1) * n].to_vec()
+}
+
 /// Compute the per-node force of infection (FOI) for one tick.
 ///
-/// Reads the infectious count per node from the POST-RECOVERY census column
-/// `tick + 1` of `infected` (the working column this tick, after `carry_forward`
-/// and `sir_step` have run — so agents recovering this tick are excluded from the
-/// force of infection), and with a transmission coefficient `beta` and a spatial
-/// coupling `network`, computes the network-redistributed FOI **rate** into column
-/// `tick` of `foi`. The local rate is `r[k] = beta[k] * infected[k]`, redistributed
-/// as `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`.
-/// `sir_transmission()` turns this rate into a per-tick probability `1 - exp(-foi)`.
-/// Call it after `sir_step` and just before `sir_transmission`.
+/// Computes the frequency-dependent, network-redistributed FOI **rate** into column
+/// `tick` of `foi`. The local rate per node is
+/// `r[k] = beta[k] * seasonality[k] * infected[k] / population[k]`, redistributed as
+/// `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`. `transmission()`
+/// turns this rate into a per-tick probability `1 - exp(-foi)`. Call it after
+/// `sir_step` and just before `transmission`.
 ///
-/// `beta` is a single value (every node) or one per node; for frequency-dependent
-/// transmission pass `beta = global_beta / N` per node (folding in the `1/N`).
+/// Index conventions: `infected` and `population` are census buffers read at the
+/// POST-RECOVERY working column `tick + 1` (so agents recovering this tick are
+/// excluded, and the denominator is the current population — which may change once
+/// vital dynamics are added). `beta` and `seasonality` are exogenous modifier grids
+/// read at the interval column `tick`. The result is written to `foi[tick]`.
 ///
-/// @param infected An integer/numeric census Column (e.g. `nodes$I`) with
-///   `slice_len == n_nodes`; column `tick + 1` (the post-recovery count) is read.
-/// @param beta     A numeric vector of length 1 (broadcast) or `n_nodes`.
-/// @param network  An `n_nodes x n_nodes` numeric coupling matrix.
-/// @param foi      A 2-D f64 Column (`n_ticks x n_nodes`); column `tick` is overwritten.
-/// @param tick     0-based tick index: reads `infected[tick+1]`, writes `foi[tick]`.
+/// @param infected   Infectious-count census Column (`nodes$I`), `slice_len == n_nodes`.
+/// @param population Per-node population census Column (`nodes$N`); the FOI denominator.
+/// @param beta       Transmission-coefficient grid (`n_ticks x n_nodes`, from
+///   [values_map()]).
+/// @param seasonality Seasonal-modifier grid (`n_ticks x n_nodes`, from [values_map()]).
+/// @param network    An `n_nodes x n_nodes` numeric coupling matrix.
+/// @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
+/// @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
+///   `infected[tick+1]`/`population[tick+1]`, writes `foi[tick]`.
 /// @return `NULL` (invisibly); the result is written into `foi`.
 /// @export
 #[extendr]
-fn calc_foi(infected: &Column, beta: Vec<f64>, network: Robj, foi: &mut Column, tick: i32) {
+fn calc_foi(
+    infected: &Column,
+    population: &Column,
+    beta: &Column,
+    seasonality: &Column,
+    network: Robj,
+    foi: &mut Column,
+    tick: i32,
+) {
     assert!(tick >= 0, "`tick` must be non-negative, got {tick}");
     let tick = tick as usize;
     let n = foi.slice_len();
     assert!(tick < foi.n_slices(), "`tick` ({tick}) out of range for foi with {} ticks", foi.n_slices());
-    assert_eq!(infected.slice_len(), n, "`infected` slice length must equal n_nodes ({n})");
-    assert!(tick + 1 < infected.n_slices(), "`tick`+1 ({}) out of range for `infected`", tick + 1);
+    for (name, col) in [("infected", &*infected), ("population", &*population),
+                        ("beta", &*beta), ("seasonality", &*seasonality)] {
+        assert_eq!(col.slice_len(), n, "`{name}` slice length must equal n_nodes ({n})");
+    }
+    // beta/seasonality at the interval column `tick`; census at the post-recovery
+    // working column `tick + 1`.
+    assert!(tick < beta.n_slices(), "`tick` out of range for `beta`");
+    assert!(tick < seasonality.n_slices(), "`tick` out of range for `seasonality`");
+    assert!(tick + 1 < infected.n_slices(), "`tick`+1 out of range for `infected`");
+    assert!(tick + 1 < population.n_slices(), "`tick`+1 out of range for `population`");
 
-    // Read the POST-RECOVERY infectious counts: column tick+1 is this tick's working
-    // census column (after carry_forward + sir_step), so agents recovering this tick
-    // are already excluded from the force of infection.
-    let inf_all = infected.to_f64();
-    let read = tick + 1;
-    let inf = &inf_all[read * n..(read + 1) * n];
+    let b   = read_col(beta, tick, n);
+    let s   = read_col(seasonality, tick, n);
+    let inf = read_col(infected, tick + 1, n);     // post-recovery infectious count
+    let pop = read_col(population, tick + 1, n);    // current population (denominator)
+    let w   = read_square_matrix(&network, n);
 
-    // beta: a single value broadcast to every node, or one value per node.
-    let beta_node: Vec<f64> = match beta.len() {
-        1 => vec![beta[0]; n],
-        len if len == n => beta,
-        len => panic!("`beta` must have length 1 or n_nodes ({n}), got {len}"),
-    };
-
-    let w = read_square_matrix(&network, n);
-
-    // Local FOI rate, then redistribute through the network (W[i,j] at w[i + j*n]).
-    let r: Vec<f64> = (0..n).map(|k| beta_node[k] * inf[k]).collect();
+    // Local frequency-dependent FOI rate (guard empty nodes), then redistribute
+    // through the network (W[i,j] at w[i + j*n]).
+    let r: Vec<f64> = (0..n)
+        .map(|k| if pop[k] > 0.0 { b[k] * s[k] * inf[k] / pop[k] } else { 0.0 })
+        .collect();
     let out: Vec<f64> = (0..n)
         .map(|k| {
             let exported: f64 = (0..n).map(|j| w[k + j * n]).sum();         // share leaving node k

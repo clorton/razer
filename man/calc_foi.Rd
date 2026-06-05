@@ -4,35 +4,40 @@
 \alias{calc_foi}
 \title{Compute the per-node force of infection (FOI) for one tick.}
 \usage{
-calc_foi(infected, beta, network, foi, tick)
+calc_foi(infected, population, beta, seasonality, network, foi, tick)
 }
 \arguments{
-\item{infected}{An integer/numeric census Column (e.g. \code{nodes$I}) with
-\code{slice_len == n_nodes}; column \code{tick + 1} (the post-recovery count) is read.}
+\item{infected}{Infectious-count census Column (\code{nodes$I}), \code{slice_len == n_nodes}.}
 
-\item{beta}{A numeric vector of length 1 (broadcast) or \code{n_nodes}.}
+\item{population}{Per-node population census Column (\code{nodes$N}); the FOI denominator.}
+
+\item{beta}{Transmission-coefficient grid (\verb{n_ticks x n_nodes}, from
+\code{\link[=values_map]{values_map()}}).}
+
+\item{seasonality}{Seasonal-modifier grid (\verb{n_ticks x n_nodes}, from \code{\link[=values_map]{values_map()}}).}
 
 \item{network}{An \verb{n_nodes x n_nodes} numeric coupling matrix.}
 
-\item{foi}{A 2-D f64 Column (\verb{n_ticks x n_nodes}); column \code{tick} is overwritten.}
+\item{foi}{A 2-D f64 Column (\verb{(n_ticks-1) x n_nodes}); column \code{tick} is overwritten.}
 
-\item{tick}{0-based tick index: reads \code{infected[tick+1]}, writes \code{foi[tick]}.}
+\item{tick}{0-based tick index: reads \code{beta[tick]}/\code{seasonality[tick]} and
+\code{infected[tick+1]}/\code{population[tick+1]}, writes \code{foi[tick]}.}
 }
 \value{
 \code{NULL} (invisibly); the result is written into \code{foi}.
 }
 \description{
-Reads the infectious count per node from the POST-RECOVERY census column
-\code{tick + 1} of \code{infected} (the working column this tick, after \code{carry_forward}
-and \code{sir_step} have run — so agents recovering this tick are excluded from the
-force of infection), and with a transmission coefficient \code{beta} and a spatial
-coupling \code{network}, computes the network-redistributed FOI \strong{rate} into column
-\code{tick} of \code{foi}. The local rate is \code{r[k] = beta[k] * infected[k]}, redistributed
-as \verb{foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]}.
-\code{sir_transmission()} turns this rate into a per-tick probability \code{1 - exp(-foi)}.
-Call it after \code{sir_step} and just before \code{sir_transmission}.
+Computes the frequency-dependent, network-redistributed FOI \strong{rate} into column
+\code{tick} of \code{foi}. The local rate per node is
+\code{r[k] = beta[k] * seasonality[k] * infected[k] / population[k]}, redistributed as
+\verb{foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]}. \code{transmission()}
+turns this rate into a per-tick probability \code{1 - exp(-foi)}. Call it after
+\code{sir_step} and just before \code{transmission}.
 }
 \details{
-\code{beta} is a single value (every node) or one per node; for frequency-dependent
-transmission pass \code{beta = global_beta / N} per node (folding in the \code{1/N}).
+Index conventions: \code{infected} and \code{population} are census buffers read at the
+POST-RECOVERY working column \code{tick + 1} (so agents recovering this tick are
+excluded, and the denominator is the current population — which may change once
+vital dynamics are added). \code{beta} and \code{seasonality} are exogenous modifier grids
+read at the interval column \code{tick}. The result is written to \code{foi[tick]}.
 }

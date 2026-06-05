@@ -614,28 +614,31 @@ sir_step <- function(state, timer, nodeid, count, i_count, r_count, recoveries, 
 
 #' Compute the per-node force of infection (FOI) for one tick.
 #'
-#' Reads the infectious count per node from the POST-RECOVERY census column
-#' `tick + 1` of `infected` (the working column this tick, after `carry_forward`
-#' and `sir_step` have run — so agents recovering this tick are excluded from the
-#' force of infection), and with a transmission coefficient `beta` and a spatial
-#' coupling `network`, computes the network-redistributed FOI **rate** into column
-#' `tick` of `foi`. The local rate is `r[k] = beta[k] * infected[k]`, redistributed
-#' as `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`.
-#' `sir_transmission()` turns this rate into a per-tick probability `1 - exp(-foi)`.
-#' Call it after `sir_step` and just before `sir_transmission`.
+#' Computes the frequency-dependent, network-redistributed FOI **rate** into column
+#' `tick` of `foi`. The local rate per node is
+#' `r[k] = beta[k] * seasonality[k] * infected[k] / population[k]`, redistributed as
+#' `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`. `transmission()`
+#' turns this rate into a per-tick probability `1 - exp(-foi)`. Call it after
+#' `sir_step` and just before `transmission`.
 #'
-#' `beta` is a single value (every node) or one per node; for frequency-dependent
-#' transmission pass `beta = global_beta / N` per node (folding in the `1/N`).
+#' Index conventions: `infected` and `population` are census buffers read at the
+#' POST-RECOVERY working column `tick + 1` (so agents recovering this tick are
+#' excluded, and the denominator is the current population — which may change once
+#' vital dynamics are added). `beta` and `seasonality` are exogenous modifier grids
+#' read at the interval column `tick`. The result is written to `foi[tick]`.
 #'
-#' @param infected An integer/numeric census Column (e.g. `nodes$I`) with
-#'   `slice_len == n_nodes`; column `tick + 1` (the post-recovery count) is read.
-#' @param beta     A numeric vector of length 1 (broadcast) or `n_nodes`.
-#' @param network  An `n_nodes x n_nodes` numeric coupling matrix.
-#' @param foi      A 2-D f64 Column (`n_ticks x n_nodes`); column `tick` is overwritten.
-#' @param tick     0-based tick index: reads `infected[tick+1]`, writes `foi[tick]`.
+#' @param infected   Infectious-count census Column (`nodes$I`), `slice_len == n_nodes`.
+#' @param population Per-node population census Column (`nodes$N`); the FOI denominator.
+#' @param beta       Transmission-coefficient grid (`n_ticks x n_nodes`, from
+#'   [values_map()]).
+#' @param seasonality Seasonal-modifier grid (`n_ticks x n_nodes`, from [values_map()]).
+#' @param network    An `n_nodes x n_nodes` numeric coupling matrix.
+#' @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
+#' @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
+#'   `infected[tick+1]`/`population[tick+1]`, writes `foi[tick]`.
 #' @return `NULL` (invisibly); the result is written into `foi`.
 #' @export
-calc_foi <- function(infected, beta, network, foi, tick) .Call(wrap__calc_foi, infected, beta, network, foi, tick)
+calc_foi <- function(infected, population, beta, seasonality, network, foi, tick) .Call(wrap__calc_foi, infected, population, beta, seasonality, network, foi, tick)
 
 #' Transmission step for tick `tick`: move susceptibles into a receiving state.
 #'
