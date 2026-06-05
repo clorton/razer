@@ -13,10 +13,18 @@ library(razer)
 # ── run_sir_model: assemble parameters and hand off to run_sir() ────────────────
 # `function(args) body` is a first-class closure value, bound here with `<-`.
 # `scenario` is a data.frame with one row per patch (name, population, latitude,
-# longitude); it is the model's geographic scaffold. `network` is the N x N
-# spatial coupling matrix (fraction of each patch's force of infection exported
-# to every other patch). `nticks` is the number of daily time steps to simulate.
-run_sir_model <- function(scenario, network, nticks) {
+# longitude); it is the model's geographic scaffold. Optional integer `I` / `R`
+# columns give the number of agents to start infectious / recovered in each patch.
+# `network` is the N x N spatial coupling matrix (fraction of each patch's force of
+# infection exported to every other patch). `nticks` is the number of daily time
+# steps to simulate. `inf_duration` is a Distribution (e.g. dist_gamma(2, 2)) from
+# which each infectious agent's recovery timer is drawn; it will also drive the
+# future sir_transmit() step.
+run_sir_model <- function(scenario, network, nticks, inf_duration) {
+  # `inherits(x, "Distribution")` checks the S3 class of the extendr handle.
+  if (!inherits(inf_duration, "Distribution"))
+    stop("`inf_duration` must be a Distribution (e.g. dist_constant(7) or dist_gamma(2, 2))")
+
   # Total agent count = sum of every patch's population. `sum()` over an integer
   # column returns an integer scalar. `n_nodes` is the patch count.
   n       <- sum(scenario$population)
@@ -62,7 +70,53 @@ run_sir_model <- function(scenario, network, nticks) {
   nodes$count      <- n_nodes
   nodes$recoveries <- allocate_vector("u32", nticks, n_nodes)
 
-  # TODO: seed infections, build the rest of the SIR parameters.
+  # ── seed initial infections / immunity from the scenario ──────────────────────
+  # Agents are laid out node-by-node (see nodeid), so node k owns the contiguous
+  # block [offset[k], offset[k] + population[k]). For each node we move its first
+  # I[k] agents to the I state and the next R[k] to R. `%in%` tests for a column;
+  # a missing I/R column means zero seeding for that state.
+  states  <- laser_states()                          # c(S=0, E=1, I=2, R=3, D=-1)
+  pops    <- scenario$population
+  offsets <- cumsum(c(0L, pops[-n_nodes]))           # 0-based start of each node's block
+  I_seed  <- if ("I" %in% names(scenario)) as.integer(scenario$I) else integer(n_nodes)
+  R_seed  <- if ("R" %in% names(scenario)) as.integer(scenario$R) else integer(n_nodes)
+  if (any(I_seed < 0L) || any(R_seed < 0L))
+    stop("`scenario$I` and `scenario$R` must be non-negative")
+  # I + R must fit within each patch's population, else there aren't enough agents
+  # to place into both states — an irreconcilable initial condition. `which()`
+  # returns the offending row indices; name the first for a actionable message.
+  bad <- which(I_seed + R_seed > pops)
+  if (length(bad) > 0L)
+    stop(sprintf(
+      "seeded I + R exceeds population in %d patch(es); e.g. patch %d: I=%d + R=%d > population=%d",
+      length(bad), bad[1L], I_seed[bad[1L]], R_seed[bad[1L]], pops[bad[1L]]))
+
+  # Build the initial state vector (S everywhere, then per-node I then R) and write
+  # it into the Rust buffer with one `$set()`.
+  state0 <- rep(states[["S"]], n)
+  for (k in seq_len(n_nodes)) {
+    base <- offsets[k]; ni <- I_seed[k]; nr <- R_seed[k]
+    if (ni > 0L) state0[base + seq_len(ni)]      <- states[["I"]]
+    if (nr > 0L) state0[base + ni + seq_len(nr)] <- states[["R"]]
+  }
+  people$state$set(state0)
+
+  # Each infectious agent gets a recovery timer drawn from `inf_duration`, rounded
+  # to whole ticks and clamped to a u8's [1, 255]; everyone else stays at 0.
+  timer0  <- rep(0L, n)
+  total_I <- sum(I_seed)
+  if (total_I > 0L) {
+    draws <- pmax(1L, pmin(255L, as.integer(round(inf_duration$sample_n(total_I)))))
+    pos <- 0L
+    for (k in seq_len(n_nodes)) {
+      ni <- I_seed[k]
+      if (ni > 0L) {
+        timer0[offsets[k] + seq_len(ni)] <- draws[pos + seq_len(ni)]
+        pos <- pos + ni
+      }
+    }
+  }
+  people$timer$set(timer0)
 
   # `run` advances the simulation: each tick runs the per-tick step kernels (just
   # the SIR recovery step for now; transmission etc. will join it here). `tick - 1L`
@@ -78,10 +132,9 @@ run_sir_model <- function(scenario, network, nticks) {
   # Report success. `cat()` writes to stdout; `sprintf` is C-style formatting.
   # `sum(nodes$recoveries$values())` totals the recovery report. `invisible()`
   # returns its argument WITHOUT auto-printing at the top level.
-  cat(sprintf("run_sir_model: %d patches, %d ticks; people = {state %s, nodeid %s, timer %s}[%d]; total recoveries = %d.\n",
-              n_nodes, nticks,
-              people$state$dtype(), people$nodeid$dtype(), people$timer$dtype(),
-              people$count, sum(nodes$recoveries$values())))
+  cat(sprintf("run_sir_model: %d patches, %d agents, %d ticks; seeded I=%d R=%d; total recoveries=%d.\n",
+              n_nodes, people$count, nticks,
+              sum(I_seed), sum(R_seed), sum(nodes$recoveries$values())))
   invisible(list(people = people, nodes = nodes))
 }
 
@@ -120,12 +173,22 @@ network <- radiation(scenario$population, distance_matrix, k = 1, include_home =
 # 10% total emigration.
 network <- row_normalizer(network, max_rowsum = 0.1)
 
-# Number of daily time steps to simulate (placeholder until the full SIR loop and
-# seeding are wired up).
+# Initial conditions, attached to `scenario` as integer `I` / `R` columns: a few
+# infectious agents per patch and ~5% initial immunity. `pmin` caps the counts so
+# `I + R` never exceeds a patch's population. `as.integer` truncates toward zero.
+scenario$I <- pmin(5L, scenario$population)                       # 5 infectious / patch
+scenario$R <- pmin(as.integer(0.05 * scenario$population),        # ~5% recovered/immune
+                   scenario$population - scenario$I)
+
+# Infectious-period distribution: each infected agent's recovery timer is drawn
+# from this (mean shape*scale = 4 ticks). Also the future sir_transmit() parameter.
+inf_duration <- dist_gamma(2, 2)
+
+# Number of daily time steps to simulate.
 nticks <- 10L
 
 # ── run ───────────────────────────────────────────────────────────────────────
 # `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
 # `[["elapsed"]]` name-indexes the wall-clock seconds field.
-timing <- system.time(run_sir_model(scenario, network, nticks))
+timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))

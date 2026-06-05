@@ -19,7 +19,14 @@ All notable changes to this project are documented here.
   the `tick` column of the 2-D `recoveries` report. State/timer are `u8`, `nodeid`
   is `u16` (0-based); the recovery count type is generic. Serial for now (the
   per-node tally would race under naive parallelism). Covered by
-  `tests/testthat/test-sir-step.R`.
+  `tests/testthat/test-sir-step.R`. `examples/simple_sir.R`'s `run_sir_model()`
+  drives it from a per-tick `run` loop and gains an `inf_duration` Distribution
+  argument plus scenario-driven seeding: optional integer `I` / `R` columns on
+  `scenario` move each node's first `I[k]` agents to Infectious (with recovery
+  timers drawn from `inf_duration`) and the next `R[k]` to Recovered. Verified on
+  the full scenario that final R == seeded R + total recoveries and S is conserved
+  (no transmission yet); `inf_duration` will also parameterize the future
+  `sir_transmit()` step.
 - `allocate_vector(dtype, n_slices, slice_len)` — allocates a 2-D `Column` report
   buffer of `n_slices × slice_len` elements, SLICE-MAJOR (row-major) so each slice
   is a contiguous run: slice `s` is `s*slice_len .. (s+1)*slice_len`. The
