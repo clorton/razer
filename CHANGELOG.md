@@ -12,6 +12,26 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `bincount(values, nbins, counts)` — a parallel, NumPy-`bincount`-style histogram
+  over a [Column] (`src/rust/src/bincount.rs`). For each bin `b` in `0..nbins` it
+  counts how many elements of the integer-typed `values` Column equal `b` and
+  writes the result into the caller-provided `counts` Column (length `>= nbins`;
+  entries at/beyond `nbins` are left untouched). Each Rayon worker accumulates into
+  a private per-thread histogram (no shared-bin write collisions); the used range
+  of `counts` is then zeroed and the per-thread tallies are reduced into it. One
+  generic kernel serves every value width/signedness (`i8`..`u32`) and any numeric
+  `counts` type via traits. Counts 30.18M agents into 954 node bins in ~15 ms;
+  covered by `tests/testthat/test-bincount.R` (incl. a parallel-vs-`tabulate`
+  cross-check).
+- `bincountw(values, weights, nbins, counts)` — the weighted counterpart: sums
+  each element's weight into its bin (`counts[b] = Σ weights[i]` over `i` with
+  `values[i] == b`), à la `numpy.bincount(values, weights=...)`. Same parallel,
+  collision-free, zero-then-accumulate design; `weights` may be any numeric
+  `Column` (signed, unsigned, or floating point — all widened to f64 for
+  accumulation), and the value×weight type dispatch is macro-generated over one
+  generic kernel so weights are read in place with no copy. Covered by
+  `tests/testthat/test-bincount.R` (incl. a parallel-vs-serial weighted-tally
+  cross-check).
 - `Column` and `allocate_scalar(dtype, count)` — a Rust-owned, dtype-tagged 1-D
   property array exposed to R as an opaque external-pointer handle
   (`src/rust/src/column.rs`). `allocate_scalar()` returns a zero-filled `Column`
@@ -24,8 +44,11 @@ All notable changes to this project are documented here.
   on-demand snapshot copied into the nearest native R vector — `integer` for the
   narrow integer types, `double` for `u32`/`f32`/`f64`). Covered by
   `tests/testthat/test-allocation.R`. `examples/simple_sir.R`'s `run_sir_model()`
-  builds a lightweight `people` environment (`count`, `capacity`, and a `u8`
-  `state` Column sized to the total population).
+  builds a lightweight `people` environment (`count`, `capacity`, a `u8` `state`
+  Column, and a `u16` `nodeid` Column initialized 0-based from the patch
+  populations, sized to the total population). Node ids are 0-based (0..N-1) to
+  match the Rust kernels' direct per-node indexing; R-side joins to `scenario`
+  rows add 1.
 - **Migration-network models** ported from laser-core (`src/rust/src/migration.rs`),
   each taking a population vector and a symmetric `N × N` distance matrix and
   returning an `N × N` migration-weight matrix (zero diagonal, generally

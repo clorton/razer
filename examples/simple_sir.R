@@ -35,13 +35,27 @@ run_sir_model <- function(scenario, network) {
   # and `$length()` query it, `$values()` copies a snapshot back to R.
   people$state    <- allocate_scalar("u8", n)
 
-  # TODO: assign agents to patches, seed infections, build SIR parameters, run.
+  # Per-agent node id — which patch each agent lives in — as a compact uint16.
+  # nodeid is 0-BASED (0..N-1), matching the Rust step kernels and the rest of
+  # razer: the kernels index per-node arrays (infectious counts, populations, the
+  # coupling network) DIRECTLY by this value with no offset, so storing it 1-based
+  # would cost a `- 1` on every hot-path access. R-side joins back to `scenario`
+  # rows add 1 instead (e.g. scenario[nodeid + 1, ]) — a rare, cheap conversion.
+  people$nodeid   <- allocate_scalar("u16", n)
+  # `rep(x, times = counts)` repeats each node id by that patch's population, so
+  # the first population[1] agents are node 0, the next population[2] are node 1,
+  # and so on. `seq_len(N) - 1L` is the 0-based id vector. `$set()` copies it once
+  # into the Rust buffer.
+  people$nodeid$set(rep(seq_len(nrow(scenario)) - 1L, times = scenario$population))
+
+  # TODO: seed infections, build SIR parameters, run.
 
   # Report success. `cat()` writes to stdout; `sprintf` is C-style formatting.
   # `invisible()` returns its argument WITHOUT auto-printing at the top level.
-  cat(sprintf("run_sir_model: %d patches, network %d x %d; people$state = %s[%d] (capacity %d).\n",
+  cat(sprintf("run_sir_model: %d patches, network %d x %d; people = {state %s, nodeid %s}[%d] (capacity %d).\n",
               nrow(scenario), nrow(network), ncol(network),
-              people$state$dtype(), people$state$length(), people$capacity))
+              people$state$dtype(), people$nodeid$dtype(),
+              people$state$length(), people$capacity))
   invisible(people)
 }
 

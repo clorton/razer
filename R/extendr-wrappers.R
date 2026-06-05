@@ -483,6 +483,57 @@ row_normalizer <- function(network, max_rowsum) .Call(wrap__row_normalizer, netw
 #' @export
 allocate_scalar <- function(dtype, count) .Call(wrap__allocate_scalar, dtype, count)
 
+#' Count occurrences of each value, NumPy `bincount`-style, into a buffer.
+#'
+#' For each bin `b` in `0..nbins`, computes how many elements of `values` equal
+#' `b` and writes that into `counts[b]`. `values` must be an integer-typed
+#' [Column] whose elements lie in `0..nbins` (they are used as bin indices);
+#' `counts` must be a numeric [Column] with at least `nbins` elements and is
+#' **overwritten** in its first `nbins` entries (entries at or beyond `nbins` are
+#' left untouched). The work is parallelized with private per-thread histograms,
+#' so there are no write collisions.
+#'
+#' @param values An integer-typed `Column` of bin indices (`i8`..`u32`).
+#' @param nbins  Number of bins; a non-negative integer `<= counts$length()`.
+#' @param counts A numeric `Column` (length `>= nbins`) that receives the counts.
+#'   It is modified in place; the function returns `NULL`.
+#' @return `NULL` (invisibly); the result is written into `counts`.
+#' @examples
+#' values <- allocate_scalar("u16", 6L)
+#' values$set(c(0, 1, 1, 2, 2, 2))
+#' counts <- allocate_scalar("i32", 3L)
+#' bincount(values, 3L, counts)
+#' counts$values()   # 1 2 3
+#' @export
+bincount <- function(values, nbins, counts) .Call(wrap__bincount, values, nbins, counts)
+
+#' Weighted bincount: sum each element's weight into its bin (NumPy
+#' `bincount(values, weights=...)`).
+#'
+#' For each bin `b` in `0..nbins`, computes `sum of weights[i] over all i with
+#' values[i] == b` and writes it into `counts[b]`. `values` must be an
+#' integer-typed [Column] of bin indices in `0..nbins`; `weights` is any numeric
+#' [Column] (signed, unsigned, or floating point) the SAME length as `values`;
+#' `counts` is a numeric [Column] with at least `nbins` elements, **overwritten**
+#' in its first `nbins` entries (entries at or beyond `nbins` are left untouched).
+#' Parallelized with private per-thread accumulators, so there are no write
+#' collisions.
+#'
+#' @param values  An integer-typed `Column` of bin indices (`i8`..`u32`).
+#' @param weights A numeric `Column` (any type), the same length as `values`.
+#' @param nbins   Number of bins; a non-negative integer `<= counts$length()`.
+#' @param counts  A numeric `Column` (length `>= nbins`) that receives the sums.
+#'   It is modified in place; the function returns `NULL`.
+#' @return `NULL` (invisibly); the result is written into `counts`.
+#' @examples
+#' values  <- allocate_scalar("u16", 5L); values$set(c(0, 0, 1, 2, 2))
+#' weights <- allocate_scalar("f64", 5L); weights$set(c(1.5, 2.5, 4, 1, 3))
+#' counts  <- allocate_scalar("f64", 3L)
+#' bincountw(values, weights, 3L, counts)
+#' counts$values()   # 4 4 4
+#' @export
+bincountw <- function(values, weights, nbins, counts) .Call(wrap__bincountw, values, weights, nbins, counts)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a

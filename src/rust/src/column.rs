@@ -64,8 +64,10 @@ impl DType {
     }
 }
 
-// The typed, owned backing buffer. One variant is live per Column.
-enum Storage {
+// The typed, owned backing buffer. One variant is live per Column. `pub(crate)`
+// so sibling modules (e.g. `bincount`) can match on the element type to dispatch
+// to a generic kernel; it stays invisible to R (R only sees the `Column` handle).
+pub(crate) enum Storage {
     I8(Vec<i8>),   U8(Vec<u8>),
     I16(Vec<i16>), U16(Vec<u16>),
     I32(Vec<i32>), U32(Vec<u32>),
@@ -87,14 +89,23 @@ pub struct Column {
 }
 
 impl Column {
-    // Element count of the live variant.
-    fn len(&self) -> usize {
+    // Element count of the live variant. `pub(crate)` for sibling modules.
+    pub(crate) fn len(&self) -> usize {
         match &self.data {
             Storage::I8(v) => v.len(),   Storage::U8(v) => v.len(),
             Storage::I16(v) => v.len(),  Storage::U16(v) => v.len(),
             Storage::I32(v) => v.len(),  Storage::U32(v) => v.len(),
             Storage::F32(v) => v.len(),  Storage::F64(v) => v.len(),
         }
+    }
+
+    // Borrow the typed backing store (for crate-internal kernels to dispatch on).
+    pub(crate) fn storage(&self) -> &Storage {
+        &self.data
+    }
+
+    pub(crate) fn storage_mut(&mut self) -> &mut Storage {
+        &mut self.data
     }
 
     fn dtype_enum(&self) -> DType {

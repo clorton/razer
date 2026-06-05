@@ -5,6 +5,7 @@ mod epidemic;
 mod distributions;
 mod migration;
 mod column;
+mod bincount;
 pub use laser_frame::LaserFrame;
 pub use distributions::Distribution;
 pub use column::Column;
@@ -16,4 +17,5 @@ extendr_module! {
     use distributions;
     use migration;
     use column;
+    use bincount;
 }
