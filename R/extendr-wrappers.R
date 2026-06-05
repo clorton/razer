@@ -356,6 +356,114 @@ dist_logistic <- function(location, scale) .Call(wrap__dist_logistic, location, 
 #' @export
 dist_lognormal <- function(meanlog, sdlog) .Call(wrap__dist_lognormal, meanlog, sdlog)
 
+#' Great-circle distance matrix between geographic points.
+#'
+#' Ports laser-core's `distance` (all-pairs case): given the latitudes and
+#' longitudes of `N` points in decimal degrees, returns the symmetric `N × N`
+#' matrix whose `[i, j]` entry is the haversine great-circle distance, in
+#' **kilometres**, between point `i` and point `j`. The diagonal is zero.
+#'
+#' The haversine formula (see <https://en.wikipedia.org/wiki/Haversine_formula>)
+#' is evaluated with a mean Earth radius of 6371 km, matching laser-core.
+#'
+#' @param latitude  Numeric vector of latitudes in decimal degrees, in `[-90, 90]`.
+#' @param longitude Numeric vector of longitudes in decimal degrees, in `[-180, 180]`.
+#'   Must be the same length as `latitude`.
+#' @return An `N × N` numeric matrix of pairwise distances in kilometres
+#'   (symmetric, zero diagonal), where `N` is the number of points.
+#' @examples
+#' # London and Paris, ~344 km apart:
+#' d <- distances(c(51.5074, 48.8566), c(-0.1278, 2.3522))
+#' d[1, 2]
+#' @export
+distances <- function(latitude, longitude) .Call(wrap__distances, latitude, longitude)
+
+#' Gravity migration-network model.
+#'
+#' `network[i, j] = k * pops[i]^a * pops[j]^b / distance[i, j]^c`, with a zero
+#' diagonal (no self-migration). Port of laser-core's `gravity`.
+#'
+#' @param pops      Numeric vector of node populations (length N, non-negative).
+#' @param distances Symmetric `N × N` numeric distance matrix (e.g. from
+#'   [distances()]).
+#' @param k Scaling constant for the overall flow magnitude (non-negative).
+#' @param a Exponent on the origin population.
+#' @param b Exponent on the destination population.
+#' @param c Exponent on the distance (larger `c` = stronger distance decay).
+#' @return An `N × N` numeric matrix; `[i, j]` is the migration weight from node
+#'   i to node j.
+#' @export
+gravity <- function(pops, distances, k, a, b, c) .Call(wrap__gravity, pops, distances, k, a, b, c)
+
+#' Radiation migration-network model (Simini et al., Nature 2012).
+#'
+#' For each source `i`, destinations are ranked by distance and the weight to
+#' destination `j` is
+#' `k * p_i * p_j / (p_i + s) / (p_i + p_j + s)`, where `s` is the total
+#' population of all nodes as close or closer to `i` than `j` (excluding the home
+#' population `p_i` when `include_home = FALSE`). Port of laser-core's
+#' `radiation`. The diagonal is 0.
+#'
+#' @param pops      Numeric vector of node populations (length N, non-negative).
+#' @param distances Symmetric `N × N` numeric distance matrix.
+#' @param k Scaling constant for the flow magnitude (non-negative).
+#' @param include_home Logical; whether the home (source) population is included
+#'   in the "as close or closer" cumulative sum.
+#' @return An `N × N` numeric migration-weight matrix (generally not symmetric).
+#' @export
+radiation <- function(pops, distances, k, include_home) .Call(wrap__radiation, pops, distances, k, include_home)
+
+#' Competing-destinations migration model (Fotheringham, 1984).
+#'
+#' Starts from the [gravity()] weights and multiplies each `[i, j]` by an
+#' accessibility term `(Σ_k p_k^b / d_jk^c)^delta`, summed over competing
+#' destinations `k ∉ {i, j}`. Port of laser-core's `competing_destinations`. The
+#' diagonal is 0.
+#'
+#' @param pops      Numeric vector of node populations (length N, non-negative).
+#' @param distances Symmetric `N × N` numeric distance matrix.
+#' @param k Scaling constant for the flow magnitude (non-negative).
+#' @param a Exponent on the origin population (gravity term).
+#' @param b Exponent on the destination population (gravity and competition terms).
+#' @param c Exponent on distance (gravity and competition terms).
+#' @param delta Exponent on the competing-destinations accessibility term.
+#' @return An `N × N` numeric migration-weight matrix (generally not symmetric).
+#' @export
+competing_destinations <- function(pops, distances, k, a, b, c, delta) .Call(wrap__competing_destinations, pops, distances, k, a, b, c, delta)
+
+#' Stouffer's intervening-opportunities migration model (Stouffer, 1940).
+#'
+#' For each source `i` and destination `j`,
+#' `network[i, j] = k * p_i^a * (p_j / s)^b`, where `s` is the cumulative
+#' population as close or closer to `i` than `j` (excluding the home population
+#' when `include_home = FALSE`); the nearest node (the source) gets weight 0.
+#' Port of laser-core's `stouffer`. The diagonal is 0.
+#'
+#' @param pops      Numeric vector of node populations (length N, non-negative).
+#' @param distances Symmetric `N × N` numeric distance matrix.
+#' @param k Scaling constant for the flow magnitude (non-negative).
+#' @param a Exponent on the origin population.
+#' @param b Exponent on the destination/cumulative-population ratio.
+#' @param include_home Logical; whether the home population is included in the
+#'   cumulative sum.
+#' @return An `N × N` numeric migration-weight matrix (generally not symmetric).
+#' @export
+stouffer <- function(pops, distances, k, a, b, include_home) .Call(wrap__stouffer, pops, distances, k, a, b, include_home)
+
+#' Cap each row sum of a network matrix at `max_rowsum`.
+#'
+#' Rows whose total exceeds `max_rowsum` are scaled down proportionally so they
+#' sum to exactly `max_rowsum`; smaller rows are left unchanged. Port of
+#' laser-core's `row_normalizer`. Useful to bound the fraction of a node's force
+#' of infection that is exported before passing the matrix as the transmission
+#' `network`.
+#'
+#' @param network    A square non-negative numeric matrix.
+#' @param max_rowsum Maximum allowed row sum, in `[0, 1]`.
+#' @return The row-capped matrix, same shape as `network`.
+#' @export
+row_normalizer <- function(network, max_rowsum) .Call(wrap__row_normalizer, network, max_rowsum)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a

@@ -10,3 +10,10 @@ src/Makevars.win
 
 # pkgdown site is built in CI and served from the gh-pages branch
 docs/
+
+# scratch / working directory — never committed
+tmp/
+
+# large (~20 MB) upstream source dataset; the derived, shareable
+# EnglandWalesMeasles_places.csv (built by convert_measles.py) is committed instead
+examples/data/EnglandWalesMeasles.py

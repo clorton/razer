@@ -12,6 +12,41 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- **Migration-network models** ported from laser-core (`src/rust/src/migration.rs`),
+  each taking a population vector and a symmetric `N × N` distance matrix and
+  returning an `N × N` migration-weight matrix (zero diagonal, generally
+  asymmetric):
+  - `gravity(pops, distances, k, a, b, c)` — gravity model
+    `k · p_i^a · p_j^b / d_ij^c`.
+  - `radiation(pops, distances, k, include_home)` — radiation model
+    (Simini et al., Nature 2012).
+  - `stouffer(pops, distances, k, a, b, include_home)` — Stouffer's intervening
+    opportunities (1940).
+  - `competing_destinations(pops, distances, k, a, b, c, delta)` — Fotheringham's
+    competing-destinations adjustment to the gravity model (1984).
+  - `row_normalizer(network, max_rowsum)` — proportionally caps each row sum at
+    `max_rowsum`, e.g. to bound the exported fraction before using a matrix as the
+    transmission `network`.
+  Outputs match laser-core's reference implementation to floating-point precision;
+  covered by `tests/testthat/test-migration.R`. `examples/simple_sir.R` uses
+  `radiation()` + `row_normalizer()` to build its spatial coupling network.
+- `distances()` — a port of laser-core's `distance` (all-pairs case): given
+  vectors of latitudes and longitudes (decimal degrees), returns the symmetric
+  `N × N` great-circle (haversine) distance matrix in kilometres, with a zero
+  diagonal. Uses a 6371 km mean Earth radius to match laser-core, validates the
+  coordinate ranges, and fills the matrix column-by-column across Rayon worker
+  threads (`src/rust/src/migration.rs`). Covered by
+  `tests/testthat/test-distances.R`.
+- `examples/simple_sir.R` — a worked SIR example built on the high-level
+  `run_sir()` runner. Its setup loads the England & Wales measles patches as the
+  node scaffold and builds the pairwise `distances()` matrix from their
+  latitude/longitude (the geographic input for the spatial coupling network);
+  the SIR wiring follows.
+- `examples/data/EnglandWalesMeasles_places.csv` and
+  `examples/data/convert_measles.py` — a shareable, one-row-per-patch CSV (name,
+  initial 1944 population, latitude, longitude) for the 954 England & Wales
+  registration districts, plus the Python converter that flattens it from the
+  source `EnglandWalesMeasles.py` dataset.
 - **Spatial coupling of contagion** via the new `network` argument on
   `step_transmission_si()` and `step_transmission_se()`, porting laser-generic's
   force-of-infection redistribution model. The `network` is an `n_nodes × n_nodes`
