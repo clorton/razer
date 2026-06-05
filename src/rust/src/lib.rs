@@ -4,8 +4,10 @@ mod laser_frame;
 mod epidemic;
 mod distributions;
 mod migration;
+mod column;
 pub use laser_frame::LaserFrame;
 pub use distributions::Distribution;
+pub use column::Column;
 
 extendr_module! {
     mod razer;
@@ -13,4 +15,5 @@ extendr_module! {
     use epidemic;
     use distributions;
     use migration;
+    use column;
 }

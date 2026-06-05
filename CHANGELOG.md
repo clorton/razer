@@ -12,6 +12,20 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `Column` and `allocate_scalar(dtype, count)` — a Rust-owned, dtype-tagged 1-D
+  property array exposed to R as an opaque external-pointer handle
+  (`src/rust/src/column.rs`). `allocate_scalar()` returns a zero-filled `Column`
+  of any of eight element types — `i8`, `u8`, `i16`, `u16`, `i32`, `u32`, `f32`,
+  `f64` (with aliases like `"integer"` = i32, `"double"` = f64, `"uint8"` = u8) —
+  none of which (beyond i32/f64/u8) R can represent natively. The data lives in a
+  Rust `Vec<T>` so it is exactly `sizeof(T)` per element and the step kernels can
+  borrow `&mut [T]` and mutate it in place with no R copy-on-modify. Methods:
+  `$length()`, `$dtype()`, `$fill(value)`, `$set(values)`, and `$values()` (an
+  on-demand snapshot copied into the nearest native R vector — `integer` for the
+  narrow integer types, `double` for `u32`/`f32`/`f64`). Covered by
+  `tests/testthat/test-allocation.R`. `examples/simple_sir.R`'s `run_sir_model()`
+  builds a lightweight `people` environment (`count`, `capacity`, and a `u8`
+  `state` Column sized to the total population).
 - **Migration-network models** ported from laser-core (`src/rust/src/migration.rs`),
   each taking a population vector and a symmetric `N × N` distance matrix and
   returning an `N × N` migration-weight matrix (zero diagonal, generally

@@ -17,7 +17,32 @@ library(razer)
 # spatial coupling matrix (fraction of each patch's force of infection exported
 # to every other patch).
 run_sir_model <- function(scenario, network) {
-  # TODO: build the SIR parameters, then call run_sir().
+  # Total agent count = sum of every patch's population. `sum()` over an integer
+  # column returns an integer scalar.
+  n <- sum(scenario$population)
+
+  # `new.env()` makes a fresh ENVIRONMENT: unlike ordinary R values (which are
+  # copy-on-modify), an environment has reference semantics — assigning into it
+  # mutates the same object everyone holds, like a mutable struct / object. We use
+  # it as a lightweight "people" record whose named entries are agent-property
+  # arrays. `env$name <- value` (the `$<-` method) assigns a member by name.
+  people <- new.env()
+  people$count    <- n   # number of live agents
+  people$capacity <- n   # allocated array length (room to grow); equals count for now
+  # `allocate_scalar()` (Rust) returns an opaque Column handle backed by a
+  # Rust-owned, zero-filled uint8 buffer of length n, holding each agent's disease
+  # state. The step kernels mutate this buffer in place (no copies); `$dtype()`
+  # and `$length()` query it, `$values()` copies a snapshot back to R.
+  people$state    <- allocate_scalar("u8", n)
+
+  # TODO: assign agents to patches, seed infections, build SIR parameters, run.
+
+  # Report success. `cat()` writes to stdout; `sprintf` is C-style formatting.
+  # `invisible()` returns its argument WITHOUT auto-printing at the top level.
+  cat(sprintf("run_sir_model: %d patches, network %d x %d; people$state = %s[%d] (capacity %d).\n",
+              nrow(scenario), nrow(network), ncol(network),
+              people$state$dtype(), people$state$length(), people$capacity))
+  invisible(people)
 }
 
 # ── setup ───────────────────────────────────────────────────────────────────────
@@ -56,4 +81,7 @@ network <- radiation(scenario$population, distance_matrix, k = 1, include_home =
 network <- row_normalizer(network, max_rowsum = 0.1)
 
 # ── run ───────────────────────────────────────────────────────────────────────
-run_sir_model(scenario, network)
+# `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
+# `[["elapsed"]]` name-indexes the wall-clock seconds field.
+timing <- system.time(run_sir_model(scenario, network))
+cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))

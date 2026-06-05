@@ -464,6 +464,25 @@ stouffer <- function(pops, distances, k, a, b, include_home) .Call(wrap__stouffe
 #' @export
 row_normalizer <- function(network, max_rowsum) .Call(wrap__row_normalizer, network, max_rowsum)
 
+#' Allocate a fresh, zero-filled property array of a given type and length.
+#'
+#' Returns an opaque [Column] handle backed by a Rust-owned buffer. Choose the
+#' narrowest type that fits the data to minimize memory (e.g. `"u8"` for a small
+#' set of disease-state codes).
+#'
+#' @param dtype Element type, one of `"i8"`, `"u8"`, `"i16"`, `"u16"`, `"i32"`,
+#'   `"u32"`, `"f32"`, `"f64"` (aliases: `"int8"`, `"uint8"`/`"raw"`, …,
+#'   `"integer"` = i32, `"double"`/`"real"` = f64, `"single"` = f32).
+#' @param count Array length (number of elements); a non-negative integer.
+#' @return A [Column] object whose elements are all zero.
+#' @examples
+#' state <- allocate_scalar("u8", 5L)
+#' state$dtype()    # "u8"
+#' state$length()   # 5
+#' state$values()   # 0 0 0 0 0
+#' @export
+allocate_scalar <- function(dtype, count) .Call(wrap__allocate_scalar, dtype, count)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a
@@ -799,5 +818,102 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 
 #' @export
 `[[.Distribution` <- `$.Distribution`
+
+#' A Rust-owned, dtype-tagged 1-D property array.
+#'
+#' Allocate one with [allocate_scalar()]. The data is held in Rust and exposed to
+#' R only as an opaque handle; use `$values()` to copy a snapshot back into an R
+#' vector for inspection, `$fill()` / `$set()` to write, and `$length()` /
+#' `$dtype()` to query. The simulation step kernels operate on the buffer in
+#' place with no copies.
+#'
+#' @export
+#'
+#' @section Methods:
+#'\subsection{Method `length`}{
+#'Number of elements in the array.
+#' \subsection{return}{
+#'An integer length.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `dtype`}{
+#'The element data type as a string (e.g. `"u8"`, `"f32"`).
+#' \subsection{return}{
+#'A length-1 character vector.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `values`}{
+#'Copy the array into an R vector for inspection (NOT a view — a snapshot).
+#'
+#'Integer-width types (i8, u8, i16, u16, i32) widen to R `integer`; `u32`,
+#'`f32`, and `f64` widen to R `double` (since `u32` overflows R's signed
+#'32-bit integer). This O(n) copy is the only place data leaves Rust.
+#'
+#' \subsection{return}{
+#'A numeric vector (integer or double) of length `length()`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `fill`}{
+#'Set every element to `value`, cast to the array's data type.
+#'
+#'For integer-typed arrays the value is truncated toward zero (e.g. `2.9`
+#'becomes `2`); out-of-range values wrap per Rust's `as` cast.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`value`}{A single numeric value to broadcast across the array.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `set`}{
+#'Overwrite the array from an R numeric vector (integer or double).
+#'
+#'The input length must equal `length()`. Each element is cast to the array's
+#'data type (integer-typed arrays truncate toward zero). Useful for setup —
+#'e.g. writing per-agent node assignments or seeding initial states from R.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`values`}{A numeric vector of length `length()`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+Column <- new.env(parent = emptyenv())
+
+Column$length <- function() .Call(wrap__Column__length, self)
+
+Column$dtype <- function() .Call(wrap__Column__dtype, self)
+
+Column$values <- function() .Call(wrap__Column__values, self)
+
+Column$fill <- function(value) .Call(wrap__Column__fill, self, value)
+
+Column$set <- function(values) .Call(wrap__Column__set, self, values)
+
+#' @rdname Column
+#' @usage NULL
+#' @export
+`$.Column` <- function (self, name) { func <- Column[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.Column` <- `$.Column`
 
 # nolint end
