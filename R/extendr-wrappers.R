@@ -26,6 +26,14 @@ laser_states <- function() .Call(wrap__laser_states)
 #' Node-level I counts are computed from current agent states and written to
 #' `nodes$I` (overwriting the previous value).
 #'
+#' **Spatial coupling.** `network` is an `n_nodes × n_nodes` matrix whose
+#' `[i, j]` entry is the fraction of node *i*'s force of infection exported to
+#' node *j*. The per-node force is redistributed before agents are infected:
+#' `lambda[k] = r[k]·(1 - rowSums(W)[k]) + (t(W) %*% r)[k]` with local rate
+#' `r[k] = beta · I[k] / N[k]`. Total force is conserved (off-diagonal row sums
+#' should be in `[0, 1]`). Use an **all-zero matrix** for independent nodes (no
+#' spatial mixing), which leaves `lambda[k] = r[k]`.
+#'
 #' **Required people properties:** `state` (integer), `node` (integer, 0-based),
 #' `timer` (integer).
 #' **Required nodes properties:** `N` (integer, total population per node),
@@ -37,14 +45,21 @@ laser_states <- function() .Call(wrap__laser_states)
 #' @param inf_dist     A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
 #'   infectious period in ticks; sampled per newly infected agent and written to
 #'   `timer` on S→I (rounded to whole ticks, clamped to a minimum of 1).
+#' @param network      An `n_nodes × n_nodes` numeric matrix whose `[i, j]` entry
+#'   is the fraction of node `i`'s force of infection exported to node `j` (see
+#'   Spatial coupling above). Use an all-zero matrix for independent nodes.
 #' @export
-step_transmission_si <- function(people, nodes, beta, inf_dist) .Call(wrap__step_transmission_si, people, nodes, beta, inf_dist)
+step_transmission_si <- function(people, nodes, beta, inf_dist, network) .Call(wrap__step_transmission_si, people, nodes, beta, inf_dist, network)
 
 #' Stochastic S→E exposure step (SEIR kernel).
 #'
 #' Same FOI computation and parallelism as `step_transmission_si`, but newly
 #' exposed agents move to state E and `timer` is set to a draw from `exp_dist`
 #' (incubation period). Pair with `step_exposed_ei` to complete E→I.
+#'
+#' Spatial coupling via `network` works exactly as in [step_transmission_si()]:
+#' an `n_nodes × n_nodes` matrix redistributes the per-node force of infection
+#' before agents are exposed. Use an all-zero matrix for independent nodes.
 #'
 #' **Required people properties:** `state`, `node`, `timer` (all integer).
 #' **Required nodes properties:** `N`, `I` (integer; `I` is overwritten).
@@ -55,8 +70,11 @@ step_transmission_si <- function(people, nodes, beta, inf_dist) .Call(wrap__step
 #' @param exp_dist      A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
 #'   incubation period in ticks; sampled per newly exposed agent and written to
 #'   `timer` on S→E (rounded to whole ticks, clamped to a minimum of 1).
+#' @param network       An `n_nodes × n_nodes` numeric matrix of exported
+#'   force-of-infection fractions (see [step_transmission_si()]); all-zero for
+#'   independent nodes.
 #' @export
-step_transmission_se <- function(people, nodes, beta, exp_dist) .Call(wrap__step_transmission_se, people, nodes, beta, exp_dist)
+step_transmission_se <- function(people, nodes, beta, exp_dist, network) .Call(wrap__step_transmission_se, people, nodes, beta, exp_dist, network)
 
 #' Generalized timer-expiry transition into an *absorbing* (untimed) state.
 #'

@@ -35,7 +35,7 @@ run_sir <- function(n, n_seed = 100L, beta = 0.3, inf_duration = 14L,
 
   for (tick in seq_len(nticks)) {
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
-    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(inf_duration))
+    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(inf_duration), network = matrix(0, 1, 1))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L),
                             sum(ppl$state == 2L),
                             sum(ppl$state == 3L))
@@ -64,7 +64,7 @@ run_seir <- function(n, n_seed = 100L, beta = 0.4, exp_duration = 5L,
   for (tick in seq_len(nticks)) {
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
     step_exposed_ei(ppl, inf_dist = dist_constant(inf_duration))
-    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration))
+    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration), network = matrix(0, 1, 1))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 1L),
                             sum(ppl$state == 2L), sum(ppl$state == 3L))
   }
@@ -155,14 +155,14 @@ test_that("SIR: recovery timer is respected (I duration ≈ inf_duration)", {
 
   for (tick in seq_len(9L)) {
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
-    step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10))
+    step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10), network = matrix(0, 1, 1))
     # ppl$state[1L] reads the first element of the state column. `info=` attaches
     # a label to the failure message so a failing iteration is identifiable;
     # paste() joins its args with a space.
     expect_equal(ppl$state[1L], 2L, info = paste("tick", tick))
   }
   step_infectious_ir(ppl, imm_dist = dist_constant(0))
-  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10))
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(10), network = matrix(0, 1, 1))
   expect_equal(ppl$state[1L], 3L)   # recovered on tick 10
 })
 

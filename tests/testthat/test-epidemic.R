@@ -58,7 +58,7 @@ test_that("step_transmission_si: no infections when beta = 0", {
   nd$N <- n
 
   state_before <- ppl$state   # reads the column into an ordinary R vector (a copy)
-  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14))
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14), network = matrix(0, 1, 1))
 
   # expect_identical is an exact compare (value + type), used here since the step
   # must not have mutated the column at all.
@@ -73,7 +73,7 @@ test_that("step_transmission_si: no infections when no infectious agents", {
   ppl <- make_people(n, state = 0L)
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14))
+  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14), network = matrix(0, 1, 1))
 
   expect_true(all(ppl$state == 0L))
 })
@@ -87,7 +87,7 @@ test_that("step_transmission_si: near-certain infection with very high beta", {
   ppl <- make_people(n, state = c(rep(2L, 500L), rep(0L, 4500L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14))
+  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14), network = matrix(0, 1, 1))
 
   n_remaining_s <- sum(ppl$state == 0L)
   expect_lt(n_remaining_s, 0.05 * 4500L)
@@ -103,7 +103,7 @@ test_that("step_transmission_si: newly infected agents draw timer from inf_dist"
   nd  <- make_nodes(pop = n)
   state_before <- ppl$state
 
-  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14))
+  step_transmission_si(ppl, nd, beta = 0.5, inf_dist = dist_constant(14), network = matrix(0, 1, 1))
 
   # which() returns the integer indices where the logical is TRUE; `&` is the
   # vectorized elementwise AND (`&&` would be scalar-only).
@@ -123,7 +123,7 @@ test_that("step_transmission_si: updates nodes$I with infectious count", {
   ppl <- make_people(n, state = c(rep(2L, 50L), rep(0L, 450L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14))  # beta=0 so no new infections
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(14), network = matrix(0, 1, 1))  # beta=0 so no new infections
 
   expect_equal(nd$I, 50L)
 })
@@ -143,7 +143,7 @@ test_that("step_transmission_si: multi-node FOI is node-local", {
   nd$add_scalar_property("N", "integer", 500L)
   nd$add_scalar_property("I", "integer", 0L)
 
-  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14))
+  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_constant(14), network = matrix(0, 2, 2))
 
   # Logical indexing: ppl$state[nodes == 1L] keeps elements where the mask is TRUE.
   node1_states <- ppl$state[nodes == 1L]
@@ -163,7 +163,7 @@ test_that("step_transmission_se: exposed agents move to E, not I", {
   ppl <- make_people(n, state = c(rep(2L, 200L), rep(0L, 1800L)))
   nd  <- make_nodes(pop = n)
 
-  step_transmission_se(ppl, nd, beta = 0.5, exp_dist = dist_constant(5))
+  step_transmission_se(ppl, nd, beta = 0.5, exp_dist = dist_constant(5), network = matrix(0, 1, 1))
 
   new_exposures <- which(ppl$state == 1L)
   expect_true(length(new_exposures) > 0L)
@@ -278,7 +278,7 @@ test_that("step_infectious_ir: SIR model conserves population", {
   nd  <- make_nodes(pop = n)
 
   for (tick in seq_len(50L)) {
-    step_transmission_si(ppl, nd, beta = 0.3, inf_dist = dist_constant(14))
+    step_transmission_si(ppl, nd, beta = 0.3, inf_dist = dist_constant(14), network = matrix(0, 1, 1))
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
   }
 
@@ -486,7 +486,7 @@ test_that("SEIR model: S only decreases, S+E+I+R is conserved over 100 ticks", {
 
   prev_s <- sum(ppl$state == 0L)
   for (tick in seq_len(100L)) {
-    step_transmission_se(ppl, nd, beta = 0.4, exp_dist = dist_constant(5))
+    step_transmission_se(ppl, nd, beta = 0.4, exp_dist = dist_constant(5), network = matrix(0, 1, 1))
     step_exposed_ei(ppl, inf_dist = dist_constant(7))
     step_infectious_ir(ppl, imm_dist = dist_constant(0))
 

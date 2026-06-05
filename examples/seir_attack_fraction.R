@@ -75,7 +75,7 @@ seir_step <- function(sim, beta) {
   # `sim$ppl` reads a list element; `name = value` passes a named (keyword) arg.
   step_infectious_ir(sim$ppl, imm_dist = sim$imm_dist)
   step_exposed_ei(sim$ppl, inf_dist = sim$inf_dist)
-  step_transmission_se(sim$ppl, sim$nd, beta = beta, exp_dist = sim$exp_dist)
+  step_transmission_se(sim$ppl, sim$nd, beta = beta, exp_dist = sim$exp_dist, network = matrix(0, 1, 1))
 }
 
 # Vectorized compare `state == code` -> logical vector; `sum` counts the TRUEs.

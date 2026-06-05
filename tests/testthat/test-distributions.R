@@ -296,7 +296,7 @@ test_that("step_transmission_si: newly infected agents draw their timer from any
   nd$add_scalar_property("I", "integer", 0L)
 
   state_before <- ppl$state
-  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_uniform(10, 20))
+  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_uniform(10, 20), network = matrix(0, 1, 1))
 
   # `which(logical_vec)` returns the 1-based indices where the condition is TRUE
   # (here: was S, now I). `ppl$timer[newly_infected]` then gathers those agents' timers.

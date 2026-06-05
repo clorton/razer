@@ -143,6 +143,84 @@ fn duration_ticks(x: f64) -> i32 {
     x.round().max(1.0) as i32
 }
 
+// ── Spatial coupling of the force of infection ──────────────────────────────────
+//
+// Mirrors laser-generic's `network` redistribution (components.py, TransmissionSI /
+// TransmissionSE). The matrix `W` is n_nodes × n_nodes; `W[i, j]` is the fraction
+// of node i's locally generated force of infection that is *exported* to node j.
+// Total force is conserved: a node keeps `1 - sum_j W[i, j]` of its own force and
+// receives `sum_i r[i]·W[i, k]` imported from every other node.
+
+// Parse the `network` argument into a column-major `Vec<f64>` of n_nodes*n_nodes
+// entries. There is no "no coupling" special case — independent nodes are
+// expressed with an all-zero matrix (which leaves the rate uncoupled).
+//
+// `Robj` is extendr's handle to any R value. An R matrix is just a vector
+// carrying a `dim` attribute, stored COLUMN-MAJOR, so `W[i, j]` lives at index
+// `i + j*n_nodes` — the same layout the LaserFrame vector properties use.
+fn parse_network(network: &Robj, n_nodes: usize) -> Vec<f64> {
+    // `as_real_slice()` borrows the f64 buffer of a REALSXP (R "double"), and
+    // `as_integer_slice()` an integer matrix. `if let Some(s) = ...` is Rust's
+    // match-on-`Option` shorthand (Some = present, None = absent). We copy into an
+    // owned Vec so no borrow on `network` outlives this call.
+    let data: Vec<f64> = if let Some(s) = network.as_real_slice() {
+        s.to_vec()
+    } else if let Some(s) = network.as_integer_slice() {
+        s.iter().map(|&x| x as f64).collect()
+    } else {
+        panic!("`network` must be a numeric matrix");
+    };
+    assert_eq!(
+        data.len(),
+        n_nodes * n_nodes,
+        "`network` must be an {n_nodes} x {n_nodes} matrix ({} elements), got {}",
+        n_nodes * n_nodes,
+        data.len()
+    );
+    data
+}
+
+// Compute the per-node infection probability for one transmission step.
+//
+// `i_counts[k]` is node k's current infectious count and `n_pop[k]` its
+// population, so the local force-of-infection RATE is `r[k] = beta·I[k]/N[k]`.
+// The rate is redistributed across nodes through the network W:
+//
+//     lambda[k] = r[k]·(1 - Σ_j W[k, j])  +  Σ_i r[i]·W[i, k]
+//
+// An all-zero W leaves `lambda[k] = r[k]` (independent nodes). The returned
+// per-node probability is `p[k] = 1 - exp(-lambda[k])` (the standard
+// rate→Bernoulli conversion, R's `-expm1(-lambda)`).
+fn infection_probability(
+    i_counts: &[i32],
+    n_pop: &[i32],
+    beta: f64,
+    network: &[f64],
+    n_nodes: usize,
+) -> Vec<f64> {
+    // Local FOI rate per node; guard against an empty node (N == 0).
+    // `(0..n_nodes).map(...).collect()` is a lazy range → transform → materialize,
+    // like a Python comprehension `[... for k in range(n_nodes)]`.
+    let r: Vec<f64> = (0..n_nodes)
+        .map(|k| {
+            let n = n_pop[k] as f64;
+            if n > 0.0 { beta * i_counts[k] as f64 / n } else { 0.0 }
+        })
+        .collect();
+
+    // Redistribute each node's rate through W (`W[i, j]` at `network[i + j*n_nodes]`).
+    // `.map(|j| ...).sum()` is a lazy iterator pipeline with no intermediate alloc.
+    let lambda: Vec<f64> = (0..n_nodes)
+        .map(|k| {
+            let row_sum: f64 = (0..n_nodes).map(|j| network[k + j * n_nodes]).sum();        // exported share
+            let incoming: f64 = (0..n_nodes).map(|i| r[i] * network[i + k * n_nodes]).sum(); // imported force
+            r[k] * (1.0 - row_sum) + incoming
+        })
+        .collect();
+
+    lambda.iter().map(|&l| 1.0 - (-l).exp()).collect()
+}
+
 // ── Transmission kernels ──────────────────────────────────────────────────────
 
 /// Stochastic S→I transmission step (SI / SIR kernel).
@@ -157,6 +235,14 @@ fn duration_ticks(x: f64) -> i32 {
 /// Node-level I counts are computed from current agent states and written to
 /// `nodes$I` (overwriting the previous value).
 ///
+/// **Spatial coupling.** `network` is an `n_nodes × n_nodes` matrix whose
+/// `[i, j]` entry is the fraction of node *i*'s force of infection exported to
+/// node *j*. The per-node force is redistributed before agents are infected:
+/// `lambda[k] = r[k]·(1 - rowSums(W)[k]) + (t(W) %*% r)[k]` with local rate
+/// `r[k] = beta · I[k] / N[k]`. Total force is conserved (off-diagonal row sums
+/// should be in `[0, 1]`). Use an **all-zero matrix** for independent nodes (no
+/// spatial mixing), which leaves `lambda[k] = r[k]`.
+///
 /// **Required people properties:** `state` (integer), `node` (integer, 0-based),
 /// `timer` (integer).
 /// **Required nodes properties:** `N` (integer, total population per node),
@@ -168,6 +254,9 @@ fn duration_ticks(x: f64) -> i32 {
 /// @param inf_dist     A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
 ///   infectious period in ticks; sampled per newly infected agent and written to
 ///   `timer` on S→I (rounded to whole ticks, clamped to a minimum of 1).
+/// @param network      An `n_nodes × n_nodes` numeric matrix whose `[i, j]` entry
+///   is the fraction of node `i`'s force of infection exported to node `j` (see
+///   Spatial coupling above). Use an all-zero matrix for independent nodes.
 /// @export
 #[extendr]
 fn step_transmission_si(
@@ -175,6 +264,7 @@ fn step_transmission_si(
     nodes: &mut LaserFrame,
     beta: f64,
     inf_dist: &Distribution,
+    network: Robj,
 ) {
     let count   = people.count;
     let n_nodes = nodes.count;
@@ -237,43 +327,35 @@ fn step_transmission_si(
             },
         );
 
-    // Write pre-FOI I counts to the nodes frame.
+    // Write the pre-FOI infectious counts to the nodes frame.
     i_out.copy_from_slice(&i_counts); // equivalent to memcpy
 
-    // ── Parallel stochastic FOI ───────────────────────────────────────────────
-    // par_iter_mut() splits state[0..count] into contiguous chunks — one per
-    // Rayon worker thread — matching numba's prange pattern.  zip() binds each
-    // (s, t) pair with the corresponding n_idx; the compiler sees them as a
-    // single unit owned by one thread.
-    // for_each_init() builds one thread_rng per worker (Pattern B: the kernel
-    // owns the RNG); the same rng drives both the Bernoulli infection draw and
-    // the infectious-period draw from the shared `inf_dist`.
-    // The two `.zip(...)` calls nest the items as `((s, t), n_idx)`; the closure
-    // parameter `|rng, ((s, t), &n_idx)|` destructures that nesting in place
-    // (`s` and `t` are `&mut i32`, `&n_idx` binds the i32 *by value*, copying out
-    // of the `&i32` the iterator yields). `for_each_init(init, body)` calls `init`
-    // once per worker thread to make the per-thread state (`rng`) and passes it by
-    // `&mut` into every `body` call on that thread.
+    // ── Per-node infection probability (with spatial coupling) ────────────────
+    // `parse_network` reads the n×n matrix as a column-major Vec; an all-zero
+    // matrix leaves the rate uncoupled (independent nodes).
+    let net = parse_network(&network, n_nodes);
+    let probs = infection_probability(&i_counts, n_pop, beta, &net, n_nodes);
+
+    // ── Parallel stochastic infection ─────────────────────────────────────────
+    // par_iter_mut() splits state[0..count] into contiguous chunks — one per Rayon
+    // worker thread — matching numba's prange pattern. The two `.zip(...)` calls
+    // nest the items as `((s, t), n_idx)`; the closure parameter
+    // `|rng, ((s, t), &n_idx)|` destructures that nesting in place (`s`/`t` are
+    // `&mut i32`; `&n_idx` copies the node id out by value). for_each_init() builds
+    // one thread_rng per worker (Pattern B: the kernel owns the RNG) and passes it
+    // by `&mut` into every call on that thread.
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .zip(node.par_iter())
         .for_each_init(rand::thread_rng, |rng, ((s, t), &n_idx)| {
             if *s == STATE_S {                       // `*s` dereferences the &mut i32 to read it
-                let n = n_pop[n_idx as usize] as f64;
-                if n > 0.0 {
-                    // Force of infection λ, then per-tick infection probability
-                    // p = 1 - e^(-λ). `(-lambda).exp()` is method-call math:
-                    // negate, then `.exp()` (Rust has no global `exp()` function).
-                    let lambda = beta * i_counts[n_idx as usize] as f64 / n;
-                    let p = 1.0 - (-lambda).exp();
-                    // `gen::<f64>()` draws a uniform in [0, 1). The `::<f64>` is a
-                    // "turbofish" — explicit type argument for the generic method,
-                    // like `gen<double>()` in C++/C#.
-                    if rng.gen::<f64>() < p {
-                        *s = STATE_I;                // write through the &mut: S -> I
-                        *t = duration_ticks(inf_dist.sample(rng));   // set this agent's infectious timer
-                    }
+                let p = probs[n_idx as usize];       // per-node probability computed above
+                // `gen::<f64>()` draws a uniform in [0, 1); the `::<f64>` turbofish
+                // is an explicit type argument, like `gen<double>()` in C++/C#.
+                if p > 0.0 && rng.gen::<f64>() < p {
+                    *s = STATE_I;                    // write through the &mut: S -> I
+                    *t = duration_ticks(inf_dist.sample(rng));   // set this agent's infectious timer
                 }
             }
         });
@@ -287,6 +369,10 @@ fn step_transmission_si(
 /// exposed agents move to state E and `timer` is set to a draw from `exp_dist`
 /// (incubation period). Pair with `step_exposed_ei` to complete E→I.
 ///
+/// Spatial coupling via `network` works exactly as in [step_transmission_si()]:
+/// an `n_nodes × n_nodes` matrix redistributes the per-node force of infection
+/// before agents are exposed. Use an all-zero matrix for independent nodes.
+///
 /// **Required people properties:** `state`, `node`, `timer` (all integer).
 /// **Required nodes properties:** `N`, `I` (integer; `I` is overwritten).
 ///
@@ -296,6 +382,9 @@ fn step_transmission_si(
 /// @param exp_dist      A `Distribution` (e.g. `dist_constant()` or `dist_normal()`) giving the
 ///   incubation period in ticks; sampled per newly exposed agent and written to
 ///   `timer` on S→E (rounded to whole ticks, clamped to a minimum of 1).
+/// @param network       An `n_nodes × n_nodes` numeric matrix of exported
+///   force-of-infection fractions (see [step_transmission_si()]); all-zero for
+///   independent nodes.
 /// @export
 #[extendr]
 fn step_transmission_se(
@@ -303,6 +392,7 @@ fn step_transmission_se(
     nodes: &mut LaserFrame,
     beta: f64,
     exp_dist: &Distribution,
+    network: Robj,
 ) {
     let count   = people.count;
     let n_nodes = nodes.count;
@@ -345,23 +435,21 @@ fn step_transmission_se(
 
     i_out.copy_from_slice(&i_counts);
 
-    // Identical structure to step_transmission_si's FOI loop (see there for the
-    // closure-destructuring, turbofish, and `(-lambda).exp()` idiom notes); the
-    // only difference is the destination state E instead of I.
+    // Per-node infection probability with spatial coupling, exactly as in
+    // step_transmission_si; the only difference is the destination state E.
+    let net = parse_network(&network, n_nodes);
+    let probs = infection_probability(&i_counts, n_pop, beta, &net, n_nodes);
+
     state
         .par_iter_mut()
         .zip(timer.par_iter_mut())
         .zip(node.par_iter())
         .for_each_init(rand::thread_rng, |rng, ((s, t), &n_idx)| {
             if *s == STATE_S {
-                let n = n_pop[n_idx as usize] as f64;
-                if n > 0.0 {
-                    let lambda = beta * i_counts[n_idx as usize] as f64 / n;
-                    let p = 1.0 - (-lambda).exp();
-                    if rng.gen::<f64>() < p {
-                        *s = STATE_E;                              // S -> E (exposed)
-                        *t = duration_ticks(exp_dist.sample(rng)); // set incubation timer
-                    }
+                let p = probs[n_idx as usize];
+                if p > 0.0 && rng.gen::<f64>() < p {
+                    *s = STATE_E;                              // S -> E (exposed)
+                    *t = duration_ticks(exp_dist.sample(rng)); // set incubation timer
                 }
             }
         });

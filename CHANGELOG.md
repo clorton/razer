@@ -4,7 +4,30 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Changed
+- **Breaking:** `step_transmission_si()` and `step_transmission_se()` now take a
+  required fifth argument, `network`, enabling spatial coupling of contagion (see
+  Added). razer is spatial-first: there is no "no coupling" special case — pass an
+  **all-zero matrix** to run nodes independently (identical to the previous
+  per-node force of infection). All existing callers were updated.
+
 ### Added
+- **Spatial coupling of contagion** via the new `network` argument on
+  `step_transmission_si()` and `step_transmission_se()`, porting laser-generic's
+  force-of-infection redistribution model. The `network` is an `n_nodes × n_nodes`
+  matrix whose `[i, j]` entry is the fraction of node *i*'s force of infection
+  exported to node *j*; the per-node coupled rate is
+  `lambda[k] = r[k]·(1 - rowSums(W)[k]) + (t(W) %*% r)[k]` with local rate
+  `r[k] = beta·I[k]/N[k]`, converted to a probability `p[k] = 1 - exp(-lambda[k])`.
+  Total force of infection is conserved and the diagonal cancels (self-export has
+  no effect). An all-zero matrix leaves `lambda[k] = r[k]` (independent nodes) —
+  a convenient "poor man's" batch of parallel single-node runs in one call.
+  `run_sir()` gains a required `network` parameter that validates
+  shape / non-negativity / off-diagonal row-sum ≤ 1 and threads the matrix
+  through. Covered by `tests/testthat/test-transmission-network.R` (directional
+  leak, unconnected-node isolation, FOI-magnitude and diagonal-cancellation checks
+  against the formula, all-zero independence, shape validation) plus additional
+  `run_sir()` network cases.
 - `run_sir()` — a high-level **model runner** that assembles the per-tick step
   kernels and their parameters into a single call (`R/models.R`). It takes a node
   data.frame (one row per node, an integer `population` column), builds an agent

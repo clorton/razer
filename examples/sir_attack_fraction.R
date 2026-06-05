@@ -95,7 +95,7 @@ sir_step <- function(sim, beta) {
   # `sim$ppl` reads the `ppl` element of the list; `name = value` at a call site
   # passes a named argument (order-independent, like a keyword argument).
   step_infectious_ir(sim$ppl, imm_dist = sim$imm_dist)
-  step_transmission_si(sim$ppl, sim$nd, beta = beta, inf_dist = sim$inf_dist)
+  step_transmission_si(sim$ppl, sim$nd, beta = beta, inf_dist = sim$inf_dist, network = matrix(0, 1, 1))
 }
 
 # One-line closure. `sim$ppl$state == code` is a vectorized elementwise compare

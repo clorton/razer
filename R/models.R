@@ -88,6 +88,13 @@ count_by_node <- function(state, node_ids, code, n_nodes) {
 #' @param infectious_period Infectious period in ticks: either a `Distribution`
 #'   (e.g. `dist_gamma(...)`) or a single number (a fixed period).
 #' @param nticks Number of ticks to simulate (a positive integer).
+#' @param network Spatial coupling of the force of infection: an `nrow(nodes)` ×
+#'   `nrow(nodes)` numeric matrix whose `[i, j]` entry is the fraction of node
+#'   `i`'s force of infection exported to node `j` (the laser-generic `network`
+#'   model). Entries must be non-negative and each row's off-diagonal sum must not
+#'   exceed 1; the diagonal has no effect (self-export cancels). Pass an
+#'   **all-zero matrix** to run the nodes independently — handy as a "poor man's"
+#'   batch of parallel single-node runs in one call.
 #' @param seed Initial number of infectious agents per node: either one number
 #'   (applied to every node) or a vector of length `nrow(nodes)`. Defaults to 0
 #'   (no infections — supply a positive seed to start an epidemic).
@@ -98,14 +105,23 @@ count_by_node <- function(state, node_ids, code, n_nodes) {
 #'
 #' @examples
 #' nodes <- data.frame(population = c(10000, 5000))
-#' model <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
-#'                  seed = c(10, 0))
-#' report <- attr(model, "report")
-#' tail(t(report$I))        # infectious count over time, per node
+#'
+#' # Two independent nodes (all-zero network): a batch of single-node epidemics
+#' # in one call. Each node's trajectory depends only on its own seed.
+#' indep <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
+#'                  network = matrix(0, 2, 2), seed = c(10, 10))
+#' report <- attr(indep, "report")
+#' tail(t(report$I))          # infectious count over time, per node
 #' colSums(report$incidence)  # total new infections per node
-#' attr(model, "runtime")
+#'
+#' # Coupled nodes: node 1 exports 20% of its force of infection to node 2, so an
+#' # epidemic seeded only in node 1 can spread into node 2.
+#' W <- matrix(c(0, 0.2,
+#'               0, 0), nrow = 2, byrow = TRUE)
+#' coupled <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
+#'                    network = W, seed = c(10, 0))
 #' @export
-run_sir <- function(nodes, beta, infectious_period, nticks,
+run_sir <- function(nodes, beta, infectious_period, nticks, network,
                     seed = 0L, progress = FALSE) {
   # ── validate the scenario table ─────────────────────────────────────────────
   if (!is.data.frame(nodes))
@@ -132,6 +148,23 @@ run_sir <- function(nodes, beta, infectious_period, nticks,
     stop("`seed` must have length 1 or nrow(nodes)")
   if (anyNA(seed) || any(seed < 0L) || any(seed > pops))
     stop("`seed` must be between 0 and each node's population")
+
+  # Spatial coupling matrix. Required: an n_nodes x n_nodes matrix whose [i, j]
+  # entry is the fraction of node i's force of infection exported to node j. Use
+  # an all-zero matrix for independent nodes. We validate shape and the row-sum
+  # constraint here so callers get a clear R-level error rather than a silent
+  # negative FOI.
+  if (!is.matrix(network) || !is.numeric(network) ||
+      nrow(network) != n_nodes || ncol(network) != n_nodes)
+    stop(sprintf("`network` must be an %d x %d numeric matrix (all-zero for independent nodes)",
+                 n_nodes, n_nodes))
+  if (anyNA(network) || any(network < 0))
+    stop("`network` entries must be non-negative and non-missing")
+  # Diagonal cancels in the redistribution, so only off-diagonal export counts.
+  offdiag_rowsums <- rowSums(network) - diag(network)
+  if (any(offdiag_rowsums > 1 + 1e-8))
+    stop("each row of `network` may export at most its full force of infection ",
+         "(off-diagonal row sums must not exceed 1)")
 
   # State codes as a named integer vector: states[["S"]] == 0L, etc.
   states <- laser_states()
@@ -224,7 +257,8 @@ run_sir <- function(nodes, beta, infectious_period, nticks,
       mid <- tally()                       # after recovery, before transmission
       recovery <- cur$I - mid$I            # agents that left I this tick, per node
 
-      step_transmission_si(people, nd, beta = beta, inf_dist = inf_dist)
+      step_transmission_si(people, nd, beta = beta, inf_dist = inf_dist,
+                           network = network)
       new <- tally()                       # after transmission
       incidence <- cur$S - new$S           # agents that left S this tick, per node
 
@@ -247,6 +281,7 @@ run_sir <- function(nodes, beta, infectious_period, nticks,
   attr(people, "model")      <- "SIR"
   attr(people, "nticks")     <- nticks
   attr(people, "runtime")    <- elapsed
-  attr(people, "parameters") <- list(beta = beta, infectious_period = inf_dist)
+  attr(people, "parameters") <- list(beta = beta, infectious_period = inf_dist,
+                                     network = network)
   people
 }

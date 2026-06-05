@@ -4,7 +4,15 @@
 \alias{run_sir}
 \title{Run an agent-based SIR model.}
 \usage{
-run_sir(nodes, beta, infectious_period, nticks, seed = 0L, progress = FALSE)
+run_sir(
+  nodes,
+  beta,
+  infectious_period,
+  nticks,
+  network,
+  seed = 0L,
+  progress = FALSE
+)
 }
 \arguments{
 \item{nodes}{A data.frame with one row per geographic node and an integer
@@ -17,6 +25,14 @@ tick).}
 (e.g. \code{dist_gamma(...)}) or a single number (a fixed period).}
 
 \item{nticks}{Number of ticks to simulate (a positive integer).}
+
+\item{network}{Spatial coupling of the force of infection: an \code{nrow(nodes)} ×
+\code{nrow(nodes)} numeric matrix whose \verb{[i, j]} entry is the fraction of node
+\code{i}'s force of infection exported to node \code{j} (the laser-generic \code{network}
+model). Entries must be non-negative and each row's off-diagonal sum must not
+exceed 1; the diagonal has no effect (self-export cancels). Pass an
+\strong{all-zero matrix} to run the nodes independently — handy as a "poor man's"
+batch of parallel single-node runs in one call.}
 
 \item{seed}{Initial number of infectious agents per node: either one number
 (applied to every node) or a vector of length \code{nrow(nodes)}. Defaults to 0
@@ -58,10 +74,19 @@ Pull a matrix with \code{attr(model, "report")$I} (counts) or transpose with
 }
 \examples{
 nodes <- data.frame(population = c(10000, 5000))
-model <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
-                 seed = c(10, 0))
-report <- attr(model, "report")
-tail(t(report$I))        # infectious count over time, per node
+
+# Two independent nodes (all-zero network): a batch of single-node epidemics
+# in one call. Each node's trajectory depends only on its own seed.
+indep <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
+                 network = matrix(0, 2, 2), seed = c(10, 10))
+report <- attr(indep, "report")
+tail(t(report$I))          # infectious count over time, per node
 colSums(report$incidence)  # total new infections per node
-attr(model, "runtime")
+
+# Coupled nodes: node 1 exports 20\% of its force of infection to node 2, so an
+# epidemic seeded only in node 1 can spread into node 2.
+W <- matrix(c(0, 0.2,
+              0, 0), nrow = 2, byrow = TRUE)
+coupled <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 160,
+                   network = W, seed = c(10, 0))
 }

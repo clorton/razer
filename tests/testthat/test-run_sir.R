@@ -6,8 +6,10 @@
 # Written given-when-then. testthat idioms: `expect_*` assertions; `L` marks an
 # integer literal; `set.seed` fixes the RNG so stochastic runs are reproducible.
 
-# Helper: a deterministic two-node scenario reused across tests.
+# Helpers: a deterministic two-node scenario, and the all-zero network that runs
+# those two nodes independently (no spatial mixing).
 two_nodes <- function() data.frame(population = c(10000L, 5000L))
+no_coupling <- function() matrix(0, 2L, 2L)
 
 test_that("run_sir assigns agents to nodes by population count", {
   # Given a two-node table with populations 10000 and 5000
@@ -19,7 +21,7 @@ test_that("run_sir assigns agents to nodes by population count", {
   nodes <- two_nodes()
   set.seed(1L)
   model <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 5L,
-                   seed = c(5L, 0L))
+                   network = no_coupling(), seed = c(5L, 0L))
 
   expect_equal(model$count, 15000L)
   node_counts <- tabulate(model$node + 1L, nbins = 2L)  # +1L: 0-based -> 1-based
@@ -36,7 +38,7 @@ test_that("run_sir seeds the requested number of infectious agents per node", {
   nodes <- two_nodes()
   set.seed(2L)
   model <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 10L,
-                   seed = c(10L, 0L))
+                   network = no_coupling(), seed = c(10L, 0L))
   report <- attr(model, "report")
 
   expect_equal(report$I[, 1L], c(10L, 0L))
@@ -53,7 +55,7 @@ test_that("run_sir conserves population within each node at every tick", {
   nodes <- two_nodes()
   set.seed(3L)
   model <- run_sir(nodes, beta = 0.4, infectious_period = 6, nticks = 80L,
-                   seed = c(20L, 5L))
+                   network = no_coupling(), seed = c(20L, 5L))
   report <- attr(model, "report")
 
   totals <- report$S + report$I + report$R   # element-wise over the [2 x 81] matrices
@@ -71,7 +73,7 @@ test_that("run_sir flows equal the source-compartment deltas", {
   set.seed(4L)
   nticks <- 100L
   model <- run_sir(nodes, beta = 0.35, infectious_period = 8, nticks = nticks,
-                   seed = c(15L, 3L))
+                   network = no_coupling(), seed = c(15L, 3L))
   report <- attr(model, "report")
 
   s_drop <- report$S[, seq_len(nticks)] - report$S[, seq_len(nticks) + 1L]
@@ -90,22 +92,23 @@ test_that("run_sir with zero seed produces no epidemic", {
   nodes <- two_nodes()
   set.seed(5L)
   model <- run_sir(nodes, beta = 0.5, infectious_period = 7, nticks = 30L,
-                   seed = 0L)
+                   network = no_coupling(), seed = 0L)
   report <- attr(model, "report")
 
   expect_true(all(report$incidence == 0L))
   expect_equal(report$S[, ncol(report$S)], c(10000L, 5000L))
 })
 
-test_that("run_sir does not mix infection across unconnected nodes", {
-  # Given infection seeded only in node 1 and no migration between nodes
-  # When the model runs
-  # Then node 2 (the unseeded node) never sees an infection.
+test_that("an all-zero network runs nodes independently (poor man's parallelism)", {
+  # Given infection seeded only in node 1 and an all-zero network (no coupling)
+  # When the model runs both nodes in one call
+  # Then node 2 (the unseeded node) never sees an infection — the two nodes are a
+  #      batch of independent single-node runs.
   # Failure would mean the per-node force of infection is leaking across nodes.
   nodes <- two_nodes()
   set.seed(6L)
   model <- run_sir(nodes, beta = 0.6, infectious_period = 7, nticks = 60L,
-                   seed = c(50L, 0L))
+                   network = no_coupling(), seed = c(50L, 0L))
   report <- attr(model, "report")
 
   expect_true(all(report$I[2L, ] == 0L))
@@ -121,7 +124,7 @@ test_that("run_sir attaches report and run metadata to the returned frame", {
   nodes <- two_nodes()
   set.seed(7L)
   model <- run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 25L,
-                   seed = c(10L, 0L))
+                   network = no_coupling(), seed = c(10L, 0L))
 
   expect_s3_class(attr(model, "report"), "LaserFrame")
   expect_equal(attr(model, "model"), "SIR")
@@ -143,12 +146,51 @@ test_that("run_sir accepts a Distribution for the infectious period", {
   nodes <- two_nodes()
   set.seed(8L)
   model <- run_sir(nodes, beta = 0.4, infectious_period = dist_gamma(2, 3.5),
-                   nticks = 50L, seed = c(20L, 0L))
+                   nticks = 50L, network = no_coupling(), seed = c(20L, 0L))
   report <- attr(model, "report")
 
   expect_true(all(report$S + report$I + report$R == matrix(c(10000L, 5000L),
                                                             nrow = 2L,
                                                             ncol = 51L)))
+})
+
+test_that("run_sir with a network spreads infection to a connected node", {
+  # Given infection seeded only in node 1 and a network exporting part of node
+  #       1's force to node 2 (W[1, 2] > 0)
+  # When the model runs
+  # Then node 2 — empty at seeding — acquires an epidemic, in contrast to the
+  #      all-zero-network case where it stays empty.
+  # Failure would mean run_sir does not thread the network through to the kernel.
+  nodes <- two_nodes()
+  W <- matrix(c(0, 0.3,
+                0, 0), nrow = 2L, byrow = TRUE)  # node 1 -> node 2
+  set.seed(9L)
+  model <- run_sir(nodes, beta = 0.4, infectious_period = 8, nticks = 120L,
+                   seed = c(20L, 0L), network = W)
+  report <- attr(model, "report")
+
+  expect_gt(sum(report$incidence[2L, ]), 0L)              # node 2 had infections
+  expect_true(all(report$S + report$I + report$R ==      # still conserved
+                  matrix(c(10000L, 5000L), nrow = 2L, ncol = 121L)))
+})
+
+test_that("run_sir validates the network matrix", {
+  # Given network matrices that violate the documented contract
+  # When run_sir is called
+  # Then each violation raises an informative error before the run starts.
+  # Failure would let an ill-posed coupling produce a negative force of infection.
+  nodes <- two_nodes()
+  expect_error(run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 5L,
+                       network = matrix(0, 3L, 3L)),
+               "2 x 2")
+  expect_error(run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 5L,
+                       network = matrix(-0.1, 2L, 2L)),
+               "non-negative")
+  # Off-diagonal row sum > 1 (export more than the full force).
+  bad <- matrix(c(0, 1.5, 0, 0), nrow = 2L, byrow = TRUE)
+  expect_error(run_sir(nodes, beta = 0.3, infectious_period = 7, nticks = 5L,
+                       network = bad),
+               "off-diagonal row sums")
 })
 
 test_that("run_sir validates its scenario table and arguments", {

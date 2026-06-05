@@ -4,7 +4,7 @@
 \alias{step_transmission_si}
 \title{Stochastic S→I transmission step (SI / SIR kernel).}
 \usage{
-step_transmission_si(people, nodes, beta, inf_dist)
+step_transmission_si(people, nodes, beta, inf_dist, network)
 }
 \arguments{
 \item{people}{LaserFrame of agents.}
@@ -16,6 +16,10 @@ step_transmission_si(people, nodes, beta, inf_dist)
 \item{inf_dist}{A \code{Distribution} (e.g. \code{dist_constant()} or \code{dist_normal()}) giving the
 infectious period in ticks; sampled per newly infected agent and written to
 \code{timer} on S→I (rounded to whole ticks, clamped to a minimum of 1).}
+
+\item{network}{An \verb{n_nodes × n_nodes} numeric matrix whose \verb{[i, j]} entry
+is the fraction of node \code{i}'s force of infection exported to node \code{j} (see
+Spatial coupling above). Use an all-zero matrix for independent nodes.}
 }
 \description{
 \strong{Parallelism:} the active agent array is split into fixed chunks — one per
@@ -28,6 +32,14 @@ All operations are performed in-place on the backing arrays; no copies are made.
 
 Node-level I counts are computed from current agent states and written to
 \code{nodes$I} (overwriting the previous value).
+
+\strong{Spatial coupling.} \code{network} is an \verb{n_nodes × n_nodes} matrix whose
+\verb{[i, j]} entry is the fraction of node \emph{i}'s force of infection exported to
+node \emph{j}. The per-node force is redistributed before agents are infected:
+\verb{lambda[k] = r[k]·(1 - rowSums(W)[k]) + (t(W) \%*\% r)[k]} with local rate
+\verb{r[k] = beta · I[k] / N[k]}. Total force is conserved (off-diagonal row sums
+should be in \verb{[0, 1]}). Use an \strong{all-zero matrix} for independent nodes (no
+spatial mixing), which leaves \code{lambda[k] = r[k]}.
 
 \strong{Required people properties:} \code{state} (integer), \code{node} (integer, 0-based),
 \code{timer} (integer).

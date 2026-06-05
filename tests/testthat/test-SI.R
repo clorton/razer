@@ -41,7 +41,7 @@ run_si <- function(n, n_seed = 100L, beta = 0.3, nticks = 200L, seed = 42L) {
   # for (x in vec) is R's foreach; seq_len(nticks) is the 1..nticks index range.
   for (tick in seq_len(nticks)) {
     # step kernels take a Distribution object (dist_constant(n)) for the timer draw.
-    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(n))
+    step_transmission_si(ppl, nd, beta = beta, inf_dist = dist_constant(n), network = matrix(0, 1, 1))
     # `ppl$state == 0L` is a vectorized elementwise compare → logical vector;
     # sum() of a logical counts the TRUEs (vectorized population tally).
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 2L))
@@ -123,6 +123,6 @@ test_that("SI: nodes$I reflects pre-step infectious count each tick", {
   nd <- LaserFrame$new(1L, 1L)
   nd$add_scalar_property("N", "integer", 1000L)
   nd$add_scalar_property("I", "integer", 0L)
-  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(1))
+  step_transmission_si(ppl, nd, beta = 0.0, inf_dist = dist_constant(1), network = matrix(0, 1, 1))
   expect_equal(nd$I, 200L)   # nd$I reads the scalar property back from the frame
 })

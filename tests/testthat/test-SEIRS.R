@@ -42,7 +42,7 @@ run_seirs <- function(n, n_seed = 200L, beta = 0.5, exp_duration = 3L,
     step_recovered_rs(ppl)   # R→S waning; counts down the timer drawn from imm_dist by step_infectious_ir
     step_infectious_ir(ppl, imm_dist = dist_constant(imm_duration))
     step_exposed_ei(ppl,    inf_dist = dist_constant(inf_duration))
-    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration))
+    step_transmission_se(ppl, nd, beta = beta, exp_dist = dist_constant(exp_duration), network = matrix(0, 1, 1))
     traj[tick + 1L, ] <- c(sum(ppl$state == 0L), sum(ppl$state == 1L),
                             sum(ppl$state == 2L), sum(ppl$state == 3L))
   }
