@@ -121,6 +121,17 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   has_step_clearance <- !model %in% c("SI", "SEI")     # I leaves I (recovery/clearance)
   absorbing <- if (model %in% c("SIS", "SEIS")) states[["S"]] else states[["R"]]
 
+  # Warn about inputs the chosen model does not use — usually a typo'd model name or a
+  # wrong expectation (e.g. an `E` column or `incubation_period` passed to SIR).
+  if (!has_E  && "E" %in% names(scenario))
+    warning(sprintf("model %s has no E compartment; the scenario's `E` column is ignored", model))
+  if (!has_R  && "R" %in% names(scenario))
+    warning(sprintf("model %s has no R compartment; the scenario's `R` column is ignored", model))
+  if (!has_E  && !is.null(incubation_period))
+    warning(sprintf("model %s has no E compartment; `incubation_period` is ignored", model))
+  if (!waning && !is.null(immunity_period))
+    warning(sprintf("model %s does not have waning immunity; `immunity_period` is ignored", model))
+
   inf_dist <- .as_dist(infectious_period, "infectious_period")
   inc_dist <- if (has_E) .as_dist(incubation_period, "incubation_period") else NULL
   imm_dist <- if (waning) .as_dist(immunity_period, "immunity_period") else NULL

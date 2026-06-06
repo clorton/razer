@@ -3,11 +3,14 @@
 # deltas. Closed population (no births/deaths), so the living compartments sum to N at
 # every tick. Written given-when-then.
 
-# Run each model with the durations it needs; returns the result.
+# Run each model with the durations it needs; returns the result. We pass every period for
+# convenience, so models lacking E/waning warn that those are ignored (see the dedicated
+# warning test) — suppress that expected noise here.
 run_one <- function(model, nticks = 60L, n = 20000L, seed = 1L) {
   scenario <- data.frame(population = n, I = 50L)
-  run_model(scenario, model, nticks = nticks, r0 = 2.5,
-            infectious_period = 8, incubation_period = 5, immunity_period = 60, seed = seed)
+  suppressWarnings(
+    run_model(scenario, model, nticks = nticks, r0 = 2.5,
+              infectious_period = 8, incubation_period = 5, immunity_period = 60, seed = seed))
 }
 
 # Sum the present census compartments at each recorded tick (an n_ticks-length vector).
@@ -153,7 +156,23 @@ test_that("run_model seeds only states the model has (item 3)", {
   expect_equal(seir$nodes$R$values()[1L, 1L], 5L)
   expect_equal(seir$nodes$S$values()[1L, 1L], 1000L - 10L - 30L - 5L)
 
-  sir <- run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6, seed = 1L)
+  sir <- suppressWarnings(                            # SIR ignores the E column (warns; see below)
+    run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6, seed = 1L))
   expect_null(sir$nodes$E)                            # SIR has no E census
   expect_equal(sir$nodes$S$values()[1L, 1L], 1000L - 10L - 5L)  # the 30 "E" stay S
+})
+
+test_that("run_model warns about inputs the chosen model does not use", {
+  # Given a model lacking a compartment/parameter that the caller still supplies
+  # When run_model runs
+  # Then it warns (rather than silently ignoring the input) — catching typos and wrong
+  #      expectations. Failure would let an ignored E column or unused period pass silently.
+  scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
+  expect_warning(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6), "no E compartment")
+  expect_warning(run_model(data.frame(population = 1000L, I = 10L), "SIS",
+                           nticks = 5L, r0 = 2, infectious_period = 6, immunity_period = 30),
+                 "immunity_period")
+  expect_warning(run_model(data.frame(population = 1000L, I = 10L), "SIR",
+                           nticks = 5L, r0 = 2, infectious_period = 6, incubation_period = 4),
+                 "incubation_period")
 })
