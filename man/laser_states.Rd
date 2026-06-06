@@ -7,9 +7,10 @@
 laser_states()
 }
 \value{
-Named integer vector with elements S, E, I, R, D.
+Named integer vector with elements S, E, I, R, M, D.
 }
 \description{
-Returns \code{c(S=0L, E=1L, I=2L, R=3L, D=-1L)}. Use these constants to set
-and test the \code{state} property on a people frame.
+Returns \code{c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)}. Use these constants to set
+and test the \code{state} property on a people frame. \code{M} is maternal immunity
+(newborns protected by maternal antibodies, waning to \code{S}); \code{D} is deceased.
 }

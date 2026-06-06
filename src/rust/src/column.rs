@@ -155,6 +155,13 @@ impl Column {
     }
 
     // Typed slice accessors used by the step kernels; panic on a dtype mismatch.
+    pub(crate) fn as_u8(&self) -> &[u8] {
+        match &self.data {
+            Storage::U8(v) => v,
+            _ => panic!("expected a u8 Column"),
+        }
+    }
+
     pub(crate) fn as_u8_mut(&mut self) -> &mut [u8] {
         match &mut self.data {
             Storage::U8(v) => v,
@@ -173,6 +180,20 @@ impl Column {
         match &mut self.data {
             Storage::U16(v) => v,
             _ => panic!("expected a u16 Column"),
+        }
+    }
+
+    pub(crate) fn as_u32(&self) -> &[u32] {
+        match &self.data {
+            Storage::U32(v) => v,
+            _ => panic!("expected a u32 Column"),
+        }
+    }
+
+    pub(crate) fn as_u32_mut(&mut self) -> &mut [u32] {
+        match &mut self.data {
+            Storage::U32(v) => v,
+            _ => panic!("expected a u32 Column"),
         }
     }
 

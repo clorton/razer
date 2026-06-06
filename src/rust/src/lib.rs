@@ -10,6 +10,9 @@ mod sir;
 mod vitals;
 mod pyramid;
 mod kmestimator;
+mod mortality;
+mod measles;
+mod births;
 pub use laser_frame::LaserFrame;
 pub use distributions::Distribution;
 pub use column::Column;
@@ -26,4 +29,7 @@ extendr_module! {
     use vitals;
     use pyramid;
     use kmestimator;
+    use mortality;
+    use measles;
+    use births;
 }

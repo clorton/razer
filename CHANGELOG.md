@@ -12,6 +12,53 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `transmission_u16(state, timer, nodeid, count, foi, S, to_count, incidence, tick, to_state, duration)`
+  (`src/rust/src/measles.rs`) — the measles S→E transmission step: identical to
+  `transmission()` but writes a **uint16** timer (the incubation clock). Reuses the
+  per-node `1 - exp(-foi)` probability and the parallel-tally pattern. Covered by
+  `tests/testthat/test-transmission-u16.R` (incl. a 1M-agent parallel-vs-census check).
+- `births(state, timer, nodeid, dob, dod, count, birth_rate, M, births_flow, maternal_duration, km, tick)`
+  (`src/rust/src/births.rs`) — crude-birth-rate births. Each living agent births with
+  per-node probability `1 - exp(-birth_rate)`; each newborn activates a reserved slot as
+  `M` (maternal immunity) with a `timer` from `maternal_duration`, `dob = tick`, and a
+  `dod` drawn from the `KaplanMeierEstimator` (`tick` + a newborn age at death). Returns
+  the grown active count; updates the `M` census at `tick+1` and the `births` flow at
+  `tick`; caps at capacity. The `KaplanMeierEstimator` gained a crate-internal
+  `sample_newborn_age_at_death`, and `Column` gained `as_u8` / `as_u32_mut`. Covered by
+  `tests/testthat/test-births.R`.
+- `examples/engwal_measles.R` is now a **complete single-patch measles model**: the
+  per-tick loop wires `carry_forward_states → measles_step → calc_foi →
+  transmission_u16 → births → mortality`, with initial infectious timers seeded and a
+  CBR-driven `birth_rate` grid. Over 20 years it reproduces the classic measles
+  inter-epidemic cycles (damping toward the endemic equilibrium) with susceptibles
+  regulated at the `N/R0` threshold; writes a reservoirs/incidence dynamics plot.
+- `measles_step(state, timer, nodeid, count, M, S, E, I, R, inf_duration, tick)`
+  (`src/rust/src/measles.rs`) — the combined timed-transition kernel for the measles
+  model, advancing all three timed compartments in a single pass over a **uint16**
+  timer: **M→S** (maternal-immunity waning → Susceptible), **E→I** (incubation end →
+  Infectious, drawing a fresh infectious-period timer from `inf_duration`), and **I→R**
+  (recovery → Recovered, lifelong). Branching on each agent's entry state means every
+  agent is touched at most once per tick, so a just-arrived `I` is not also recovered
+  the same tick — the downstream-first ordering achieved structurally rather than by
+  sequencing separate kernels. The decrement is guarded so the u16 timer never
+  underflows. Census deltas are applied at column `tick+1`; parallelized across cores
+  with private per-thread node buffers. Covered by `tests/testthat/test-measles-step.R`
+  (incl. a parallel-vs-census check at 900k agents).
+- **Natural (non-disease) mortality by date of death** for the measles model.
+  - New `M` (maternal-immunity) compartment: `STATE_M = 4` and `laser_states()` now
+    returns `c(S=0, E=1, I=2, R=3, M=4, D=-1)` (`src/rust/src/epidemic.rs`).
+  - `mortality(state, dod, nodeid, count, M, S, E, I, R, deaths, tick)`
+    (`src/rust/src/mortality.rs`) — retires every living agent whose date of death
+    `dod` (an absolute `u32` tick) has arrived (`dod <= tick`): sets its state to `D`,
+    decrements the M/S/E/I/R census it occupied at column `tick+1`, and adds to the
+    per-node `deaths` flow at column `tick`. Parallelized across cores with private
+    per-thread node buffers. Covered by `tests/testthat/test-mortality.R`.
+  - `Column` gains a crate-internal `as_u32` accessor (`src/rust/src/column.rs`).
+  - `examples/engwal_measles.R` now allocates initial ages from an age-distribution
+    curve, draws each agent's age at death with a `KaplanMeierEstimator` built on the
+    SAME curve, stores `dob` (signed `i32`, = −age) and `dod` (`u32`), and runs the
+    `mortality()` kernel each tick. Writes an age-curve/life-table plot and a
+    living-population/deaths plot to `examples/output/`.
 - `calc_capacity(birthrates, initial_pop, safety_factor = 1)` (`R/calc_capacity.R`) —
   estimate the per-node agent capacity to preallocate for a population growing under a
   (possibly time-varying) crude birth rate, ported from laser.core. Treats births as

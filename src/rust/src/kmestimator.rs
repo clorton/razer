@@ -87,6 +87,36 @@ impl KaplanMeierEstimator {
         self.cd.partition_point(|&x| x < draw) - 1
     }
 
+    // Sample one age AT death (in days) for an individual currently `age_days` old:
+    // draw a year of death, then a day within it (a uniform day of a later year, or — if
+    // death is this same year — a day at or after the current day-of-year). `pub(crate)`
+    // so kernels (e.g. births) can assign a newborn's lifespan without going through R.
+    pub(crate) fn sample_age_at_death_days<R: Rng + ?Sized>(
+        &self,
+        rng: &mut R,
+        age_days: i64,
+        max_year: usize,
+        total_deaths: i64,
+    ) -> i64 {
+        let age_years = (age_days / DAYS_PER_YEAR) as usize;
+        let yod = self.draw_year_of_death(rng, age_years, max_year, total_deaths);
+        let doy = if (age_days / DAYS_PER_YEAR) < yod as i64 {
+            rng.gen_range(0..DAYS_PER_YEAR)          // dies in a later year: any day
+        } else {
+            let age_doy = age_days % DAYS_PER_YEAR;  // dies this year: today or later
+            rng.gen_range(age_doy..DAYS_PER_YEAR)
+        };
+        yod as i64 * DAYS_PER_YEAR + doy
+    }
+
+    // Convenience for a NEWBORN (age 0), using the full life table. Returns the age at
+    // death in days (equivalently the days until death for someone born now).
+    pub(crate) fn sample_newborn_age_at_death<R: Rng + ?Sized>(&self, rng: &mut R) -> i64 {
+        let max_year = self.n_years() - 1;
+        let total_deaths = self.cd[max_year + 1];
+        self.sample_age_at_death_days(rng, 0, max_year, total_deaths)
+    }
+
     // Per-chunk parallel helper shared by the two predict methods.
     fn par_fill(&self, len: usize, f: impl Fn(&mut [i32], usize) + Sync) -> Vec<i32> {
         let mut out = vec![0i32; len];
@@ -164,17 +194,7 @@ impl KaplanMeierEstimator {
             let mut rng = rand::thread_rng();
             for (j, slot) in c.iter_mut().enumerate() {
                 let age_days = ages_days[start + j] as i64;
-                let age_years = (age_days / DAYS_PER_YEAR) as usize;
-                let yod = self.draw_year_of_death(&mut rng, age_years, max_year, total_deaths);
-                // Day within the year of death.
-                let doy = if (age_days / DAYS_PER_YEAR) < yod as i64 {
-                    rng.gen_range(0..DAYS_PER_YEAR) // dies in a later year: any day
-                } else {
-                    // dies this same year: any day at/after today's day-of-year
-                    let age_doy = age_days % DAYS_PER_YEAR;
-                    rng.gen_range(age_doy..DAYS_PER_YEAR)
-                };
-                *slot = (yod as i64 * DAYS_PER_YEAR + doy) as i32;
+                *slot = self.sample_age_at_death_days(&mut rng, age_days, max_year, total_deaths) as i32;
             }
         })
     }

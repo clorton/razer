@@ -45,14 +45,16 @@ pub const STATE_S: i32 =  0;
 pub const STATE_E: i32 =  1;
 pub const STATE_I: i32 =  2;
 pub const STATE_R: i32 =  3;
+pub const STATE_M: i32 =  4;   // maternal immunity (newborns); wanes to S
 pub const STATE_D: i32 = -1;
 
 /// Named integer vector of epidemic compartment state codes.
 ///
-/// Returns `c(S=0L, E=1L, I=2L, R=3L, D=-1L)`. Use these constants to set
-/// and test the `state` property on a people frame.
+/// Returns `c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)`. Use these constants to set
+/// and test the `state` property on a people frame. `M` is maternal immunity
+/// (newborns protected by maternal antibodies, waning to `S`); `D` is deceased.
 ///
-/// @return Named integer vector with elements S, E, I, R, D.
+/// @return Named integer vector with elements S, E, I, R, M, D.
 /// @export
 // `#[extendr]` is a procedural macro (an attribute, like a C# attribute or
 // Java/Python decorator) that generates the C-ABI shim and the R wrapper so this
@@ -60,7 +62,7 @@ pub const STATE_D: i32 = -1;
 #[extendr]
 fn laser_states() -> Robj {
     // `vec![...]` is the Vec (growable array, ~ std::vector / List<T>) literal.
-    let vals: Vec<i32> = vec![STATE_S, STATE_E, STATE_I, STATE_R, STATE_D];
+    let vals: Vec<i32> = vec![STATE_S, STATE_E, STATE_I, STATE_R, STATE_M, STATE_D];
     // `.iter()` borrows each element; `collect_robj()` materializes the iterator
     // into an R integer vector. `mut` marks the binding as reassignable/mutable
     // (Rust bindings are immutable by default, the opposite of C/C#).
@@ -68,7 +70,7 @@ fn laser_states() -> Robj {
     // Build the names vector. `["S",..]` is a fixed-size array; `.map(...)` is the
     // lazy transform (LINQ `Select` / Python `map`); `.collect()` runs it into a
     // `Vec<String>`. `s.to_string()` copies the `&str` literal into an owned String.
-    let names: Vec<String> = ["S", "E", "I", "R", "D"]
+    let names: Vec<String> = ["S", "E", "I", "R", "M", "D"]
         .iter()
         .map(|s| s.to_string())
         .collect();

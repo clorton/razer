@@ -35,14 +35,14 @@ make_nodes <- function(n_nodes = 1L, pop = 1000L) {
 test_that("laser_states returns a named integer vector with correct codes", {
   # Given: nothing
   # When:  call laser_states()
-  # Then:  get a named integer vector with 5 elements and expected values
+  # Then:  get a named integer vector with 6 elements and expected values
   states <- laser_states()
 
   expect_type(states, "integer")                          # asserts the base type
-  expect_named(states, c("S", "E", "I", "R", "D"))        # asserts the names() attribute
+  expect_named(states, c("S", "E", "I", "R", "M", "D"))   # asserts the names() attribute
   # unname() strips names so the comparison is values-only (named vs unnamed
   # vectors are not identical in R).
-  expect_equal(unname(states), c(0L, 1L, 2L, 3L, -1L))
+  expect_equal(unname(states), c(0L, 1L, 2L, 3L, 4L, -1L))
 })
 
 # ── step_transmission_si ─────────────────────────────────────────────────────

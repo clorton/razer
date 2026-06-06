@@ -7,10 +7,11 @@ NULL
 
 #' Named integer vector of epidemic compartment state codes.
 #'
-#' Returns `c(S=0L, E=1L, I=2L, R=3L, D=-1L)`. Use these constants to set
-#' and test the `state` property on a people frame.
+#' Returns `c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)`. Use these constants to set
+#' and test the `state` property on a people frame. `M` is maternal immunity
+#' (newborns protected by maternal antibodies, waning to `S`); `D` is deceased.
 #'
-#' @return Named integer vector with elements S, E, I, R, D.
+#' @return Named integer vector with elements S, E, I, R, M, D.
 #' @export
 laser_states <- function() .Call(wrap__laser_states)
 
@@ -761,6 +762,102 @@ aliased_distribution <- function(counts) .Call(wrap__aliased_distribution, count
 #' km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
 #' @export
 kaplan_meier_estimator <- function(cumulative_deaths) .Call(wrap__kaplan_meier_estimator, cumulative_deaths)
+
+#' Apply natural mortality for one tick: retire agents whose date of death has arrived.
+#'
+#' For each of the first `count` agents that is still alive (state != D) and whose
+#' `dod` (an absolute tick) is `<= tick`, the agent's `state` is set to D and the
+#' living compartment it currently occupies (M, S, E, I, or R) is decremented by one at
+#' census column `tick + 1` (the working column the caller has already carried
+#' forward). The per-node total of deaths this tick is added to the `deaths` flow at
+#' column `tick`. Parallelized with private per-thread node buffers summed at the end.
+#'
+#' @param state   Per-agent `u8` state Column (mutated; the deceased become D = 255).
+#' @param dod     Per-agent `u32` date-of-death Column (an absolute tick index).
+#' @param nodeid  Per-agent `u16` 0-based node-id Column.
+#' @param count   Number of active agents to process.
+#' @param m_count,s_count,e_count,i_count,r_count  `n_ticks x n_nodes` i32 census
+#'   Columns kept in sync (mutated at column `tick + 1`).
+#' @param deaths  `(n_ticks-1) x n_nodes` i32 flow Column; column `tick` receives the
+#'   per-node death counts (added).
+#' @param tick    0-based tick index.
+#' @return `NULL` (invisibly); the Columns are modified in place.
+#' @export
+mortality <- function(state, dod, nodeid, count, m_count, s_count, e_count, i_count, r_count, deaths, tick) .Call(wrap__mortality, state, dod, nodeid, count, m_count, s_count, e_count, i_count, r_count, deaths, tick)
+
+#' Advance the measles timed compartments for one tick (M→S, E→I, I→R).
+#'
+#' For each of the first `count` agents, decrements its `timer` (uint16) and, on expiry,
+#' transitions it: M→S (timer left at 0), E→I (timer set to a fresh draw from
+#' `inf_duration`, the infectious period), or I→R (timer left at 0). Each agent is in at
+#' most one timed state, so it is processed at most once. The per-compartment census
+#' deltas are applied at column `tick + 1` (the working columns the caller has already
+#' carried forward): M and E lose their leavers, R gains its arrivals, S gains the M→S
+#' waners, and I gains the E→I arrivals minus the I→R leavers. Parallelized across cores
+#' with private per-thread node buffers reduced at the end.
+#'
+#' @param state   Per-agent `u8` state Column (mutated).
+#' @param timer   Per-agent `u16` countdown Column (mutated; decremented, reset on E→I).
+#' @param nodeid  Per-agent `u16` 0-based node-id Column.
+#' @param count   Number of active agents to process.
+#' @param m_count,s_count,e_count,i_count,r_count  `n_ticks x n_nodes` i32 census
+#'   Columns kept in sync (mutated at column `tick + 1`).
+#' @param inf_duration A `Distribution` for the infectious period drawn on E→I.
+#' @param tick    0-based tick index.
+#' @return `NULL` (invisibly); the Columns are modified in place.
+#' @export
+measles_step <- function(state, timer, nodeid, count, m_count, s_count, e_count, i_count, r_count, inf_duration, tick) .Call(wrap__measles_step, state, timer, nodeid, count, m_count, s_count, e_count, i_count, r_count, inf_duration, tick)
+
+#' Transmission step (S→`to_state`) writing a uint16 timer — the measles counterpart of
+#' [transmission()], which writes a u8 timer.
+#'
+#' Identical to [transmission()] in every respect except the `timer` Column is `u16`
+#' (clamped to `[1, 65535]`): converts column `tick` of `foi` to a per-node probability
+#' `1 - exp(-foi)` once per node, then for each susceptible agent moves it (with that
+#' probability) into `to_state` — `E` for measles — drawing its `timer` from `duration`
+#' (the incubation period). New cases per node are applied as a delta to column `tick+1`
+#' of the `s_count`/`to_count` census and recorded in column `tick` of `incidence`.
+#'
+#' @param state      Per-agent `u8` state Column (mutated).
+#' @param timer      Per-agent `u16` countdown Column for the receiving state (mutated).
+#' @param nodeid     Per-agent `u16` 0-based node-id Column.
+#' @param count      Number of active agents to process.
+#' @param foi        `n_ticks x n_nodes` f64 FOI Column (from [calc_foi()]); column `tick` read.
+#' @param s_count    i32 census Column for `S` (mutated at `tick+1`).
+#' @param to_count   i32 census Column for the receiving state (mutated at `tick+1`).
+#' @param incidence  i32 flow Column (mutated at `tick`).
+#' @param tick       0-based tick index.
+#' @param to_state   State code new cases enter (e.g. `laser_states()[["E"]]`).
+#' @param duration   A Distribution from which the receiving state's timer is drawn.
+#' @return `NULL` (invisibly); the Columns are modified in place.
+#' @export
+transmission_u16 <- function(state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration) .Call(wrap__transmission_u16, state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration)
+
+#' Apply crude-birth-rate births for one tick; newborns enter maternal immunity (M).
+#'
+#' For each of the first `count` living agents, draws a birth with probability
+#' `1 - exp(-birth_rate[node, tick])`. Each birth activates the next reserved slot as a
+#' new agent: state M, `timer` from `maternal_duration`, `nodeid` = the parent's node,
+#' `dob` = `tick`, and `dod` = `tick` + a Kaplan–Meier age at death (from `km`). The
+#' per-node birth count is added to the `M` census at column `tick + 1` and to the
+#' `births` flow at column `tick`. Returns the new active agent count.
+#'
+#' @param state    Per-agent `u8` state Column (capacity-sized; newborn slots set to M).
+#' @param timer    Per-agent `u16` timer Column (newborn slots set from `maternal_duration`).
+#' @param nodeid   Per-agent `u16` node-id Column (newborn slots set to the parent's node).
+#' @param dob      Per-agent `i32` date-of-birth Column (newborn slots set to `tick`).
+#' @param dod      Per-agent `u32` date-of-death Column (newborn slots set via `km`).
+#' @param count    Current active agent count (the first free slot).
+#' @param birth_rate `n_ticks x n_nodes` f64 daily-birth-rate grid (from values_map);
+#'   column `tick` is read.
+#' @param m_count  `n_ticks x n_nodes` i32 `M` census Column (mutated at `tick + 1`).
+#' @param births_flow `(n_ticks-1) x n_nodes` i32 flow Column (mutated at `tick`).
+#' @param maternal_duration A Distribution for the newborns' maternal-immunity timer.
+#' @param km       A KaplanMeierEstimator giving each newborn its age at death.
+#' @param tick     0-based tick index.
+#' @return The new active agent count (`count` plus the number born this tick).
+#' @export
+births <- function(state, timer, nodeid, dob, dod, count, birth_rate, m_count, births_flow, maternal_duration, km, tick) .Call(wrap__births, state, timer, nodeid, dob, dod, count, birth_rate, m_count, births_flow, maternal_duration, km, tick)
 
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
