@@ -385,10 +385,10 @@ bincount_impl <- function(values, nbins, counts, slot) .Call(wrap__bincount_impl
 #' values  <- allocate_scalar("u16", 5L); values$set(c(0, 0, 1, 2, 2))
 #' weights <- allocate_scalar("f64", 5L); weights$set(c(1.5, 2.5, 4, 1, 3))
 #' counts  <- allocate_scalar("f64", 3L)
-#' bincountw(values, weights, 3L, counts)
+#' bincount_wt(values, weights, 3L, counts)
 #' counts$values()   # 4 4 4
 #' @noRd
-bincountw_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bincountw_impl, values, weights, nbins, counts, slot)
+bincount_wt_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bincount_wt_impl, values, weights, nbins, counts, slot)
 
 #' Count, per group, the agents whose property satisfies a comparison (filtered bincount).
 #'
@@ -415,7 +415,31 @@ bincountw_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bin
 #'   `< counts`'s slice count. Defaults to `0`.
 #' @return `NULL` (invisibly); the result is written into `counts`.
 #' @noRd
-count_by_where_impl <- function(group, n_groups, prop, op, value, count, counts, slot) .Call(wrap__count_by_where_impl, group, n_groups, prop, op, value, count, counts, slot)
+bincount_where_impl <- function(group, n_groups, prop, op, value, count, counts, slot) .Call(wrap__bincount_where_impl, group, n_groups, prop, op, value, count, counts, slot)
+
+#' Weighted, predicate-filtered bincount: sum a weight per group over matching agents.
+#'
+#' The weighted twin of [bincount_where()]: for each group `g` in `0..n_groups`, sums
+#' `weights[i]` over the first `count` agents that both have `group[i] == g` AND satisfy
+#' `prop[i] <op> value`, writing the per-group sums into **slice `slot`** of `counts`.
+#' Use it for predicate-filtered weighted aggregates by node — e.g. total infectiousness
+#' of symptomatic agents per node, or person-days under five — in one parallel pass with
+#' no copy of `prop` or `weights` into R. `group` must be integer-typed (`i8`..`u32`);
+#' `prop` and `weights` are any numeric [Column]s; `counts` is numeric with slice length
+#' `>= n_groups`.
+#'
+#' @param group    An integer-typed `Column` of group indices (`i8`..`u32`), e.g. nodeid.
+#' @param n_groups Number of groups; a non-negative integer `<= counts`'s slice length.
+#' @param prop     A numeric `Column` holding the per-agent property to test.
+#' @param op       Comparison: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+#' @param value    The threshold the property is compared against (a double).
+#' @param weights  A numeric `Column` (any type) of per-agent weights to sum.
+#' @param count    How many leading agents to scan (the active count).
+#' @param counts   A numeric `Column` that receives the per-group sums (modified in place).
+#' @param slot     Which slice of `counts` to write; defaults to `0`.
+#' @return `NULL` (invisibly); the result is written into `counts`.
+#' @noRd
+bincount_where_wt_impl <- function(group, n_groups, prop, op, value, weights, count, counts, slot) .Call(wrap__bincount_where_wt_impl, group, n_groups, prop, op, value, weights, count, counts, slot)
 
 #' Compute the per-node force of infection (FOI) for one tick.
 #'
@@ -426,20 +450,21 @@ count_by_where_impl <- function(group, n_groups, prop, op, value, count, counts,
 #' kernels turn this rate into a per-tick probability `1 - exp(-foi)`.
 #'
 #' Index conventions: `infected` and `population` are census buffers read at the
-#' working column `tick + 1` (the denominator is the current population, which may
-#' change with vital dynamics); `beta` and `seasonality` are exogenous modifier grids
-#' read at the interval column `tick`; the result is written to `foi[tick]`.
+#' **start-of-interval** column `tick` (the settled census recorded for tick `tick`, the
+#' infectious count and population at the start of the interval `tick → tick+1`); `beta`
+#' and `seasonality` are exogenous modifier grids read at the interval column `tick`; the
+#' result is written to `foi[tick]`.
 #'
-#' **Ordering and the effective infectious period.** Whether `infected[tick+1]` is the
-#' pre- or post-recovery count depends on where you place this call, and that choice
-#' sets the realized infectious period:
-#' * For **direct S→I** (SIR), call `calc_foi` BEFORE the recovery step, so an agent is
-#'   still counted on its recovery tick. Because a directly-infected agent is added to
-#'   `I` *after* this tally (not counted on its entry tick), counting it on its recovery
-#'   tick instead yields the full period: `R0 = beta * D`, not `beta * (D - 1)`.
-#' * For **SEIR-style** entry (agents arrive in `I` via a step run before this tally,
-#'   e.g. `step_sir`'s E→I), call `calc_foi` AFTER that step: the new infectious are
-#'   counted on their entry tick and recoveries excluded — also `beta * D`.
+#' **Ordering and the effective infectious period.** Because `calc_foi` reads the SETTLED
+#' census at column `tick` — not the working column `tick+1` that this interval's step
+#' kernel and transmission build — its result does NOT depend on where the step kernel
+#' runs. That lets every model use ONE ordering: `carry_forward → step → calc_foi →
+#' transmission`, with `calc_foi` placed immediately before `transmission`. Under it an
+#' agent contributes to the FOI on exactly the `D` census columns it occupies (it enters
+#' `I` at column `entry+1` via either the step kernel's E→I or transmission's S→I, and
+#' recovers `D` columns later), so the realized basic reproduction number is the full
+#' `R0 = beta * D` — for both direct S→I (SIR) and SEIR-style entry, with no `beta*(D-1)`
+#' artifact and no per-family special-casing.
 #'
 #' @param infected   Infectious-count census Column (`nodes$I`), `slice_len == n_nodes`.
 #' @param population Per-node population census Column (`nodes$N`); the FOI denominator.
@@ -448,7 +473,7 @@ count_by_where_impl <- function(group, n_groups, prop, op, value, count, counts,
 #' @param network    An `n_nodes x n_nodes` numeric coupling matrix.
 #' @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
 #' @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
-#'   `infected[tick+1]`/`population[tick+1]`, writes `foi[tick]`.
+#'   `infected[tick]`/`population[tick]` (the start-of-interval census), writes `foi[tick]`.
 #' @return `NULL` (invisibly); the result is written into `foi`.
 #' @export
 calc_foi <- function(infected, population, beta, seasonality, network, foi, tick) .Call(wrap__calc_foi, infected, population, beta, seasonality, network, foi, tick)

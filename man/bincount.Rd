@@ -37,3 +37,6 @@ counts <- allocate_scalar("i32", 3L)
 bincount(values, 3L, counts)
 counts$values()   # 1 2 3
 }
+\seealso{
+\code{\link[=bincount_wt]{bincount_wt()}}, \code{\link[=bincount_where]{bincount_where()}}, \code{\link[=bincount_where_wt]{bincount_where_wt()}}.
+}

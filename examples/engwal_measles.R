@@ -42,7 +42,7 @@ library(razer)
 # returns per-node counts that the model applies to the census with move_count():
 #   carry_forward_states(list(M, S, E, I, R), t0, total = N)
 #   step_sir(absorbing = R) # M->S waning, E->I incubation, I->R recovery (one u16 pass)
-#   calc_foi(...)           # force of infection from post-step I[t+1] / N[t+1]
+#   calc_foi(...)           # force of infection from the settled census I[t0] / N[t0]
 #   transmission(... E)     # S->E exposures, drawing the incubation timer
 #   births(...)             # CBR newborns into M (maternal timer + a KM date of death)
 #   mortality(...)          # retire agents whose dod has arrived (deaths by compartment)
@@ -73,8 +73,9 @@ run_measles_model <- function(scenario, network, nticks,
   capacity   <- as.integer(sum(calc_capacity(birthrates, pops, safety_factor = 1)))
 
   # Transmission coefficient: R0 = beta * mean infectious period, so beta = R0 / mean.
-  # (For SEIR-style models agents enter I via step_sir BEFORE the FOI tally, so the
-  # full infectious period D counts — see CLAUDE.md.)
+  # (calc_foi reads the settled start-of-interval census I[t0], so each infectious agent
+  # contributes on exactly the D census columns it occupies — the full infectious period
+  # D counts and R0 = beta * D — see CLAUDE.md.)
   beta <- r0 / mean(inf_duration$sample_n(100000L))
 
   # ── people: per-agent property arrays, allocated to capacity ───────────────────────
@@ -183,8 +184,10 @@ run_measles_model <- function(scenario, network, nticks,
       move_count(nodes$M, nodes$S, prog$waned,   t0)   # M -> S
       move_count(nodes$E, nodes$I, prog$onset,   t0)   # E -> I
       move_count(nodes$I, nodes$R, prog$cleared, t0)   # I -> R
-      # Force of infection from the post-step infectious census, then S->E exposures
-      # (drawing the incubation timer); incidence records new exposures.
+      # Force of infection from the SETTLED start-of-interval census I[t0]/N[t0], placed
+      # IMMEDIATELY before transmission, then S->E exposures (drawing the incubation
+      # timer); incidence records new exposures. Reading the settled census gives each
+      # infectious agent its full D census columns, so R0 = beta * D.
       calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       inf <- transmission(people$state, people$timer, people$nodeid, people$count,
                           nodes$foi, t0, states[["E"]], incubation_duration)

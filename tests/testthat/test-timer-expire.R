@@ -36,7 +36,7 @@ test_that("step_timer_expire_set sets the destination's timer on expiry", {
 
 test_that("the generic kernels compose into a hand-built SIRS that conserves population", {
   # Given a single-node SIRS assembled purely from the generic kernels + transmission
-  #       (downstream-first: R->S, calc_foi, I->R, S->I)
+  #       (steps first: R->S, I->R, then calc_foi immediately before S->I)
   # When it is run for 80 ticks
   # Then the living compartments sum to N at every tick and an epidemic takes off — i.e.
   #      the building blocks compose into a working model. Failure would mean the generics
@@ -55,8 +55,8 @@ test_that("the generic kernels compose into a hand-built SIRS that conserves pop
     t <- tick - 1L
     carry_forward_states(list(Sc, Ic, Rc), t, total = N)
     move_count(Rc, Sc, step_timer_expire(state, timer, nodeid, n, nn, R, S), t)          # R->S
-    calc_foi(Ic, N, beta, season, net, foi, t)
     move_count(Ic, Rc, step_timer_expire_set(state, timer, nodeid, n, nn, I, R, imm), t) # I->R (+imm)
+    calc_foi(Ic, N, beta, season, net, foi, t)                                            # immediately before transmit
     move_count(Sc, Ic, transmission(state, timer, nodeid, n, foi, t, I, inf), t)         # S->I
   }
   living <- rowSums(Sc$values()) + rowSums(Ic$values()) + rowSums(Rc$values())

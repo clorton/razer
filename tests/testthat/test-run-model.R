@@ -61,4 +61,88 @@ test_that("run_model validates its inputs", {
   expect_error(run_model(scen, "SEIR", nticks = 10L, r0 = 2, infectious_period = 5), "incubation_period")
   expect_error(run_model(scen, "SIRS", nticks = 10L, r0 = 2, infectious_period = 5), "immunity_period")
   expect_error(run_model(scen, "SIR", nticks = 1L, r0 = 2, infectious_period = 5), "nticks")
+  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = 2, infectious_period = 5, init = 7),
+               "init.*function")
+})
+
+test_that("run_model returns a model environment bundling people/nodes/network/carry", {
+  # Given a run
+  # When we inspect the result
+  # Then it is an environment exposing $people, $nodes, $network, and $carry — the bundle
+  #      the callbacks receive. Failure would mean the model wasn't packaged as intended.
+  m <- run_one("SIR")
+  expect_true(is.environment(m))
+  expect_true(all(c("people", "nodes", "network", "carry") %in% ls(m)))
+  expect_true(is.environment(m$people) && is.environment(m$nodes))
+  expect_true(is.matrix(m$network) && is.list(m$carry))
+})
+
+test_that("run_model records the per-model node flows", {
+  # Given each model
+  # When run
+  # Then exactly the right flows exist: incidence (all), onset (E models), recovery (I-exit
+  #      models), waning (waning models); and incidence is non-trivial. Failure would mean a
+  #      flow is missing, spurious, or not recorded.
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SI")$nodes)),
+                  "incidence")
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SEI")$nodes)),
+                  c("incidence","onset"))
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SIR")$nodes)),
+                  c("incidence","recovery"))
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SEIR")$nodes)),
+                  c("incidence","onset","recovery"))
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SIRS")$nodes)),
+                  c("incidence","recovery","waning"))
+  expect_setequal(intersect(c("incidence","onset","recovery","waning"), ls(run_one("SEIRS")$nodes)),
+                  c("incidence","onset","recovery","waning"))
+  expect_gt(sum(run_one("SEIR")$nodes$incidence$values()), 0)
+})
+
+test_that("flow accounting matches the census changes (SEIR)", {
+  # Given an SEIR run
+  # When we compare flows to census deltas
+  # Then incidence equals the rise in (E entries) and onset equals E->I transitions: each
+  #      tick, S[t+1]-S[t] = -incidence (the only way to leave S), and the running R rise
+  #      equals cumulative recovery. Failure would mean a flow and its delta disagree.
+  m <- run_one("SEIR")
+  S <- rowSums(m$nodes$S$values()); R <- rowSums(m$nodes$R$values())
+  inc <- rowSums(m$nodes$incidence$values()); rec <- rowSums(m$nodes$recovery$values())
+  expect_equal(-diff(S), inc)                       # S only ever leaves via new infection
+  expect_equal(diff(R), rec)                         # R only ever grows via recovery
+})
+
+test_that("run_model fires the init and per-tick callbacks", {
+  # Given init/step_enter/step_exit callbacks
+  # When an SIR model is run for nticks
+  # Then init runs once (here it tags the model and adds a counter), and step_enter/
+  #      step_exit each fire once per interval (nticks - 1). Failure would mean callbacks
+  #      are not invoked at the documented points.
+  scen <- data.frame(population = 5000L, I = 20L)
+  counters <- new.env(); counters$enter <- 0L; counters$exit <- 0L
+  m <- run_model(scen, "SIR", nticks = 12L, r0 = 2, infectious_period = 6,
+                 init = function(model) model$nodes$inited <- TRUE,
+                 step_enter = function(model) counters$enter <- counters$enter + 1L,
+                 step_exit  = function(model) counters$exit  <- counters$exit  + 1L)
+  expect_true(isTRUE(m$nodes$inited))
+  expect_equal(counters$enter, 11L)
+  expect_equal(counters$exit, 11L)
+})
+
+test_that("run_model seeds only states the model has (item 3)", {
+  # Given a scenario carrying an E column
+  # When run as SEIR (has E) vs SIR (no E)
+  # Then SEIR seeds the E compartment from the column, while SIR ignores it (no E census,
+  #      and those agents stay susceptible). Failure would mean states absent from the
+  #      model get initialized, or present ones are skipped.
+  scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
+  seir <- run_model(scen, "SEIR", nticks = 5L, r0 = 2, infectious_period = 6,
+                    incubation_period = 4, seed = 1L)
+  expect_equal(seir$nodes$E$values()[1L, 1L], 30L)   # E seeded
+  expect_equal(seir$nodes$I$values()[1L, 1L], 10L)
+  expect_equal(seir$nodes$R$values()[1L, 1L], 5L)
+  expect_equal(seir$nodes$S$values()[1L, 1L], 1000L - 10L - 30L - 5L)
+
+  sir <- run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6, seed = 1L)
+  expect_null(sir$nodes$E)                            # SIR has no E census
+  expect_equal(sir$nodes$S$values()[1L, 1L], 1000L - 10L - 5L)  # the 30 "E" stay S
 })

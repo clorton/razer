@@ -20,7 +20,7 @@ calc_foi(infected, population, beta, seasonality, network, foi, tick)
 \item{foi}{A 2-D f64 Column (\verb{(n_ticks-1) x n_nodes}); column \code{tick} is overwritten.}
 
 \item{tick}{0-based tick index: reads \code{beta[tick]}/\code{seasonality[tick]} and
-\code{infected[tick+1]}/\code{population[tick+1]}, writes \code{foi[tick]}.}
+\code{infected[tick]}/\code{population[tick]} (the start-of-interval census), writes \code{foi[tick]}.}
 }
 \value{
 \code{NULL} (invisibly); the result is written into \code{foi}.
@@ -34,20 +34,18 @@ kernels turn this rate into a per-tick probability \code{1 - exp(-foi)}.
 }
 \details{
 Index conventions: \code{infected} and \code{population} are census buffers read at the
-working column \code{tick + 1} (the denominator is the current population, which may
-change with vital dynamics); \code{beta} and \code{seasonality} are exogenous modifier grids
-read at the interval column \code{tick}; the result is written to \code{foi[tick]}.
+\strong{start-of-interval} column \code{tick} (the settled census recorded for tick \code{tick}, the
+infectious count and population at the start of the interval \verb{tick → tick+1}); \code{beta}
+and \code{seasonality} are exogenous modifier grids read at the interval column \code{tick}; the
+result is written to \code{foi[tick]}.
 
-\strong{Ordering and the effective infectious period.} Whether \code{infected[tick+1]} is the
-pre- or post-recovery count depends on where you place this call, and that choice
-sets the realized infectious period:
-\itemize{
-\item For \strong{direct S→I} (SIR), call \code{calc_foi} BEFORE the recovery step, so an agent is
-still counted on its recovery tick. Because a directly-infected agent is added to
-\code{I} \emph{after} this tally (not counted on its entry tick), counting it on its recovery
-tick instead yields the full period: \code{R0 = beta * D}, not \code{beta * (D - 1)}.
-\item For \strong{SEIR-style} entry (agents arrive in \code{I} via a step run before this tally,
-e.g. \code{step_sir}'s E→I), call \code{calc_foi} AFTER that step: the new infectious are
-counted on their entry tick and recoveries excluded — also \code{beta * D}.
-}
+\strong{Ordering and the effective infectious period.} Because \code{calc_foi} reads the SETTLED
+census at column \code{tick} — not the working column \code{tick+1} that this interval's step
+kernel and transmission build — its result does NOT depend on where the step kernel
+runs. That lets every model use ONE ordering: \verb{carry_forward → step → calc_foi → transmission}, with \code{calc_foi} placed immediately before \code{transmission}. Under it an
+agent contributes to the FOI on exactly the \code{D} census columns it occupies (it enters
+\code{I} at column \code{entry+1} via either the step kernel's E→I or transmission's S→I, and
+recovers \code{D} columns later), so the realized basic reproduction number is the full
+\code{R0 = beta * D} — for both direct S→I (SIR) and SEIR-style entry, with no \code{beta*(D-1)}
+artifact and no per-family special-casing.
 }

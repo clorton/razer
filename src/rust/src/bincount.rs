@@ -263,11 +263,11 @@ fn histogram_weighted<V: BinIndex, W: ToWeight>(
 /// values  <- allocate_scalar("u16", 5L); values$set(c(0, 0, 1, 2, 2))
 /// weights <- allocate_scalar("f64", 5L); weights$set(c(1.5, 2.5, 4, 1, 3))
 /// counts  <- allocate_scalar("f64", 3L)
-/// bincountw(values, weights, 3L, counts)
+/// bincount_wt(values, weights, 3L, counts)
 /// counts$values()   # 4 4 4
 /// @noRd
 #[extendr]
-fn bincountw_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Column, slot: i32) {
+fn bincount_wt_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Column, slot: i32) {
     assert!(nbins >= 0, "`nbins` must be non-negative, got {nbins}");
     let nbins = nbins as usize;
     assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
@@ -333,7 +333,7 @@ fn bincountw_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Co
     }
 }
 
-// ── count_by_where: predicate-filtered, count-aware bincount ─────────────────────
+// ── bincount_where: predicate-filtered, count-aware bincount ─────────────────────
 //
 // "How many agents in each node are in state E?" or "...are under five (tick - dob <
 // 5*365)?" Both are a bincount of `group` (e.g. nodeid) restricted to the agents whose
@@ -344,6 +344,20 @@ fn bincountw_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Co
 // Build a per-group histogram counting only elements where `pred(prop[i])` holds.
 // `pred` is a non-capturing comparison baked from the op + threshold, so it is `Copy`
 // and trivially `Send + Sync`. Same private-buffer-then-reduce trick as `histogram`.
+// Parse a comparison op string into a non-capturing fn pointer (all arms share one
+// type). Shared by the filtered and weighted-filtered kernels.
+fn parse_op(op: &str) -> fn(f64, f64) -> bool {
+    match op {
+        "eq" => |a, b| a == b,
+        "ne" => |a, b| a != b,
+        "lt" => |a, b| a < b,
+        "le" => |a, b| a <= b,
+        "gt" => |a, b| a > b,
+        "ge" => |a, b| a >= b,
+        _ => panic!("`op` must be one of \"eq\", \"ne\", \"lt\", \"le\", \"gt\", \"ge\", got {op:?}"),
+    }
+}
+
 fn histogram_filtered<V: BinIndex, P: ToWeight, F: Fn(f64) -> bool + Sync + Send>(
     group: &[V],
     prop: &[P],
@@ -399,7 +413,7 @@ fn histogram_filtered<V: BinIndex, P: ToWeight, F: Fn(f64) -> bool + Sync + Send
 /// @return `NULL` (invisibly); the result is written into `counts`.
 /// @noRd
 #[extendr]
-fn count_by_where_impl(
+fn bincount_where_impl(
     group: &Column,
     n_groups: i32,
     prop: &Column,
@@ -431,17 +445,9 @@ fn count_by_where_impl(
         group.len(), prop.len()
     );
 
-    // Bake the comparison into a non-capturing fn pointer (all arms share one type), then
-    // wrap it with the captured threshold. `move` copies `value` into the closure.
-    let cmp: fn(f64, f64) -> bool = match op {
-        "eq" => |a, b| a == b,
-        "ne" => |a, b| a != b,
-        "lt" => |a, b| a < b,
-        "le" => |a, b| a <= b,
-        "gt" => |a, b| a > b,
-        "ge" => |a, b| a >= b,
-        _ => panic!("`op` must be one of \"eq\", \"ne\", \"lt\", \"le\", \"gt\", \"ge\", got {op:?}"),
-    };
+    // Bake the comparison into a non-capturing fn pointer, then wrap it with the captured
+    // threshold. `move` copies `value` into the closure.
+    let cmp = parse_op(op);
     let pred = move |x: f64| cmp(x, value);
 
     // Recover both element types (group's integer index type, prop's numeric type) over
@@ -486,9 +492,162 @@ fn count_by_where_impl(
     }
 }
 
+// Weighted + filtered histogram: per Rayon task, accumulate `weights[i]` into bin
+// `group[i]` ONLY where `pred(prop[i])` holds, in a private f64 buffer; then reduce.
+// The three slices (group, prop, weights) are zipped elementwise.
+fn histogram_filtered_weighted<
+    V: BinIndex,
+    P: ToWeight,
+    W: ToWeight,
+    F: Fn(f64) -> bool + Sync + Send,
+>(
+    group: &[V],
+    prop: &[P],
+    weights: &[W],
+    nbins: usize,
+    pred: F,
+) -> Vec<f64> {
+    group
+        .par_iter()
+        .zip(prop.par_iter())
+        .zip(weights.par_iter())
+        .fold(
+            || vec![0.0f64; nbins],
+            |mut local, ((&g, &p), &w)| {
+                if pred(p.to_weight()) {
+                    local[g.to_index()] += w.to_weight();
+                }
+                local
+            },
+        )
+        .reduce(
+            || vec![0.0f64; nbins],
+            |mut a, b| {
+                for i in 0..nbins {
+                    a[i] += b[i];
+                }
+                a
+            },
+        )
+}
+
+/// Weighted, predicate-filtered bincount: sum a weight per group over matching agents.
+///
+/// The weighted twin of [bincount_where()]: for each group `g` in `0..n_groups`, sums
+/// `weights[i]` over the first `count` agents that both have `group[i] == g` AND satisfy
+/// `prop[i] <op> value`, writing the per-group sums into **slice `slot`** of `counts`.
+/// Use it for predicate-filtered weighted aggregates by node — e.g. total infectiousness
+/// of symptomatic agents per node, or person-days under five — in one parallel pass with
+/// no copy of `prop` or `weights` into R. `group` must be integer-typed (`i8`..`u32`);
+/// `prop` and `weights` are any numeric [Column]s; `counts` is numeric with slice length
+/// `>= n_groups`.
+///
+/// @param group    An integer-typed `Column` of group indices (`i8`..`u32`), e.g. nodeid.
+/// @param n_groups Number of groups; a non-negative integer `<= counts`'s slice length.
+/// @param prop     A numeric `Column` holding the per-agent property to test.
+/// @param op       Comparison: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+/// @param value    The threshold the property is compared against (a double).
+/// @param weights  A numeric `Column` (any type) of per-agent weights to sum.
+/// @param count    How many leading agents to scan (the active count).
+/// @param counts   A numeric `Column` that receives the per-group sums (modified in place).
+/// @param slot     Which slice of `counts` to write; defaults to `0`.
+/// @return `NULL` (invisibly); the result is written into `counts`.
+/// @noRd
+#[extendr]
+fn bincount_where_wt_impl(
+    group: &Column,
+    n_groups: i32,
+    prop: &Column,
+    op: &str,
+    value: f64,
+    weights: &Column,
+    count: i32,
+    counts: &mut Column,
+    slot: i32,
+) {
+    assert!(n_groups >= 0, "`n_groups` must be non-negative, got {n_groups}");
+    let n_groups = n_groups as usize;
+    assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+    let slot = slot as usize;
+    assert!(
+        slot < counts.n_slices(),
+        "`slot` ({slot}) out of range for counts with {} slices",
+        counts.n_slices()
+    );
+    let slice_len = counts.slice_len();
+    assert!(
+        n_groups <= slice_len,
+        "`counts` slice length ({slice_len}) must be at least `n_groups` ({n_groups})"
+    );
+    assert!(count >= 0, "`count` must be non-negative, got {count}");
+    let count = count as usize;
+    assert!(
+        count <= group.len() && count <= prop.len() && count <= weights.len(),
+        "`count` ({count}) exceeds `group` ({}), `prop` ({}), or `weights` ({}) length",
+        group.len(), prop.len(), weights.len()
+    );
+
+    let cmp = parse_op(op);
+    let pred = move |x: f64| cmp(x, value);
+
+    // Triple dispatch (group index type x prop type x weight type) over the live prefix.
+    macro_rules! dispatch_w {
+        ($g:expr, $p:expr) => {
+            match weights.storage() {
+                Storage::I8(w)  => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::U8(w)  => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::I16(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::U16(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::I32(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::U32(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::F32(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+                Storage::F64(w) => histogram_filtered_weighted($g, $p, &w[..count], n_groups, pred),
+            }
+        };
+    }
+    macro_rules! dispatch_prop {
+        ($g:expr) => {
+            match prop.storage() {
+                Storage::I8(p)  => dispatch_w!($g, &p[..count]),
+                Storage::U8(p)  => dispatch_w!($g, &p[..count]),
+                Storage::I16(p) => dispatch_w!($g, &p[..count]),
+                Storage::U16(p) => dispatch_w!($g, &p[..count]),
+                Storage::I32(p) => dispatch_w!($g, &p[..count]),
+                Storage::U32(p) => dispatch_w!($g, &p[..count]),
+                Storage::F32(p) => dispatch_w!($g, &p[..count]),
+                Storage::F64(p) => dispatch_w!($g, &p[..count]),
+            }
+        };
+    }
+    let totals: Vec<f64> = match group.storage() {
+        Storage::I8(g)  => dispatch_prop!(&g[..count]),
+        Storage::U8(g)  => dispatch_prop!(&g[..count]),
+        Storage::I16(g) => dispatch_prop!(&g[..count]),
+        Storage::U16(g) => dispatch_prop!(&g[..count]),
+        Storage::I32(g) => dispatch_prop!(&g[..count]),
+        Storage::U32(g) => dispatch_prop!(&g[..count]),
+        Storage::F32(_) | Storage::F64(_) =>
+            panic!("`group` must be an integer-typed Column (group indices), not float"),
+    };
+
+    let start = slot * slice_len;
+    let end = start + n_groups;
+    match counts.storage_mut() {
+        Storage::I8(c)  => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::U8(c)  => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::I16(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::U16(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::I32(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::U32(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::F32(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+        Storage::F64(c) => write_counts_f64(&mut c[start..end], &totals, n_groups),
+    }
+}
+
 extendr_module! {
     mod bincount;
     fn bincount_impl;
-    fn bincountw_impl;
-    fn count_by_where_impl;
+    fn bincount_wt_impl;
+    fn bincount_where_impl;
+    fn bincount_where_wt_impl;
 }

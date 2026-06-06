@@ -79,3 +79,85 @@ calc_capacity <- function(birthrates, initial_pop, safety_factor = 1) {
       sum(over), .Machine$integer.max, max(estimates)))
   estimates
 }
+
+# Coerce a rate grid argument (a 2-D matrix, or a 2-D Column from values_map) to a matrix
+# and validate it. Shared by calc_capacity_cdr for both the birth and death grids.
+.as_rate_grid <- function(x, what) {
+  if (inherits(x, "Column")) x <- x$values()
+  if (is.null(dim(x)) || length(dim(x)) != 2L)
+    stop(sprintf("`%s` must be a 2-D (nsteps x nnodes) matrix or a 2-D Column", what))
+  if (any(x < 0) || any(x > 100))
+    stop(sprintf("all `%s` must be in [0, 100] (events per 1,000 per year)", what))
+  x
+}
+
+#' Estimate the agent capacity for a growing population reclaimed with [squash()].
+#'
+#' The mortality-aware companion to [calc_capacity()]. When dead agents' slots are
+#' reclaimed periodically with [squash()], the slots needed are bounded by the **peak
+#' simultaneous living population** — net births minus deaths — not by the cumulative
+#' number ever born (which [calc_capacity()] estimates for the no-reclaim case). This lets
+#' you model decades or centuries without allocating one slot per agent ever born.
+#'
+#' The per-node daily birth and death rates `lambda = (1 + rate/1000)^(1/365) - 1` are
+#' summed over all time steps; the expected net-growth factor is `exp(sum lambda_b - sum
+#' lambda_d)`. For a conservative bound the **death rate is underestimated** by the safety
+#' factor — only a fraction `1 / (1 + safety_factor)` of the death sum is credited, holding
+#' the rest back as headroom against a lower-mortality (faster-growing) realization. So
+#' `safety_factor = 0` credits deaths fully (the tightest, bare net-growth estimate); larger
+#' values credit fewer deaths and reserve more slack. (Unlike [calc_capacity()], no gross-
+#' births term enters — that would defeat the point of reclaiming slots.)
+#'
+#' @param birthrates A 2-D `nsteps x nnodes` matrix of crude birth rates (per 1,000 per
+#'   year), or a 2-D [Column] (e.g. from [values_map()]). Each value in `[0, 100]`.
+#' @param deathrates A 2-D `nsteps x nnodes` matrix (or 2-D [Column]) of crude death rates,
+#'   the same shape as `birthrates`. Each value in `[0, 100]`.
+#' @param initial_pop A non-negative numeric vector of length `nnodes`: initial population.
+#' @param safety_factor Non-negative headroom multiplier in `[0, 6]` (default `1`),
+#'   controlling how much the death rate is underestimated. `0` credits deaths fully.
+#' @return A numeric vector of length `nnodes` of estimated capacities (whole-valued
+#'   doubles). A `warning` is issued if any estimate exceeds `.Machine$integer.max`.
+#' @section Errors:
+#' Stops if either rate grid is not 2-D, if their shapes or node counts disagree with each
+#' other or with `length(initial_pop)`, if any population is negative, if any rate is
+#' outside `[0, 100]`, or if `safety_factor` is outside `[0, 6]`.
+#' @examples
+#' # one node, 100 years, CBR 30 / CDR 15 — peak-living bound for a squash-reclaimed run
+#' br <- matrix(30, nrow = 100 * 365, ncol = 1)
+#' dr <- matrix(15, nrow = 100 * 365, ncol = 1)
+#' calc_capacity_cdr(br, dr, initial_pop = 1e6, safety_factor = 1)
+#' @seealso [calc_capacity()] (cumulative-births bound, no reclaim), [squash()].
+#' @export
+calc_capacity_cdr <- function(birthrates, deathrates, initial_pop, safety_factor = 1) {
+  birthrates <- .as_rate_grid(birthrates, "birthrates")
+  deathrates <- .as_rate_grid(deathrates, "deathrates")
+  if (!all(dim(birthrates) == dim(deathrates)))
+    stop(sprintf("`birthrates` (%s) and `deathrates` (%s) must have the same shape",
+                 paste(dim(birthrates), collapse = "x"), paste(dim(deathrates), collapse = "x")))
+
+  initial_pop <- as.numeric(initial_pop)
+  nnodes      <- ncol(birthrates)
+  if (length(initial_pop) != nnodes)
+    stop(sprintf("number of nodes (%d) and `initial_pop` length (%d) must match",
+                 nnodes, length(initial_pop)))
+  if (any(initial_pop < 0))
+    stop("`initial_pop` values must be non-negative")
+  if (!(length(safety_factor) == 1L && safety_factor >= 0 && safety_factor <= 6))
+    stop(sprintf("`safety_factor` must be a single value in [0, 6], got %s", safety_factor))
+
+  # Daily per-individual birth and death rates from the annual crude rates.
+  lambda_b <- (1 + birthrates / 1000)^(1 / 365) - 1
+  lambda_d <- (1 + deathrates / 1000)^(1 / 365) - 1
+  # Underestimate deaths: credit only 1/(1+safety_factor) of the death sum (the rest is
+  # headroom). Net expected peak-living growth factor per node = exp(sum_b - credited_d).
+  death_credit <- 1 / (1 + safety_factor)
+  growth <- exp(colSums(lambda_b) - death_credit * colSums(lambda_d))
+
+  estimates <- round(initial_pop * growth)
+  over <- estimates > .Machine$integer.max
+  if (any(over))
+    warning(sprintf(
+      "calc_capacity_cdr: %d node(s) exceed .Machine$integer.max (%d) and cannot be allocated as-is; largest is %.0f",
+      sum(over), .Machine$integer.max, max(estimates)))
+  estimates
+}

@@ -129,7 +129,7 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   sched_node  <- as.integer(schedule$node)
   sched_count <- as.integer(schedule$count)
 
-  # ── per-tick dynamics (downstream-first), run nticks-1 times ──────────────────────
+  # ── per-tick dynamics (single razer ordering), run nticks-1 times ─────────────────
   # See endemic_sir.R for the full per-step rationale; the only difference here is that
   # calc_foi reads a time-varying `seasonality` column, so the local rate
   # beta*seasonality[t]*I/N rises and falls through the year.
@@ -140,14 +140,14 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
     for (tick in seq_len(nticks - 1L)) {
       t0 <- tick - 1L
       carry_forward_states(list(nodes$S, nodes$I, nodes$R), t0, total = nodes$N)
-      # calc_foi BEFORE step_sir (recovery) so an agent counts on its recovery tick;
-      # for direct S->I this yields the full infectious period D (R0 = beta * D), not
-      # D - 1. See endemic_sir.R for the full rationale.
-      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       rec <- step_sir(people$state, people$timer, people$nodeid, people$count,
                       nodes$count, inf_duration, states[["R"]])   # I->R (no M/E here)
       move_count(nodes$I, nodes$R, rec$cleared, t0)
       nodes$recoveries$set_col(t0, rec$cleared)
+      # calc_foi reads the SETTLED start-of-interval census I[t0]/N[t0] (NOT t0+1) and
+      # sits IMMEDIATELY before transmission. Each infectious agent contributes on
+      # exactly the D census columns it occupies, so R0 = beta * D. See endemic_sir.R.
+      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       inf <- transmission(people$state, people$timer, people$nodeid, people$count,
                           nodes$foi, t0, states[["I"]], inf_duration)
       move_count(nodes$S, nodes$I, inf, t0)

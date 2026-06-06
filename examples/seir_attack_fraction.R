@@ -18,10 +18,10 @@
 # Built on the Column kernels. SEIR is `step_sir` with the absorbing state set to R:
 # it performs E->I (drawing the infectious timer) and I->R, returning per-node counts
 # the model applies to its E/I/R census; `transmission` performs S->E (drawing the
-# incubation timer) and returns new infections per node. Per-tick order: carry_forward
-# -> step_sir -> calc_foi -> transmission. Because an agent enters I via step_sir (a
-# step run *before* the FOI tally), it is counted on its entry tick, so the effective
-# infectious period is the full D ticks and
+# incubation timer) and returns new infections per node. Per-tick order is the single
+# razer ordering: carry_forward -> step_sir -> calc_foi -> transmission, with `calc_foi`
+# immediately before `transmission`; it reads the settled start-of-interval census I[t],
+# so each infectious agent contributes on exactly its D census columns and
 #
 #     R0 = beta * D.
 #
@@ -72,7 +72,7 @@ run_seir_columns <- function(n, n_seed, exp_duration, inf_duration, beta_val, ho
     prog <- step_sir(state, timer, nodeid, n, nn, inf_dist, states[["R"]])
     move_count(E, I, prog$onset,   t)
     move_count(I, R, prog$cleared, t)
-    calc_foi(I, N, beta, season, net, foi, t)                       # after E->I -> beta*D
+    calc_foi(I, N, beta, season, net, foi, t)                       # reads settled I[t]; just before transmit
     inf <- transmission(state, timer, nodeid, n, foi, t, states[["E"]], exp_dist)
     move_count(S, E, inf, t)
     if (stop_extinct && sum(E$col(tick)) + sum(I$col(tick)) == 0L) { last <- tick; break }

@@ -108,11 +108,11 @@ test_that("bincount validates nbins, buffer length, and value type", {
   expect_error(bincount(make("f32", c(0, 1, 2)), 3L, ok), "integer")  # float values
 })
 
-# ── bincountw: weighted histogram ────────────────────────────────────────────────
+# ── bincount_wt: weighted histogram ────────────────────────────────────────────────
 
-test_that("bincountw sums each element's weight into its bin", {
+test_that("bincount_wt sums each element's weight into its bin", {
   # Given values 0,0,1,2,2 with float weights 1.5,2.5,4,1,3 and a 3-bin buffer
-  # When bincountw runs
+  # When bincount_wt runs
   # Then counts holds the per-bin weight sums c(4, 4, 4): bin 0 = 1.5+2.5, bin 1 =
   #      4, bin 2 = 1+3.
   # Failure would mean the weighted accumulation or the index mapping is wrong.
@@ -120,12 +120,12 @@ test_that("bincountw sums each element's weight into its bin", {
   weights <- make("f64", c(1.5, 2.5, 4, 1, 3))
   counts  <- allocate_scalar("f64", 3L)
 
-  bincountw(values, weights, 3L, counts)
+  bincount_wt(values, weights, 3L, counts)
 
   expect_equal(counts$values(), c(4, 4, 4))
 })
 
-test_that("bincountw handles signed, unsigned, and floating-point weights", {
+test_that("bincount_wt handles signed, unsigned, and floating-point weights", {
   # Given the same values binned with i32 (incl. a negative), u32, and f32 weights
   # When each is summed
   # Then the per-bin sums reflect the weight type: the signed case can go negative,
@@ -134,50 +134,50 @@ test_that("bincountw handles signed, unsigned, and floating-point weights", {
   values <- make("u8", c(0, 1, 1, 2))
 
   ci <- allocate_scalar("f64", 3L)
-  bincountw(values, make("i32", c(10, -1, 5, 7)), 3L, ci)
+  bincount_wt(values, make("i32", c(10, -1, 5, 7)), 3L, ci)
   expect_equal(ci$values(), c(10, 4, 7))           # bin 1 = -1 + 5
 
   cu <- allocate_scalar("f64", 3L)
-  bincountw(values, make("u32", c(10, 1, 5, 7)), 3L, cu)
+  bincount_wt(values, make("u32", c(10, 1, 5, 7)), 3L, cu)
   expect_equal(cu$values(), c(10, 6, 7))
 
   cf <- allocate_scalar("f64", 3L)
-  bincountw(values, make("f32", c(0.5, 1, 0.25, 2)), 3L, cf)
+  bincount_wt(values, make("f32", c(0.5, 1, 0.25, 2)), 3L, cf)
   expect_equal(cf$values(), c(0.5, 1.25, 2))
 })
 
-test_that("bincountw truncates toward zero when counts is integer-typed", {
+test_that("bincount_wt truncates toward zero when counts is integer-typed", {
   # Given fractional weights summed into an integer counts buffer
-  # When bincountw runs
+  # When bincount_wt runs
   # Then each bin's float sum is truncated toward zero on write (3.7 -> 3).
   # Failure would mean the integer cast on write is wrong.
   values  <- make("u8", c(0, 0))
   weights <- make("f64", c(1.9, 1.8))   # sum 3.7
   counts  <- allocate_scalar("i32", 1L)
 
-  bincountw(values, weights, 1L, counts)
+  bincount_wt(values, weights, 1L, counts)
 
   expect_equal(counts$values(), 3L)
 })
 
-test_that("bincountw overwrites the counts buffer on reuse and preserves the tail", {
+test_that("bincount_wt overwrites the counts buffer on reuse and preserves the tail", {
   # Given a reused 4-element counts buffer prefilled with 9s and nbins = 3
-  # When bincountw runs twice
+  # When bincount_wt runs twice
   # Then bins 0..2 hold the (same) weighted sums and bin 3 keeps its prior 9.
   # Failure would mean accumulation onto stale data or writing past nbins.
   values  <- make("u16", c(0, 1, 2, 2))
   weights <- make("f64", c(2, 3, 1, 1))
   counts  <- make("f64", c(9, 9, 9, 9))
 
-  bincountw(values, weights, 3L, counts)
-  bincountw(values, weights, 3L, counts)
+  bincount_wt(values, weights, 3L, counts)
+  bincount_wt(values, weights, 3L, counts)
 
   expect_equal(counts$values(), c(2, 3, 2, 9))
 })
 
-test_that("bincountw on a large input matches a serial weighted tally", {
+test_that("bincount_wt on a large input matches a serial weighted tally", {
   # Given 2 million (bin index, weight) pairs
-  # When bincountw sums the weights per bin in parallel
+  # When bincount_wt sums the weights per bin in parallel
   # Then the result matches a serial tapply()-based sum to floating tolerance —
   #      the private per-thread accumulators reduce without lost contributions.
   # Failure would expose a race or reduction bug in the weighted path.
@@ -187,7 +187,7 @@ test_that("bincountw on a large input matches a serial weighted tally", {
   wt    <- runif(2e6)
   counts <- allocate_scalar("f64", nbins)
 
-  bincountw(make("i32", idx), make("f64", wt), nbins, counts)
+  bincount_wt(make("i32", idx), make("f64", wt), nbins, counts)
 
   ref <- as.numeric(tapply(wt, factor(idx, levels = 0:(nbins - 1L)), sum))
   ref[is.na(ref)] <- 0
@@ -214,16 +214,16 @@ test_that("bincount writes into the requested slot of a 2-D counts buffer", {
   expect_equal(report0$values()[1L, ], c(1, 3))
 })
 
-test_that("bincountw writes into the requested slot of a 2-D counts buffer", {
+test_that("bincount_wt writes into the requested slot of a 2-D counts buffer", {
   # Given a 3-tick x 2-node report, values over 2 bins, and float weights
-  # When bincountw targets slot (tick) 2
+  # When bincount_wt targets slot (tick) 2
   # Then tick 2's row holds the per-bin weight sums and the other ticks stay zero.
   # Failure would mean the weighted slot offset is wrong.
   values  <- make("u16", c(0, 1, 1, 1))
   weights <- make("f64", c(2, 3, 1, 1))         # bin 0: 2, bin 1: 3+1+1 = 5
   report  <- allocate_vector("f64", 3L, 2L)
 
-  bincountw(values, weights, 2L, report, 2L)
+  bincount_wt(values, weights, 2L, report, 2L)
   m <- report$values()
   expect_equal(m[1L, ], c(0, 0))
   expect_equal(m[2L, ], c(0, 0))
@@ -240,18 +240,18 @@ test_that("bincount rejects an out-of-range slot", {
   expect_error(bincount(values, 2L, report, 2L), "out of range")
 })
 
-test_that("bincountw validates lengths, nbins, buffer size, and value type", {
+test_that("bincount_wt validates lengths, nbins, buffer size, and value type", {
   # Given contract violations
-  # When bincountw is called
+  # When bincount_wt is called
   # Then each raises an error rather than mis-indexing or summing garbage.
   # Failure would risk out-of-bounds writes or silently wrong sums.
   values  <- make("u16", c(0, 1, 2))
   weights <- make("f64", c(1, 1, 1))
   ok      <- allocate_scalar("f64", 3L)
-  expect_error(bincountw(values, make("f64", c(1, 1)), 3L, ok), "same length")
-  expect_error(bincountw(values, weights, 3L, allocate_scalar("f64", 2L)), "at least")
-  expect_error(bincountw(values, weights, -1L, ok), "non-negative")
-  expect_error(bincountw(make("f32", c(0, 1, 2)), weights, 3L, ok), "integer")
+  expect_error(bincount_wt(values, make("f64", c(1, 1)), 3L, ok), "same length")
+  expect_error(bincount_wt(values, weights, 3L, allocate_scalar("f64", 2L)), "at least")
+  expect_error(bincount_wt(values, weights, -1L, ok), "non-negative")
+  expect_error(bincount_wt(make("f32", c(0, 1, 2)), weights, 3L, ok), "integer")
 })
 
 test_that("bincount tallies agent node ids into a per-node census slot (column-model use)", {

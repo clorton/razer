@@ -15,12 +15,17 @@ run_model(
   network = NULL,
   seasonality = 1,
   seed = NULL,
-  progress = FALSE
+  progress = FALSE,
+  init = NULL,
+  step_enter = NULL,
+  step_exit = NULL
 )
 }
 \arguments{
-\item{scenario}{A data.frame with one row per node and an integer \code{population} column;
-optional integer \code{I} / \code{R} columns seed initial infectious / recovered per node.}
+\item{scenario}{A data.frame with one row per node and an integer \code{population} column.
+Optional integer \code{E} / \code{I} / \code{R} columns seed that state per node — but only for
+states the model actually has (e.g. an \code{E} column is ignored by \code{SIR}). \code{S} is the
+remainder. The seeded \code{E + I + R} must not exceed a node's population.}
 
 \item{model}{One of \code{"SI"}, \code{"SEI"}, \code{"SIS"}, \code{"SEIS"}, \code{"SIR"}, \code{"SEIR"}, \code{"SIRS"},
 \code{"SEIRS"} (case-insensitive).}
@@ -45,25 +50,51 @@ all-zero matrix — independent nodes).}
 reproducible run.}
 
 \item{progress}{If \code{TRUE}, draw a text progress bar.}
+
+\item{init}{Optional \verb{function(model)} called once after the model is built and before
+the loop. Use it to add per-agent property \link{Column}s, add a compartment census Column
+(append it to \code{model$carry} to have it carried forward), set agent states/timers, etc.
+The initial per-node census is (re)derived from the agents' states AFTER \code{init} runs,
+so changing agent states in \code{init} keeps the census consistent.}
+
+\item{step_enter}{Optional \verb{function(model)} called at the start of every tick (before
+the carry-forward). Receives the \code{model} environment; \code{model$tick} is the current
+0-based interval index.}
+
+\item{step_exit}{Optional \verb{function(model)} called at the end of every tick (after
+transmission). Receives the \code{model} environment (with \code{model$tick} set).}
 }
 \value{
-Invisibly, a list with the \code{people} and \code{nodes} environments. \code{nodes} holds the
-per-tick census Columns the model uses (\code{S}, and \code{E}/\code{I}/\code{R} as applicable), \code{N}, the
-\code{incidence} flow (new infections), and (for models with an I-exit) a \code{recoveries}
-flow — each an \code{n_nodes}-wide, time-major Column.
+Invisibly, the \code{model} environment, with:
+\itemize{
+\item \verb{$people} — the agent arrays (\code{state}, \code{nodeid}, \code{timer}, plus \code{count}/\code{capacity}).
+\item \verb{$nodes} — per-tick census Columns (\code{S}, and \code{E}/\code{I}/\code{R} as applicable), \code{N}, the
+\code{foi}, and the per-interval flows: \code{incidence} (new infections, all models),
+\code{onset} (E→I, \verb{SE*} models), \code{recovery} (I→{S,R}, models with an I-exit), and
+\code{waning} (R→S, \code{SIRS}/\code{SEIRS}) — each an \code{n_nodes}-wide, time-major Column.
+\item \verb{$network} — the coupling matrix.
+\item \verb{$carry} — the list of census Columns carried forward each tick.
+\item \verb{$tick} — during the loop, the current 0-based interval index (for the callbacks).
+}
 }
 \description{
 Builds an agent population from a per-node scenario, seeds it, and advances one of the
 eight SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS models for \code{nticks} ticks using
 the Column kernels in the correct order (so the realized basic reproduction number is
-the full \code{R0 = beta * D}). The model is \code{transmission} (or \code{transmission_si} for SI)
-plus one step kernel; \code{run_model} applies every census delta for you.
+the full \code{R0 = beta * D}). Each tick runs, uniformly for every model,
+\verb{carry_forward → step → calc_foi → transmission}, with \code{calc_foi} placed immediately
+before \code{transmission} (no step kernel between them); \code{run_model} applies every census
+delta for you.
+}
+\details{
+The \code{people}, \code{nodes}, \code{network}, and \code{carry} objects are bundled into a single \code{model}
+environment, which is also what the optional callbacks receive and what is returned.
 }
 \examples{
 \dontrun{
 scenario <- data.frame(population = 1e5L, I = 100L)
-res <- run_model(scenario, "SEIR", nticks = 200L, r0 = 2.5,
-                 infectious_period = 8, incubation_period = 5, seed = 1)
-tail(res$nodes$I$values())
+m <- run_model(scenario, "SEIR", nticks = 200L, r0 = 2.5,
+               infectious_period = 8, incubation_period = 5, seed = 1)
+tail(m$nodes$I$values())
 }
 }

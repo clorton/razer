@@ -2,8 +2,8 @@
 #   r[k] = beta[k] * seasonality[k] * infected[k] / population[k]
 # redistributed through the network as foi[k] = r[k]*(1 - sum_j W[k,j]) + sum_i r[i]*W[i,k].
 # Index conventions: beta/seasonality are read at the interval column `tick`;
-# infected/population (census) at the POST-recovery column `tick+1`; foi written at
-# `tick`. Deterministic, so exact assertions.
+# infected/population (census) at the SETTLED start-of-interval column `tick`; foi written
+# at `tick`. Deterministic, so exact assertions.
 
 # Build an f64/i32 Column of `n_cols` x length(vals) with `vals` at column `col_idx`.
 at_col <- function(dtype, col_idx, vals, n_cols) {
@@ -14,9 +14,10 @@ at_col <- function(dtype, col_idx, vals, n_cols) {
   buf$set(v)
   buf
 }
-# Standard tick-0 inputs over 2 nodes: census at column 1, modifiers at column 0.
-inf_at1  <- function(vals) at_col("i32", 1L, vals, 2L)
-pop_at1  <- function(vals) at_col("i32", 1L, vals, 2L)
+# Standard tick-0 inputs over 2 nodes: census at column 0 (the start-of-interval column
+# `tick` = 0), modifiers at column 0.
+inf_now  <- function(vals) at_col("i32", 0L, vals, 2L)
+pop_now  <- function(vals) at_col("i32", 0L, vals, 2L)
 grid_at0 <- function(vals) at_col("f64", 0L, vals, 1L)
 foi2     <- function() allocate_vector("f64", 1L, 2L)
 
@@ -26,7 +27,7 @@ test_that("calc_foi computes the frequency-dependent local rate with no coupling
   # Then foi[k] = beta * seasonality * I[k] / N[k]: node 0 = 0.5*20/100 = 0.1, node 1 = 0.
   # Failure would mean the rate, the 1/N denominator, or the zero-network path is wrong.
   foi <- foi2()
-  calc_foi(inf_at1(c(20, 0)), pop_at1(c(100, 50)), grid_at0(c(0.5, 0.5)),
+  calc_foi(inf_now(c(20, 0)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.5)),
            grid_at0(c(1, 1)), matrix(0, 2L, 2L), foi, 0L)
   expect_equal(foi$values(), c(0.5 * 20 / 100, 0))   # 1-column foi -> plain vector
 })
@@ -37,7 +38,7 @@ test_that("calc_foi scales the rate by the seasonality factor", {
   # Then node 0's FOI doubles relative to seasonality 1.
   # Failure would mean the seasonal modifier is ignored or mis-applied.
   foi <- foi2()
-  calc_foi(inf_at1(c(20, 0)), pop_at1(c(100, 50)), grid_at0(c(0.5, 0.5)),
+  calc_foi(inf_now(c(20, 0)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.5)),
            grid_at0(c(2, 1)), matrix(0, 2L, 2L), foi, 0L)
   expect_equal(foi$values(), c(2 * 0.5 * 20 / 100, 0))
 })
@@ -48,7 +49,7 @@ test_that("calc_foi uses a per-node beta", {
   # Then each node's FOI uses its own beta.
   # Failure would mean beta is not read per node.
   foi <- foi2()
-  calc_foi(inf_at1(c(20, 10)), pop_at1(c(100, 50)), grid_at0(c(0.5, 0.2)),
+  calc_foi(inf_now(c(20, 10)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.2)),
            grid_at0(c(1, 1)), matrix(0, 2L, 2L), foi, 0L)
   expect_equal(foi$values(), c(0.5 * 20 / 100, 0.2 * 10 / 50))
 })
@@ -85,7 +86,7 @@ test_that("calc_foi redistributes force across a directed edge", {
   m <- 0.4; r0 <- 0.5 * 20 / 100
   W <- matrix(c(0, m, 0, 0), nrow = 2L, byrow = TRUE)
   foi <- foi2()
-  calc_foi(inf_at1(c(20, 0)), pop_at1(c(100, 50)), grid_at0(c(0.5, 0.5)),
+  calc_foi(inf_now(c(20, 0)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.5)),
            grid_at0(c(1, 1)), W, foi, 0L)
   expect_equal(foi$values(), c(r0 * (1 - m), r0 * m))
 })
@@ -98,18 +99,19 @@ test_that("calc_foi cancels a network's diagonal", {
   m <- 0.4; r0 <- 0.5 * 20 / 100
   W <- matrix(c(0.3, m, 0, 0), nrow = 2L, byrow = TRUE)
   foi <- foi2()
-  calc_foi(inf_at1(c(20, 0)), pop_at1(c(100, 50)), grid_at0(c(0.5, 0.5)),
+  calc_foi(inf_now(c(20, 0)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.5)),
            grid_at0(c(1, 1)), W, foi, 0L)
   expect_equal(foi$values(), c(r0 * (1 - m), r0 * m))
 })
 
-test_that("calc_foi reads modifiers at tick and census at tick+1, writing foi at tick", {
-  # Given a multi-tick setup with beta/seasonality at column 1 and census at column 2
+test_that("calc_foi reads modifiers and census at tick, writing foi at tick", {
+  # Given a multi-tick setup with beta/seasonality AND census all at column 1
   # When calc_foi targets tick 1
   # Then foi's tick-1 row holds the FOI; ticks 0 and 2 stay zero.
-  # Failure would mean a read/write tick offset is wrong.
-  infected   <- at_col("i32", 2L, c(10, 0), 3L)   # census at column tick+1 = 2
-  population <- at_col("i32", 2L, c(100, 50), 3L)
+  # Failure would mean a read/write tick offset is wrong (census is read at column `tick`,
+  # the settled start-of-interval count, NOT the working column tick+1).
+  infected   <- at_col("i32", 1L, c(10, 0), 3L)   # census at column tick = 1
+  population <- at_col("i32", 1L, c(100, 50), 3L)
   beta       <- at_col("f64", 1L, c(0.5, 0.5), 3L) # modifiers at column tick = 1
   season     <- at_col("f64", 1L, c(1, 1), 3L)
   foi        <- allocate_vector("f64", 3L, 2L)
@@ -128,7 +130,7 @@ test_that("calc_foi guards against a zero-population node", {
   # Then its FOI is 0 rather than NaN/Inf from dividing by zero.
   # Failure would propagate NaN into the transmission probability.
   foi <- foi2()
-  calc_foi(inf_at1(c(0, 5)), pop_at1(c(0, 50)), grid_at0(c(0.5, 0.5)),
+  calc_foi(inf_now(c(0, 5)), pop_now(c(0, 50)), grid_at0(c(0.5, 0.5)),
            grid_at0(c(1, 1)), matrix(0, 2L, 2L), foi, 0L)
   expect_equal(foi$values(), c(0, 0.5 * 5 / 50))
 })

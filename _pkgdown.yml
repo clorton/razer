@@ -62,6 +62,7 @@ reference:
   - load_pyramid_csv
   - sample_pyramid_ages
   - calc_capacity
+  - calc_capacity_cdr
 - title: Spatial coupling & migration
   desc: >
     Pairwise distances and migration-network models for spatial coupling of the
@@ -86,6 +87,7 @@ reference:
   contents:
   - values_map
   - bincount
-  - bincountw
-  - count_by_where
+  - bincount_wt
+  - bincount_where
+  - bincount_where_wt
   - squash

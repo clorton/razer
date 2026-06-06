@@ -4,8 +4,42 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Changed
+- **One per-tick ordering for every model — `calc_foi` immediately before `transmission`.**
+  `calc_foi` now reads the **settled start-of-interval** infectious census `I[t]` instead
+  of the working column `I[t+1]` (`src/rust/src/transmission.rs`). Because its value no
+  longer depends on where the step kernel runs, every model uses the single ordering
+  `carry_forward → step → calc_foi → transmission`, with no step kernel between `calc_foi`
+  and `transmission`. An infectious agent still contributes to the FOI on exactly the `D`
+  census columns it occupies, so `R0 = beta * D` holds for both direct-S→I and E-entry
+  families with no per-family special-casing (the old dual ordering is gone). Re-validated
+  against Kermack–McKendrick (SIR and SEIR attack fractions still match). `run_model` and
+  all examples/tests updated to the single ordering.
+- **`run_model()` now returns a `model` environment and takes lifecycle callbacks.** It
+  bundles `$people`, `$nodes`, `$network`, and `$carry` into one environment (returned, and
+  passed to the callbacks), and accepts optional `init(model)` (once, before the loop) and
+  `step_enter(model)` / `step_exit(model)` (start / end of each tick). It now seeds **any**
+  of the model's `E`/`I`/`R` compartments that the scenario supplies a column for (a state
+  absent from the scenario, or from the model, is not seeded), and records the per-node
+  flows `incidence` (all models), `onset` (E→I), `recovery` (I-exit), and `waning` (R→S).
+  `$nodes$recoveries` is renamed `$nodes$recovery`.
+- **Binning functions renamed for consistency:** `bincountw` → `bincount_wt`,
+  `count_by_where` → `bincount_where`.
+
 ### Added
-- **`count_by_where()` — flexible predicate-filtered agent binning by group**
+- **`bincount_where_wt()` — weighted, predicate-filtered binning by group**
+  (`src/rust/src/bincount.rs`, `R/bincount.R`). The weighted twin of `bincount_where()`:
+  sums a per-agent weight per group over the first `count` agents matching `prop <op>
+  value`, in one parallel pass. Completes the family `bincount` / `bincount_wt` /
+  `bincount_where` / `bincount_where_wt`. Covered by `tests/testthat/test-bincount-where.R`.
+- **`calc_capacity_cdr()` — squash-aware capacity estimate** (`R/calc_capacity.R`). The
+  mortality-aware companion to `calc_capacity()`: bounds the **peak living population** (net
+  births minus a conservatively underestimated death rate) rather than the cumulative
+  number ever born, so a [squash()]-reclaimed run can model decades/centuries without one
+  slot per agent ever born. The death rate is underestimated by the safety factor (credited
+  at `1/(1+safety_factor)`). Covered by `tests/testthat/test-calc-capacity-cdr.R` (1e6 over
+  100 years, CBR 30 / CDR 15).
+- **`bincount_where()` — flexible predicate-filtered agent binning by group**
   (`src/rust/src/bincount.rs`, `R/bincount.R`). A count-aware, filtered `bincount`: for
   each group `g` in `0..n_groups`, counts how many of the first `count` agents both have
   `group[i] == g` and satisfy `prop[i] <op> value` (`op` ∈ eq/ne/lt/le/gt/ge), in one
@@ -14,7 +48,7 @@ All notable changes to this project are documented here.
   (`prop = dob, op = "gt", value = tick - 5*365`). Returns an integer vector for ad-hoc
   use, or writes into a report Column slice for per-tick model loops. Scans only the live
   prefix `count`, so it stays correct for variable-population (post-`squash`/birth) models.
-  Covered by `tests/testthat/test-count-by-where.R`.
+  Covered by `tests/testthat/test-bincount-where.R`.
 - **Agent compaction: `Column$squash(keep)` + the `squash(people)` helper**
   (`src/rust/src/column.rs`, `R/squash.R`). `Column$squash(keep)` stably compacts a 1-D
   Column to the elements flagged by a logical mask, returning the kept count;

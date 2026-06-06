@@ -64,20 +64,21 @@ fn read_col(col: &Column, slot: usize, n: usize) -> Vec<f64> {
 /// kernels turn this rate into a per-tick probability `1 - exp(-foi)`.
 ///
 /// Index conventions: `infected` and `population` are census buffers read at the
-/// working column `tick + 1` (the denominator is the current population, which may
-/// change with vital dynamics); `beta` and `seasonality` are exogenous modifier grids
-/// read at the interval column `tick`; the result is written to `foi[tick]`.
+/// **start-of-interval** column `tick` (the settled census recorded for tick `tick`, the
+/// infectious count and population at the start of the interval `tick → tick+1`); `beta`
+/// and `seasonality` are exogenous modifier grids read at the interval column `tick`; the
+/// result is written to `foi[tick]`.
 ///
-/// **Ordering and the effective infectious period.** Whether `infected[tick+1]` is the
-/// pre- or post-recovery count depends on where you place this call, and that choice
-/// sets the realized infectious period:
-/// * For **direct S→I** (SIR), call `calc_foi` BEFORE the recovery step, so an agent is
-///   still counted on its recovery tick. Because a directly-infected agent is added to
-///   `I` *after* this tally (not counted on its entry tick), counting it on its recovery
-///   tick instead yields the full period: `R0 = beta * D`, not `beta * (D - 1)`.
-/// * For **SEIR-style** entry (agents arrive in `I` via a step run before this tally,
-///   e.g. `step_sir`'s E→I), call `calc_foi` AFTER that step: the new infectious are
-///   counted on their entry tick and recoveries excluded — also `beta * D`.
+/// **Ordering and the effective infectious period.** Because `calc_foi` reads the SETTLED
+/// census at column `tick` — not the working column `tick+1` that this interval's step
+/// kernel and transmission build — its result does NOT depend on where the step kernel
+/// runs. That lets every model use ONE ordering: `carry_forward → step → calc_foi →
+/// transmission`, with `calc_foi` placed immediately before `transmission`. Under it an
+/// agent contributes to the FOI on exactly the `D` census columns it occupies (it enters
+/// `I` at column `entry+1` via either the step kernel's E→I or transmission's S→I, and
+/// recovers `D` columns later), so the realized basic reproduction number is the full
+/// `R0 = beta * D` — for both direct S→I (SIR) and SEIR-style entry, with no `beta*(D-1)`
+/// artifact and no per-family special-casing.
 ///
 /// @param infected   Infectious-count census Column (`nodes$I`), `slice_len == n_nodes`.
 /// @param population Per-node population census Column (`nodes$N`); the FOI denominator.
@@ -86,7 +87,7 @@ fn read_col(col: &Column, slot: usize, n: usize) -> Vec<f64> {
 /// @param network    An `n_nodes x n_nodes` numeric coupling matrix.
 /// @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
 /// @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
-///   `infected[tick+1]`/`population[tick+1]`, writes `foi[tick]`.
+///   `infected[tick]`/`population[tick]` (the start-of-interval census), writes `foi[tick]`.
 /// @return `NULL` (invisibly); the result is written into `foi`.
 /// @export
 #[extendr]
@@ -109,13 +110,13 @@ fn calc_foi(
     }
     assert!(tick < beta.n_slices(), "`tick` out of range for `beta`");
     assert!(tick < seasonality.n_slices(), "`tick` out of range for `seasonality`");
-    assert!(tick + 1 < infected.n_slices(), "`tick`+1 out of range for `infected`");
-    assert!(tick + 1 < population.n_slices(), "`tick`+1 out of range for `population`");
+    assert!(tick < infected.n_slices(), "`tick` out of range for `infected`");
+    assert!(tick < population.n_slices(), "`tick` out of range for `population`");
 
     let b   = read_col(beta, tick, n);
     let s   = read_col(seasonality, tick, n);
-    let inf = read_col(infected, tick + 1, n);
-    let pop = read_col(population, tick + 1, n);
+    let inf = read_col(infected, tick, n);
+    let pop = read_col(population, tick, n);
     let w   = read_square_matrix(&network, n);
 
     let r: Vec<f64> = (0..n)

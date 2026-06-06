@@ -9,14 +9,17 @@ All examples are built on the **Column kernels** (`allocate_scalar` / `allocate_
 buffers advanced by `calc_foi`, the `transmission` / `transmission_si` kernels, the
 `step_si` / `step_sir` / `step_sirs` step kernels, `carry_forward_states` + `move_count`,
 and the vital-dynamics kernels). The agent-loop kernels return per-node counts that the
-model applies to its census. The per-tick ordering follows the modeling note in the
-repository `CLAUDE.md`; in particular `calc_foi` is placed so the effective reproduction
-number is the full `R0 = beta * D` (never `beta * (D - 1)`).
+model applies to its census. Every model uses one per-tick ordering (see the modeling note
+in the repository `CLAUDE.md`): `carry_forward → step → calc_foi → transmission`, with
+`calc_foi` immediately before `transmission`. `calc_foi` reads the settled start-of-interval
+infectious census `I[t]`, so each infectious agent contributes to the force of infection on
+exactly the `D` census columns it occupies — the effective reproduction number is the full
+`R0 = beta * D` (never `beta * (D - 1)`), for both direct-S→I and E-entry models.
 
 ## `sir_attack_fraction.R`
 
 An agent-based SIR epidemic in a single well-mixed node. Per tick:
-`carry_forward_states` → `calc_foi` → `step_sir` (absorbing = R; I→R) → `transmission`
+`carry_forward_states` → `step_sir` (absorbing = R; I→R) → `calc_foi` → `transmission`
 (S→I) with a fixed infectious period (`dist_constant`).
 
 ```sh
@@ -27,12 +30,11 @@ Produces `sir_trajectories.png` (S/I/R over time) and `sir_attack_fraction.png`
 (simulated final attack fraction across an `R0` sweep vs. the Kermack–McKendrick
 final-size curve `A = 1 - exp(-R0 * A)`), and prints a comparison table plus timing.
 
-**Effective R0 = `beta * D`.** A directly-infected agent enters `I` *after* the tick's
-force-of-infection tally, so it is not counted on its entry tick. Running `calc_foi`
-*before* the step kernel counts it on its recovery tick instead — losing
-the entry tick but gaining the recovery tick nets the full `D`-tick infectious period.
-The simulated attack fraction matches Kermack–McKendrick to within a few thousandths for
-`R0 >= 1.5`.
+**Effective R0 = `beta * D`.** `calc_foi` reads the settled start-of-interval infectious
+census `I[t]`, so a directly-infected agent (which enters `I` one column after infection
+and recovers `D` columns later) contributes to the force of infection on exactly its `D`
+census columns. The simulated attack fraction matches Kermack–McKendrick to within a few
+thousandths for `R0 >= 1.5`.
 
 ## `seir_attack_fraction.R`
 
@@ -47,9 +49,10 @@ Rscript examples/seir_attack_fraction.R
 Produces `seir_trajectories.png` (S/E/I/R over time, showing the E peak preceding the I
 peak) and `seir_attack_fraction.png` (the same Kermack–McKendrick comparison).
 
-**Effective R0 = `beta * D`.** An agent enters `I` via the step kernel's E→I, run
-*before* the force-of-infection tally, so it is counted from its entry tick — the full
-`D`-tick period. The latent (exposed) period only delays the epidemic and does not affect
+**Effective R0 = `beta * D`.** As in the SIR case, `calc_foi` reads the settled
+start-of-interval census `I[t]`, so an agent (which enters `I` via the step kernel's E→I
+one column after onset and recovers `D` columns later) contributes on exactly its `D`
+census columns. The latent (exposed) period only delays the epidemic and does not affect
 the final size, so the SEIR attack fraction obeys the same relation and matches it to
 within a few thousandths for `R0 >= 1.5`.
 
@@ -71,3 +74,8 @@ predicts zero — the expected near-critical behavior.
   a CBR-sized agent capacity, run for 20 years.
 - **`aged_population.R`** — builds a realistic age-structured population from a pyramid
   (alias sampler) and assigns each agent a Kaplan–Meier age at death.
+- **`model_callbacks.R`** — extends `run_model()` through its `init` / `step_enter` /
+  `step_exit` callbacks and the `model` environment: adds a per-agent date-of-birth Column,
+  applies a one-time pulse vaccination mid-epidemic (S→R), and records a custom
+  under-five-by-node report each tick with `bincount_where()`. Plots baseline vs.
+  intervention.

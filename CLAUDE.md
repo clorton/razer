@@ -44,21 +44,35 @@ with M→S, so any model can add a maternal compartment), so a just-entered time
 never decremented again the same tick — the residency artifact (`duration − 1`) is
 avoided structurally.
 
-**No `beta · (D − 1)` models — always realize the full `beta · D`.** An agent must count
-in the FOI on exactly the `D` ticks it is infectious; the trap is where `calc_foi` sits:
+**One ordering for every model — always realize the full `beta · D`, never `beta · (D −
+1)`.** Each tick runs, for every model:
 
-- **Direct S→I** (SI/SIS/SIR/SIRS): a directly-infected agent enters `I` *after* the
-  tally, so run **`calc_foi` before the step kernel** (which clears I) — it loses its
-  entry tick but gains its recovery tick → full `D`. Order: `carry_forward` →
-  **`calc_foi`** → `step_*` (apply counts) → `transmission` (apply counts).
-- **E-entry** (SEI/SEIS/SEIR/SEIRS): agents enter `I` via the step kernel's E→I, which
-  runs *before* the tally, so run **`calc_foi` after the step kernel**: new infectious
-  counted on entry, recoveries excluded → also `beta · D`. Order: `carry_forward` →
-  `step_*` (apply counts) → **`calc_foi`** → `transmission` (apply counts).
+> `carry_forward(_states)` → **`step_*`** (apply counts) → **`calc_foi`** → **`transmission`** (apply counts)
+
+with `calc_foi` placed **immediately before `transmission`** and **no step kernel between
+them**. This works because `calc_foi` reads the **settled start-of-interval** infectious
+census `I[t]` (not the working column `t+1` that this tick's step and transmission build),
+so its value does NOT depend on where the step kernel runs. An agent enters `I` one census
+column after it is infected (via either the step kernel's E→I or `transmission`'s S→I) and
+recovers `D` columns later, so it contributes to the FOI on exactly the `D` columns it
+occupies — `R0 = beta · D` for both direct S→I and E-entry, with no special-casing and no
+residency artifact. (Historical note: `calc_foi` used to read `I[t+1]`, which forced a
+different ordering per family; reading `I[t]` removed that footgun.)
 
 Validated by `examples/sir_attack_fraction.R` / `seir_attack_fraction.R` (both match the
 Kermack–McKendrick final size with `R0 = beta · D`). See `examples/engwal_measles.R` for
 a full M-S-E-I-R model and `simple_sir.R` / `endemic_sir.R` for spatial Column SIR.
+
+**Higher-level helpers.** `run_model(scenario, model, …)` wires the whole menagerie in the
+correct order and returns a **`model` environment** bundling `$people`, `$nodes`,
+`$network`, and `$carry`; it seeds only the states the model has (any `E`/`I`/`R` column
+the scenario supplies), records the per-node flows `incidence` / `onset` / `recovery` /
+`waning` as applicable, and takes optional `init(model)` / `step_enter(model)` /
+`step_exit(model)` callbacks for user extension. `squash(people)` compacts dead agents
+out; `calc_capacity(...)` bounds cumulative-births capacity (no reclaim) while
+`calc_capacity_cdr(...)` bounds peak-living capacity for squash-reclaimed long runs. The
+binning family is `bincount()` / `bincount_wt()` (weighted) / `bincount_where()` (predicate-
+filtered, count-aware) / `bincount_where_wt()` (weighted + filtered).
 
 ## Commenting conventions
 

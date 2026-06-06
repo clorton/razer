@@ -14,12 +14,13 @@
 #      whose non-trivial root gives the attack fraction for a large, well-mixed,
 #      fully susceptible population.
 #
-# Built on the Column kernels (`calc_foi` / `step_sir` / `transmission`). Per-tick
-# order: carry_forward -> calc_foi -> step_sir (I->R) -> transmission (S->I). Running
-# `calc_foi` BEFORE recovery counts each infectious agent on its recovery tick; since a
-# directly-infected agent enters I *after* the FOI tally (so it is not counted on its
-# entry tick), counting it on its recovery tick instead gives the full infectious period
-# D — i.e. the effective basic reproduction number is
+# Built on the Column kernels (`calc_foi` / `step_sir` / `transmission`). Per-tick order is
+# the single razer ordering: carry_forward -> step_sir (I->R) -> calc_foi -> transmission
+# (S->I), with `calc_foi` placed IMMEDIATELY before `transmission` (no step between them).
+# `calc_foi` reads the SETTLED start-of-interval infectious census I[t], so each infectious
+# agent contributes to the force of infection on exactly the D census columns it occupies
+# (it enters I one column after infection and recovers D columns later). The effective
+# basic reproduction number is therefore the full infectious period,
 #
 #     R0 = beta * D
 #
@@ -76,10 +77,10 @@ run_sir_columns <- function(n, n_seed, beta_val, D, horizon, stop_extinct = FALS
   for (tick in seq_len(horizon - 1L)) {
     t <- tick - 1L
     carry_forward_states(list(S, I, R), t)              # copy column t -> t+1
-    calc_foi(I, N, beta, season, net, foi, t)           # BEFORE recovery -> R0 = beta*D
     # step_sir with absorbing = R: I->R recovery (no M/E agents, so waned/onset are 0).
     rec <- step_sir(state, timer, nodeid, n, nn, inf_dist, states[["R"]])
     move_count(I, R, rec$cleared, t)
+    calc_foi(I, N, beta, season, net, foi, t)           # reads settled I[t]; just before transmit -> R0 = beta*D
     # transmission S->I returns new infections per node; apply the S->I census delta.
     inf <- transmission(state, timer, nodeid, n, foi, t, states[["I"]], inf_dist)
     move_count(S, I, inf, t)
