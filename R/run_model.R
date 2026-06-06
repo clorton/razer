@@ -25,6 +25,18 @@
 # Round duration draws to whole u16 ticks (the kernels' minimum is 1).
 .timer0 <- function(x) pmax(1L, pmin(65535L, as.integer(round(x))))
 
+# Validate a count vector is finite, non-negative, and whole-valued; return it as integer.
+# Used for the scenario `population` and the E/I/R seed columns so a stray NA, Inf, or
+# fractional count fails with a clear message instead of a cryptic base-R error or a silent
+# truncation.
+.whole_nonneg <- function(x, what) {
+  if (!is.numeric(x) || anyNA(x) || any(!is.finite(x)))
+    stop(sprintf("`%s` must be finite numeric (no NA / Inf)", what))
+  if (any(x < 0))         stop(sprintf("`%s` must be non-negative", what))
+  if (any(x != floor(x))) stop(sprintf("`%s` must be whole numbers", what))
+  as.integer(x)
+}
+
 #' Run a closed-population compartmental model.
 #'
 #' Builds an agent population from a per-node scenario, seeds it, and advances one of the
@@ -111,7 +123,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   if (!is.null(seed)) set_seed(seed)
 
   states  <- laser_states()
-  pops    <- as.integer(scenario$population)
+  pops    <- .whole_nonneg(scenario$population, "scenario$population")
   n       <- sum(pops)
   n_nodes <- nrow(scenario)
 
@@ -155,7 +167,8 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   # (only when immunity wanes). States the MODEL lacks are never seeded.
   seed_states <- c(if (has_E) "E", "I", if (has_R) "R")
   seed_counts <- lapply(seed_states, function(st)
-    if (st %in% names(scenario)) as.integer(scenario[[st]]) else integer(n_nodes))
+    if (st %in% names(scenario)) .whole_nonneg(scenario[[st]], paste0("scenario$", st))
+    else integer(n_nodes))
   names(seed_counts) <- seed_states
   total_seeded <- if (length(seed_counts)) Reduce(`+`, seed_counts) else integer(n_nodes)
   if (any(total_seeded > pops))

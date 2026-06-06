@@ -68,6 +68,12 @@ test_that("run_model validates its inputs", {
                "init.*function")
   expect_error(run_model(scen, "SIR", nticks = 10L, r0 = -2, infectious_period = 5), "r0")
   expect_error(run_model(scen, "SIR", nticks = 10L, r0 = NA, infectious_period = 5), "r0")
+  expect_error(run_model(data.frame(population = c(100, NA)), "SIR", nticks = 10L, r0 = 2,
+                         infectious_period = 5), "population.*NA|NA.*population|finite")
+  expect_error(run_model(data.frame(population = 100.5), "SIR", nticks = 10L, r0 = 2,
+                         infectious_period = 5), "whole")
+  expect_error(run_model(data.frame(population = 1000L, I = NA), "SIR", nticks = 10L, r0 = 2,
+                         infectious_period = 5), "I.*finite|finite")
 })
 
 test_that("run_model returns a model environment bundling people/nodes/network/carry", {
