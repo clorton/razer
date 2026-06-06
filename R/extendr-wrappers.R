@@ -845,6 +845,27 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'}
 #'}
 #'
+#'\subsection{Method `squash`}{
+#'Compact the first `length(keep)` elements in place, keeping those flagged `TRUE`.
+#'
+#'Drops elements where `keep` is `FALSE`/`NA`, shifting the survivors to the front
+#'(order preserved), and returns the number kept. Use it to reclaim the slots of
+#'deceased agents: apply the SAME `keep` mask to every per-agent Column (so they stay
+#'aligned) and set the active count to the returned value. The R [squash()] helper
+#'does exactly this across a people environment. Only valid for a 1-D (scalar) Column.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`keep`}{A logical vector whose length is at most the column length (typically the active agent count).}
+#'}}
+#' \subsection{return}{
+#'The number of kept elements (an integer); elements past it are left as-is.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
 Column <- new.env(parent = emptyenv())
 
 Column$length <- function() .Call(wrap__Column__length, self)
@@ -860,6 +881,8 @@ Column$set <- function(values) .Call(wrap__Column__set, self, values)
 Column$col <- function(slot) .Call(wrap__Column__col, self, slot)
 
 Column$set_col <- function(slot, values) .Call(wrap__Column__set_col, self, slot, values)
+
+Column$squash <- function(keep) .Call(wrap__Column__squash, self, keep)
 
 #' @rdname Column
 #' @usage NULL

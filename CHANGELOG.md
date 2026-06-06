@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- **Agent compaction: `Column$squash(keep)` + the `squash(people)` helper**
+  (`src/rust/src/column.rs`, `R/squash.R`). `Column$squash(keep)` stably compacts a 1-D
+  Column to the elements flagged by a logical mask, returning the kept count;
+  `squash(people)` applies one mask (default: still-alive, `state != D`) across every
+  per-agent Column in a people environment so they stay row-aligned, and updates the
+  active count. This reclaims the slots of agents that have left the simulation (e.g. the
+  deceased) so the per-tick kernels stop iterating over them and `births` can refill the
+  slots — the compaction the Column world had been missing. The per-node census is
+  aggregate and unaffected. Covered by `tests/testthat/test-squash.R`.
 - **Generic composable transition kernels** `step_timer_expire(from, to)` and
   `step_timer_expire_set(from, to, duration)` (`src/rust/src/steps.rs`). One timed
   `from_state → to_state` transition each (untimed vs timed destination), returning

@@ -393,6 +393,38 @@ impl Column {
             Storage::F64(v) => write_slice!(v, f64),
         }
     }
+
+    /// Compact the first `length(keep)` elements in place, keeping those flagged `TRUE`.
+    ///
+    /// Drops elements where `keep` is `FALSE`/`NA`, shifting the survivors to the front
+    /// (order preserved), and returns the number kept. Use it to reclaim the slots of
+    /// deceased agents: apply the SAME `keep` mask to every per-agent Column (so they stay
+    /// aligned) and set the active count to the returned value. The R [squash()] helper
+    /// does exactly this across a people environment. Only valid for a 1-D (scalar) Column.
+    ///
+    /// @param keep A logical vector whose length is at most the column length (typically
+    ///   the active agent count).
+    /// @return The number of kept elements (an integer); elements past it are left as-is.
+    /// @export
+    fn squash(&mut self, keep: Robj) -> i32 {
+        assert_eq!(self.n_slices, 1, "squash is only valid for a 1-D (scalar) Column");
+        let k = keep.as_logical_slice().expect("`keep` must be a logical vector");
+        let l = k.len();
+        assert!(l <= self.len(), "`keep` length ({l}) exceeds column length ({})", self.len());
+        // In-place stable compaction: copy each kept element down to the write cursor `w`.
+        macro_rules! sq { ($v:expr) => {{
+            let mut w = 0usize;
+            for i in 0..l { if k[i].is_true() { $v[w] = $v[i]; w += 1; } }
+            w
+        }} }
+        let w = match &mut self.data {
+            Storage::I8(v)  => sq!(v), Storage::U8(v)  => sq!(v),
+            Storage::I16(v) => sq!(v), Storage::U16(v) => sq!(v),
+            Storage::I32(v) => sq!(v), Storage::U32(v) => sq!(v),
+            Storage::F32(v) => sq!(v), Storage::F64(v) => sq!(v),
+        };
+        w as i32
+    }
 }
 
 /// Allocate a fresh, zero-filled property array of a given type and length.

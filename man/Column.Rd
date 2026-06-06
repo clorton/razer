@@ -6,7 +6,7 @@
 \alias{$.Column}
 \title{A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).}
 \format{
-An object of class \code{environment} of length 7.
+An object of class \code{environment} of length 8.
 }
 \usage{
 Column
@@ -125,6 +125,27 @@ slice — a derived population total) without rewriting the whole buffer.
 \item{\code{slot}}{  0-based column index, less than the number of columns.}
 \item{\code{values}}{A numeric vector of length \code{slice_len}.}
 }}
+\subsection{export}{
+
+}
+}
+
+\subsection{Method \code{squash}}{
+Compact the first \code{length(keep)} elements in place, keeping those flagged \code{TRUE}.
+
+Drops elements where \code{keep} is \code{FALSE}/\code{NA}, shifting the survivors to the front
+(order preserved), and returns the number kept. Use it to reclaim the slots of
+deceased agents: apply the SAME \code{keep} mask to every per-agent Column (so they stay
+aligned) and set the active count to the returned value. The R \code{\link[=squash]{squash()}} helper
+does exactly this across a people environment. Only valid for a 1-D (scalar) Column.
+
+\subsection{Arguments}{
+\describe{
+\item{\code{keep}}{A logical vector whose length is at most the column length (typically the active agent count).}
+}}
+\subsection{return}{
+The number of kept elements (an integer); elements past it are left as-is.
+}
 \subsection{export}{
 
 }
