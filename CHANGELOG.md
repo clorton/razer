@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Fixed
+- **SIR models now realize the full `R0 = beta · D`, not `beta · (D − 1)`.** With direct
+  `S→I` transmission a newly infectious agent enters `I` *after* the force-of-infection
+  tally; if recoveries were also excluded from the tally the agent contributed on only
+  `D − 1` ticks. In the Column-kernel examples (`simple_sir.R`, `endemic_sir.R`,
+  `endemic_sir_seasonal.R`) the per-tick order is changed to run **`calc_foi` before
+  `sir_step`** (recovery), so an agent is counted on its recovery tick and the effective
+  infectious period is the full `D`. The endemic SIR now settles with `S` at `1/R0`
+  (was ~`1/(beta·(D−1))`). `calc_foi`'s docstring and the `CLAUDE.md` modeling notes are
+  updated to document the ordering and to forbid `beta·(D−1)` models. (The legacy
+  monolithic LaserFrame `step_transmission_si`, used by `run_sir()` and
+  `sir_attack_fraction.R`, still yields `beta·(D−1)` — a structural limitation of
+  computing the tally and infection in one kernel; those are slated to move to the
+  Column kernels.)
+
 ### Changed
 - **Breaking:** `step_transmission_si()` and `step_transmission_se()` now take a
   required fifth argument, `network`, enabling spatial coupling of contagion (see

@@ -140,9 +140,12 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
     for (tick in seq_len(nticks - 1L)) {
       t0 <- tick - 1L
       carry_forward_states(list(nodes$S, nodes$I, nodes$R), t0, total = nodes$N)
+      # calc_foi BEFORE sir_step (recovery) so an agent counts on its recovery tick;
+      # for direct S->I this yields the full infectious period D (R0 = beta * D), not
+      # D - 1. See endemic_sir.R for the full rationale.
+      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       sir_step(people$state, people$timer, people$nodeid, people$count,
                nodes$I, nodes$R, nodes$recoveries, t0)
-      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       transmission(people$state, people$timer, people$nodeid, people$count,
                    nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
                    states[["I"]], inf_duration)

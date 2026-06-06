@@ -161,9 +161,13 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   # 0-based tick index the kernels expect.
   #   carry_forward:    seed tick t+1 of each census counter with tick t's value
   #                     (an SEIR model would also carry E; users can carry e.g. V).
+  #   calc_foi:         FOI[t] from the infectious census I[t+1] BEFORE recovery, so an
+  #                     agent counts on its recovery tick too. With direct S->I (no E),
+  #                     the agent enters I *after* this tally, so it is not counted on
+  #                     its entry tick; counting it on its recovery tick instead gives
+  #                     the full infectious period D — i.e. R0 = beta * D, not D - 1.
+  #                     (Run calc_foi BEFORE sir_step; this is the SIR ordering.)
   #   sir_step:         recover (I -> R), updating the carried-forward census at t+1.
-  #   calc_foi:         FOI[t] from the POST-recovery infectious census I[t+1], so
-  #                     agents recovering this tick are excluded from the force.
   #   transmission:     infect susceptibles from FOI[t] (S -> I) at t+1. For SIR the
   #                     receiving state is I directly (an SEIR model would pass E and
   #                     an incubation-period distribution instead).
@@ -177,9 +181,9 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
       carry_forward(nodes$S, t0)
       carry_forward(nodes$I, t0)
       carry_forward(nodes$R, t0)
+      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       sir_step(people$state, people$timer, people$nodeid, people$count,
                nodes$I, nodes$R, nodes$recoveries, t0)
-      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       transmission(people$state, people$timer, people$nodeid, people$count,
                    nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
                    states[["I"]], inf_duration)

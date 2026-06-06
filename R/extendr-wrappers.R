@@ -619,14 +619,24 @@ sir_step <- function(state, timer, nodeid, count, i_count, r_count, recoveries, 
 #' `tick` of `foi`. The local rate per node is
 #' `r[k] = beta[k] * seasonality[k] * infected[k] / population[k]`, redistributed as
 #' `foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]`. `transmission()`
-#' turns this rate into a per-tick probability `1 - exp(-foi)`. Call it after
-#' `sir_step` and just before `transmission`.
+#' turns this rate into a per-tick probability `1 - exp(-foi)`.
 #'
 #' Index conventions: `infected` and `population` are census buffers read at the
-#' POST-RECOVERY working column `tick + 1` (so agents recovering this tick are
-#' excluded, and the denominator is the current population — which may change once
-#' vital dynamics are added). `beta` and `seasonality` are exogenous modifier grids
-#' read at the interval column `tick`. The result is written to `foi[tick]`.
+#' working column `tick + 1` (the denominator is the current population, which may
+#' change with vital dynamics); `beta` and `seasonality` are exogenous modifier grids
+#' read at the interval column `tick`; the result is written to `foi[tick]`.
+#'
+#' **Ordering and the effective infectious period.** Whether `infected[tick+1]` is the
+#' pre- or post-recovery count depends on where you place this call, and that choice
+#' sets the realized infectious period:
+#' * For **direct S→I** (SIR), call `calc_foi` BEFORE the recovery step (`sir_step`), so
+#'   an agent is still counted on its recovery tick. Because a directly-infected agent
+#'   is added to `I` *after* this tally (so it is not counted on its entry tick),
+#'   counting it on its recovery tick instead yields the full period: `R0 = beta * D`,
+#'   not `beta * (D - 1)`.
+#' * For **SEIR-style** entry (agents arrive in `I` via a separate step run before this
+#'   tally, e.g. `measles_step`'s E→I), call `calc_foi` AFTER that step: the new
+#'   infectious are counted on their entry tick and recoveries excluded — also `beta * D`.
 #'
 #' @param infected   Infectious-count census Column (`nodes$I`), `slice_len == n_nodes`.
 #' @param population Per-node population census Column (`nodes$N`); the FOI denominator.

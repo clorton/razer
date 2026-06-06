@@ -25,13 +25,31 @@ This is validated by the attack-fraction examples: with downstream-first orderin
 the **SEIR** model matches the Kermack–McKendrick final size `A = 1 − exp(−R0·A)`
 with `R0 = beta · D` (full infectious period `D`).
 
-**SIR caveat.** For direct `S→I` transmission the offset persists regardless of
-order: an agent enters `I` *inside* `step_transmission_si`, after that step's
-infectious tally is computed, so it first contributes to the force of infection on
-the next tick. The SIR effective reproduction number is therefore
-`R0 = beta · (D − 1)`, not `beta · D`. (SEIR avoids this because agents enter `I`
-via `step_exposed_ei`, a separate step that runs before the transmission tally.)
-See `examples/sir_attack_fraction.R` and `examples/seir_attack_fraction.R`.
+**No `beta · (D − 1)` models — always realize the full `beta · D`.** With direct
+`S→I` transmission a newly infectious agent enters `I` *after* the tick's
+force-of-infection tally, so it is never counted on its entry tick. If recoveries are
+*also* excluded from the tally, the agent contributes on only `D − 1` ticks and the
+effective reproduction number collapses to `R0 = beta · (D − 1)`. **This is a bug, not
+an accepted convention; no model in this package should exhibit it.**
+
+The fix depends on which kernels you use:
+
+- **Column kernels (`calc_foi` / `sir_step` / `transmission`) — the standard path.**
+  Run `calc_foi` *before* the recovery step (`sir_step`), so an agent is still counted
+  on its recovery tick. The directly-infected agent loses its entry tick but gains its
+  recovery tick → the full `D`. Per-tick order: `carry_forward` → **`calc_foi`** →
+  `sir_step` → `transmission` → (vitals). (SEIR-style models — where agents enter `I`
+  via a step run *before* the tally, e.g. `measles_step`'s E→I — instead run `calc_foi`
+  *after* that step: the new infectious are counted on entry and recoveries excluded,
+  also `beta · D`.) `calc_foi`'s docstring spells out both orderings.
+- **Monolithic LaserFrame `step_transmission_si`.** Because it computes its infectious
+  tally and applies the S→I infection in the *same* call, neither reordering can
+  recover the full `D` — it structurally yields `beta · (D − 1)`. **Do not use it for
+  new SIR models; prefer the Column kernels** (or SEIR-style entry). `run_sir()` and
+  `examples/sir_attack_fraction.R` still ride this legacy kernel — see their notes.
+
+See `examples/simple_sir.R` / `endemic_sir.R` (Column SIR, `beta · D`) and
+`examples/seir_attack_fraction.R` (SEIR, `beta · D`).
 
 Steps that transition into untimed states (`step_infectious_is`,
 `step_recovered_rs` into S; `step_mortality_cdr` into D; `step_births_cbr`) do not

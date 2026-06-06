@@ -127,8 +127,12 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   # expect (t0). Order:
   #   carry_forward_states: copy each census column t0 -> t0+1 and set N[t0+1] = S+I+R
   #                         (one call does both the carry and the population total).
+  #   calc_foi:             FOI[t0] from I[t0+1] / N[t0+1] BEFORE recovery, so an agent
+  #                         counts on its recovery tick. With direct S->I the agent is
+  #                         not counted on its entry tick (it enters I after this tally),
+  #                         so counting it on its recovery tick instead yields the full
+  #                         infectious period D: R0 = beta * D, not beta * (D - 1).
   #   sir_step:             recover expired infectious (I -> R) at column t0+1.
-  #   calc_foi:             FOI[t0] from the post-recovery census I[t0+1] / N[t0+1].
   #   transmission:         infect susceptibles (S -> I) at t0+1, timer from inf_duration.
   #   constant_pop_vitals_sir: deaths (reborn susceptible) = births, census kept in sync.
   #   import_infections:    activate reserved slots as new infectious cases per the
@@ -148,9 +152,9 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
     for (tick in seq_len(nticks - 1L)) {
       t0 <- tick - 1L
       carry_forward_states(list(nodes$S, nodes$I, nodes$R), t0, total = nodes$N)
+      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       sir_step(people$state, people$timer, people$nodeid, people$count,
                nodes$I, nodes$R, nodes$recoveries, t0)
-      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
       transmission(people$state, people$timer, people$nodeid, people$count,
                    nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
                    states[["I"]], inf_duration)

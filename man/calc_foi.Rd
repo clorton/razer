@@ -31,13 +31,25 @@ Computes the frequency-dependent, network-redistributed FOI \strong{rate} into c
 \code{tick} of \code{foi}. The local rate per node is
 \code{r[k] = beta[k] * seasonality[k] * infected[k] / population[k]}, redistributed as
 \verb{foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]}. \code{transmission()}
-turns this rate into a per-tick probability \code{1 - exp(-foi)}. Call it after
-\code{sir_step} and just before \code{transmission}.
+turns this rate into a per-tick probability \code{1 - exp(-foi)}.
 }
 \details{
 Index conventions: \code{infected} and \code{population} are census buffers read at the
-POST-RECOVERY working column \code{tick + 1} (so agents recovering this tick are
-excluded, and the denominator is the current population — which may change once
-vital dynamics are added). \code{beta} and \code{seasonality} are exogenous modifier grids
-read at the interval column \code{tick}. The result is written to \code{foi[tick]}.
+working column \code{tick + 1} (the denominator is the current population, which may
+change with vital dynamics); \code{beta} and \code{seasonality} are exogenous modifier grids
+read at the interval column \code{tick}; the result is written to \code{foi[tick]}.
+
+\strong{Ordering and the effective infectious period.} Whether \code{infected[tick+1]} is the
+pre- or post-recovery count depends on where you place this call, and that choice
+sets the realized infectious period:
+\itemize{
+\item For \strong{direct S→I} (SIR), call \code{calc_foi} BEFORE the recovery step (\code{sir_step}), so
+an agent is still counted on its recovery tick. Because a directly-infected agent
+is added to \code{I} \emph{after} this tally (so it is not counted on its entry tick),
+counting it on its recovery tick instead yields the full period: \code{R0 = beta * D},
+not \code{beta * (D - 1)}.
+\item For \strong{SEIR-style} entry (agents arrive in \code{I} via a separate step run before this
+tally, e.g. \code{measles_step}'s E→I), call \code{calc_foi} AFTER that step: the new
+infectious are counted on their entry tick and recoveries excluded — also \code{beta * D}.
+}
 }
