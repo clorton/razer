@@ -673,6 +673,38 @@ calc_foi <- function(infected, population, beta, seasonality, network, foi, tick
 #' @export
 transmission <- function(state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration) .Call(wrap__transmission, state, timer, nodeid, count, foi, s_count, to_count, incidence, tick, to_state, duration)
 
+#' Apply constant-population SIR vital dynamics for one tick.
+#'
+#' `rate` is a per-node daily death-HAZARD-rate grid (a values map; the caller
+#' converts a crude death rate of annual deaths per 1000 people to a daily rate,
+#' e.g. `cdr / 1000 / 365`). For each of the first `count` agents, this converts the
+#' node's rate to a probability `1 - exp(-rate)` (once per node, like transmission)
+#' and, with that probability, "unalives" the agent and replaces it with a newborn:
+#' the agent's `state` is reset to Susceptible and its `timer` to 0.
+#'
+#' The S/I/R node census is updated IN PLACE at column `tick + 1` (the working
+#' column the caller has already carried forward): a death out of I decrements `I`
+#' and increments `S`; a death out of R decrements `R` and increments `S`; a death
+#' out of S nets to zero. Every event (from any compartment) is counted per node and
+#' written to BOTH the `births` and `deaths` flow reports for `tick` (equal under
+#' constant population). Agents are assumed to be in S, I, or R (it is the SIR
+#' variant). Parallelized with private per-thread node buffers summed at the end.
+#'
+#' @param state   Per-agent `u8` state Column (mutated; deaths reset to Susceptible).
+#' @param timer   Per-agent `u8` countdown Column (mutated; deaths reset to 0).
+#' @param nodeid  Per-agent `u16` 0-based node-id Column.
+#' @param count   Number of active agents to process.
+#' @param rate    Per-node daily death-hazard-rate grid (`n_ticks x n_nodes`, from
+#'   [values_map()]); column `tick` is read.
+#' @param s_count,i_count,r_count  `n_ticks x n_nodes` i32 census Columns kept in
+#'   sync (mutated at column `tick + 1`).
+#' @param births,deaths  `(n_ticks-1) x n_nodes` i32 flow Columns; column `tick`
+#'   receives the per-node event counts (equal; mutated).
+#' @param tick    0-based tick index.
+#' @return `NULL` (invisibly); the Columns are modified in place.
+#' @export
+constant_pop_vitals_sir <- function(state, timer, nodeid, count, rate, s_count, i_count, r_count, births, deaths, tick) .Call(wrap__constant_pop_vitals_sir, state, timer, nodeid, count, rate, s_count, i_count, r_count, births, deaths, tick)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a

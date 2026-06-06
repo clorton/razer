@@ -12,6 +12,20 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `constant_pop_vitals_sir(state, timer, nodeid, count, rate, S, I, R, births, deaths, tick)`
+  — constant-population SIR vital dynamics (`src/rust/src/vitals.rs`). Each agent
+  dies with probability `1 - exp(-rate[node])` (the caller passes a per-node daily
+  death HAZARD rate grid — e.g. crude death rate `cdr / 1000 / 365` via `values_map`)
+  and is immediately reborn susceptible (`state -> S`, `timer -> 0`); every event is
+  recorded as both a birth and a death (equal under constant population) in the
+  `tick` column of the `births`/`deaths` flow reports. The S/I/R node census is kept
+  exactly in sync at column `tick+1`: a death out of I/R moves that count to S (a
+  death out of S nets to zero), so `S+I+R` stays equal to the population and matches
+  a direct agent census. SIR-specific (knows the S/I/R compartments). Parallelized
+  across cores with private per-thread node buffers reduced at the end. Covered by
+  `tests/testthat/test-vitals.R` (incl. a parallel-vs-census check at 1M agents).
+  `examples/simple_sir.R`'s `run_sir_model()` gains a `cdr` argument and runs it as
+  the last per-tick step, resupplying susceptibles for endemic dynamics.
 - **Spatial SIR transmission + an incrementally-maintained node census** over
   `Column` buffers (`src/rust/src/sir.rs`). All three kernels parallelize the
   per-agent work across cores with private per-thread node accumulators (no shared

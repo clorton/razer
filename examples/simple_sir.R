@@ -21,8 +21,10 @@ library(razer)
 # which each infectious agent's recovery timer is drawn. `r0` is the basic
 # reproduction number; the transmission coefficient is `beta = r0 / mean(inf_duration)`.
 # `seasonality` is a transmission modifier accepted in any broadcastable form (a
-# scalar, a per-node or per-tick vector, or a full nticks x nnodes matrix).
-run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonality = 1) {
+# scalar, a per-node or per-tick vector, or a full nticks x nnodes matrix). `cdr` is
+# the crude death rate (annual deaths per 1000 people) driving constant-population
+# vital dynamics; 0 (the default) disables them.
+run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonality = 1, cdr = 0) {
   # `inherits(x, "Distribution")` checks the S3 class of the extendr handle.
   if (!inherits(inf_duration, "Distribution"))
     stop("`inf_duration` must be a Distribution (e.g. dist_constant(7) or dist_gamma(2, 2))")
@@ -93,6 +95,11 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   # multiplies them into the local force of infection.
   nodes$beta        <- values_map(beta,        nticks, n_nodes)
   nodes$seasonality <- values_map(seasonality, nticks, n_nodes)
+  # Vital dynamics: per-node daily death-HAZARD rate from the crude death rate
+  # (annual deaths per 1000 -> daily per person), plus per-interval birth/death flows.
+  nodes$death_rate  <- values_map(cdr / 1000 / 365, nticks, n_nodes)
+  nodes$births      <- allocate_vector("i32", nticks - 1L, n_nodes)
+  nodes$deaths      <- allocate_vector("i32", nticks - 1L, n_nodes)
 
   # ── seed initial infections / immunity from the scenario ──────────────────────
   # Agents are laid out node-by-node (see nodeid), so node k owns the contiguous
@@ -160,6 +167,8 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   #   transmission:     infect susceptibles from FOI[t] (S -> I) at t+1. For SIR the
   #                     receiving state is I directly (an SEIR model would pass E and
   #                     an incubation-period distribution instead).
+  #   vital dynamics:   constant-population births/deaths (deaths reborn susceptible),
+  #                     keeping the S/I/R census at t+1 in sync and recording flows.
   # Run dynamics nticks-1 times (the intervals between the nticks recorded states);
   # the final state nticks-1 has nothing transitioning out of the window.
   run <- function() {
@@ -174,6 +183,9 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
       transmission(people$state, people$timer, people$nodeid, people$count,
                    nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
                    states[["I"]], inf_duration)
+      constant_pop_vitals_sir(people$state, people$timer, people$nodeid, people$count,
+                              nodes$death_rate, nodes$S, nodes$I, nodes$R,
+                              nodes$births, nodes$deaths, t0)
     }
   }
   run()
@@ -182,11 +194,12 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   # `$values()` returns an nticks x n_nodes matrix, so row `nticks` is it.
   final <- nticks
   cat(sprintf(paste0("run_sir_model: %d patches, %d agents, %d ticks; seeded I=%d R=%d; ",
-                     "final S=%d I=%d R=%d; total incidence=%d, recoveries=%d.\n"),
+                     "final S=%d I=%d R=%d; incidence=%d, recoveries=%d, births=deaths=%d.\n"),
               n_nodes, people$count, nticks, sum(I_seed), sum(R_seed),
               sum(nodes$S$values()[final, ]), sum(nodes$I$values()[final, ]),
               sum(nodes$R$values()[final, ]),
-              sum(nodes$incidence$values()), sum(nodes$recoveries$values())))
+              sum(nodes$incidence$values()), sum(nodes$recoveries$values()),
+              sum(nodes$births$values())))
   invisible(list(people = people, nodes = nodes))
 }
 
@@ -247,8 +260,12 @@ nticks <- 10L
 # per-node vector, or a full nticks x nnodes matrix.
 seasonality <- 1 + 0.3 * sin(2 * pi * (seq_len(nticks) - 1L) / nticks)
 
+# Crude death rate (annual deaths per 1000 people) for constant-population vital
+# dynamics; births equal deaths, resupplying susceptibles for endemic dynamics.
+cdr <- 20
+
 # ── run ───────────────────────────────────────────────────────────────────────
 # `system.time(expr)` runs `expr` and returns a named numeric vector of timings;
 # `[["elapsed"]]` name-indexes the wall-clock seconds field.
-timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, R0, seasonality))
+timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, R0, seasonality, cdr))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))
