@@ -17,3 +17,6 @@ tmp/
 # large (~20 MB) upstream source dataset; the derived, shareable
 # EnglandWalesMeasles_places.csv (built by convert_measles.py) is committed instead
 examples/data/EnglandWalesMeasles.py
+
+# Local vendored clones (not part of the package)
+worldwide/
