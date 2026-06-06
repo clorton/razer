@@ -21,7 +21,7 @@ import_infections(
 \arguments{
 \item{state}{Per-agent \code{u8} state Column (capacity-sized; imported slots set to I).}
 
-\item{timer}{Per-agent \code{u8} timer Column (imported slots set from \code{duration}).}
+\item{timer}{Per-agent \code{u16} timer Column (imported slots set from \code{duration}).}
 
 \item{nodeid}{Per-agent \code{u16} node-id Column (imported slots set to their node).}
 

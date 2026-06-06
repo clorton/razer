@@ -600,7 +600,7 @@ step_timer_expire_set <- function(state, timer, nodeid, count, n_nodes, from_sta
 #' variant). Parallelized with private per-thread node buffers summed at the end.
 #'
 #' @param state   Per-agent `u8` state Column (mutated; deaths reset to Susceptible).
-#' @param timer   Per-agent `u8` countdown Column (mutated; deaths reset to 0).
+#' @param timer   Per-agent `u16` countdown Column (mutated; deaths reset to 0).
 #' @param nodeid  Per-agent `u16` 0-based node-id Column.
 #' @param count   Number of active agents to process.
 #' @param rate    Per-node daily death-hazard-rate grid (`n_ticks x n_nodes`, from
@@ -629,7 +629,7 @@ constant_pop_vitals_sir <- function(state, timer, nodeid, count, rate, s_count, 
 #' Sequential — it touches only the handful of imported slots, not all agents.
 #'
 #' @param state   Per-agent `u8` state Column (capacity-sized; imported slots set to I).
-#' @param timer   Per-agent `u8` timer Column (imported slots set from `duration`).
+#' @param timer   Per-agent `u16` timer Column (imported slots set from `duration`).
 #' @param nodeid  Per-agent `u16` node-id Column (imported slots set to their node).
 #' @param count   Current active agent count (the first free slot).
 #' @param i_count `n_ticks x n_nodes` i32 I census Column (mutated at `tick + 1`).

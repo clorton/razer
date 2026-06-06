@@ -26,9 +26,11 @@ use crate::distributions::Distribution;
 use crate::epidemic::STATE_S;
 use crate::rng;
 
-// Round a draw to a whole-tick u16 timer, clamped to [1, u16::MAX].
+// Round a draw to a whole-tick u16 timer, clamped to [1, u16::MAX]. Shared by the other
+// kernels that draw a state duration (e.g. vitals' import_infections) so the rounding and
+// NaN handling stay identical everywhere (NaN -> 1, via `max`/`min`, not `clamp`).
 #[inline]
-fn timer_u16(x: f64) -> u16 {
+pub(crate) fn timer_u16(x: f64) -> u16 {
     x.round().max(1.0).min(u16::MAX as f64) as u16
 }
 

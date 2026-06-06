@@ -25,6 +25,7 @@ use rand::Rng;
 use crate::column::Column;
 use crate::epidemic::{STATE_S, STATE_I, STATE_R};
 use crate::distributions::Distribution;
+use crate::transmission::timer_u16;
 use crate::rng;
 
 /// Apply constant-population SIR vital dynamics for one tick.
@@ -45,7 +46,7 @@ use crate::rng;
 /// variant). Parallelized with private per-thread node buffers summed at the end.
 ///
 /// @param state   Per-agent `u8` state Column (mutated; deaths reset to Susceptible).
-/// @param timer   Per-agent `u8` countdown Column (mutated; deaths reset to 0).
+/// @param timer   Per-agent `u16` countdown Column (mutated; deaths reset to 0).
 /// @param nodeid  Per-agent `u16` 0-based node-id Column.
 /// @param count   Number of active agents to process.
 /// @param rate    Per-node daily death-hazard-rate grid (`n_ticks x n_nodes`, from
@@ -166,7 +167,7 @@ fn constant_pop_vitals_sir(
 /// Sequential — it touches only the handful of imported slots, not all agents.
 ///
 /// @param state   Per-agent `u8` state Column (capacity-sized; imported slots set to I).
-/// @param timer   Per-agent `u8` timer Column (imported slots set from `duration`).
+/// @param timer   Per-agent `u16` timer Column (imported slots set from `duration`).
 /// @param nodeid  Per-agent `u16` node-id Column (imported slots set to their node).
 /// @param count   Current active agent count (the first free slot).
 /// @param i_count `n_ticks x n_nodes` i32 I census Column (mutated at `tick + 1`).
@@ -232,8 +233,7 @@ fn import_infections(
             let node = sched_node[e] as u16;
             for _ in 0..sched_count[e] as usize {
                 st[count] = infectious;
-                let d = duration.sample(&mut rng);
-                tm[count] = d.round().clamp(1.0, 65535.0) as u16;
+                tm[count] = timer_u16(duration.sample(&mut rng));
                 nid[count] = node;
                 count += 1;
             }

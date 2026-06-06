@@ -21,7 +21,7 @@ constant_pop_vitals_sir(
 \arguments{
 \item{state}{Per-agent \code{u8} state Column (mutated; deaths reset to Susceptible).}
 
-\item{timer}{Per-agent \code{u8} countdown Column (mutated; deaths reset to 0).}
+\item{timer}{Per-agent \code{u16} countdown Column (mutated; deaths reset to 0).}
 
 \item{nodeid}{Per-agent \code{u16} 0-based node-id Column.}
 
