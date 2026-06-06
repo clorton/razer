@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Fixed (red-team follow-up)
+- **`run_model` input validation & honesty.** Rejects a non-finite/negative `r0`; rejects
+  `NA`/`Inf`/fractional/negative `population` and `E`/`I`/`R` seed columns with clear
+  messages (no more silent truncation or cryptic base-R errors); and **warns** when a
+  scenario seed column or a period argument is supplied that the chosen model does not use
+  (e.g. an `E` column or `incubation_period` passed to `SIR`).
+- **`step_update` docstring corrected:** it runs after the step kernel but before
+  `calc_foi`, which reads the settled slice `t` — so census edits there affect the NEXT
+  tick's FOI; edit the drivers (`beta`/`seasonality`/`network`) to affect the current tick.
+- **`bincount_where()` / `bincount_where_wt()`: `count` is now required** (no longer
+  defaults to the Column's capacity), so an over-allocated population can't silently tally
+  reserved, inactive slots. Pass the active count (e.g. `people$count`).
+
 ### Changed
 - **One per-tick ordering for every model — `calc_foi` immediately before `transmission`.**
   `calc_foi` now reads the **settled start-of-interval** infectious census `I[t]` instead

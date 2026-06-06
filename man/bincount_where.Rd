@@ -10,7 +10,7 @@ bincount_where(
   prop,
   op,
   value,
-  count = NULL,
+  count,
   counts = NULL,
   slot = 0L
 )
@@ -29,8 +29,10 @@ bincount_where(
 
 \item{value}{The threshold the property is compared against.}
 
-\item{count}{How many leading agents to scan (the active count). Defaults to the
-full length of \code{group}.}
+\item{count}{How many leading agents to scan — the ACTIVE agent count, typically
+\code{people$count}. Required: there is no implicit population size, and the Column may be
+over-allocated (\code{capacity > count}), so scanning its full length would tally reserved,
+inactive slots (which default to node 0 / state S). Pass the active count explicitly.}
 
 \item{counts}{Optional numeric \link{Column} to receive the totals; when omitted an
 integer result vector is allocated and returned instead.}
@@ -62,7 +64,7 @@ per-tick model loop.
 states <- laser_states()
 state  <- allocate_scalar("u8",  6L); state$set(c(0, 1, 1, 2, 1, 0))   # S E E I E S
 nodeid <- allocate_scalar("u16", 6L); nodeid$set(c(0, 0, 1, 1, 1, 0))
-bincount_where(nodeid, 2L, state, "eq", states[["E"]])   # exposed per node: 1 2
+bincount_where(nodeid, 2L, state, "eq", states[["E"]], count = 6L)   # exposed per node: 1 2
 }
 \seealso{
 \code{\link[=bincount]{bincount()}}, \code{\link[=bincount_wt]{bincount_wt()}}, \code{\link[=bincount_where_wt]{bincount_where_wt()}}.

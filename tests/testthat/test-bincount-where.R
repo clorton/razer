@@ -13,7 +13,7 @@ test_that("bincount_where tallies agents in a state by node (ad-hoc vector mode)
   state  <- allocate_scalar("u8",  6L); state$set(c(S, E, E, I, E, S))
   nodeid <- allocate_scalar("u16", 6L); nodeid$set(c(0, 0, 1, 1, 1, 0))
 
-  got <- bincount_where(nodeid, 2L, state, "eq", E)
+  got <- bincount_where(nodeid, 2L, state, "eq", E, count = 6L)
 
   expect_equal(got, c(1L, 2L))
   expect_equal(got, as.integer(tabulate(nodeid$values()[state$values() == E] + 1L, 2L)))
@@ -29,7 +29,7 @@ test_that("bincount_where finds under-fives by node via a dob > threshold predic
   dob    <- allocate_scalar("i32", 5L); dob$set(c(-100, -2000, -50, -3000, -1800))  # ages 100,2000,50,3000,1800 days
   nodeid <- allocate_scalar("u16", 5L); nodeid$set(c(0, 0, 1, 1, 1))
 
-  got <- bincount_where(nodeid, 2L, dob, "gt", thresh)
+  got <- bincount_where(nodeid, 2L, dob, "gt", thresh, count = 5L)
 
   # under five (dob > -1825): agents 1 (-100, node 0), 3 (-50, node 1), 5 (-1800, node 1)
   expect_equal(got, c(1L, 2L))
@@ -44,7 +44,7 @@ test_that("bincount_where scans only the live prefix `count`", {
   nodeid <- allocate_scalar("u16", 6L); nodeid$set(rep(0L, 6L))
 
   expect_equal(bincount_where(nodeid, 1L, state, "eq", E, count = 3L), 2L)  # only first 3 scanned
-  expect_equal(bincount_where(nodeid, 1L, state, "eq", E),             5L)  # default: all 6
+  expect_equal(bincount_where(nodeid, 1L, state, "eq", E, count = 6L), 5L)  # all 6 scanned
 })
 
 test_that("bincount_where writes into a report Column slice (model loop mode)", {
@@ -56,7 +56,7 @@ test_that("bincount_where writes into a report Column slice (model loop mode)", 
   nodeid <- allocate_scalar("u16", 4L); nodeid$set(c(0, 1, 1, 1))
   report <- allocate_vector("i32", 3L, 2L)         # 3 ticks x 2 nodes
 
-  res <- bincount_where(nodeid, 2L, state, "eq", E, counts = report, slot = 1L)
+  res <- bincount_where(nodeid, 2L, state, "eq", E, count = 4L, counts = report, slot = 1L)
 
   expect_null(res)
   expect_equal(report$values()[2L, ], c(1L, 2L))   # slot 1 -> row 2
@@ -69,7 +69,20 @@ test_that("bincount_where rejects an unknown comparison op", {
   # Then it errors rather than silently mis-counting.
   state  <- allocate_scalar("u8",  3L); state$set(c(E, E, S))
   nodeid <- allocate_scalar("u16", 3L); nodeid$set(rep(0L, 3L))
-  expect_error(bincount_where(nodeid, 1L, state, "approx", E), "op")
+  expect_error(bincount_where(nodeid, 1L, state, "approx", E, count = 3L), "op")
+})
+
+test_that("bincount_where requires an explicit count (no capacity default)", {
+  # Given a call that omits count
+  # When bincount_where / bincount_where_wt is invoked
+  # Then it errors rather than defaulting to the Column's capacity (which would tally
+  #      reserved/inactive slots in an over-allocated population). Failure would re-introduce
+  #      the silent over-count.
+  state  <- allocate_scalar("u8",  3L); state$set(c(I, I, S))
+  nodeid <- allocate_scalar("u16", 3L); nodeid$set(rep(0L, 3L))
+  wt     <- allocate_scalar("f64", 3L); wt$set(rep(1, 3L))
+  expect_error(bincount_where(nodeid, 1L, state, "eq", I), "count")
+  expect_error(bincount_where_wt(nodeid, 1L, state, "eq", I, wt), "count")
 })
 
 # ── bincount_where_wt: weighted + predicate-filtered ─────────────────────────────
@@ -83,13 +96,13 @@ test_that("bincount_where_wt sums a weight over matching agents by node (ad-hoc 
   nodeid <- allocate_scalar("u16", 5L); nodeid$set(c(0, 0, 1, 1, 1))
   shed   <- allocate_scalar("f64", 5L); shed$set(c(1.0, 0.5, 9, 2.0, 9))   # 9s on non-I
 
-  got <- bincount_where_wt(nodeid, 2L, state, "eq", I, shed)
+  got <- bincount_where_wt(nodeid, 2L, state, "eq", I, shed, count = 5L)
 
   expect_equal(got, c(1.5, 2.0))                      # node 0: 1.0+0.5; node 1: 2.0
   # equals the count-only result when every weight is 1:
   ones <- allocate_scalar("f64", 5L); ones$set(rep(1, 5L))
-  expect_equal(bincount_where_wt(nodeid, 2L, state, "eq", I, ones),
-               as.numeric(bincount_where(nodeid, 2L, state, "eq", I)))
+  expect_equal(bincount_where_wt(nodeid, 2L, state, "eq", I, ones, count = 5L),
+               as.numeric(bincount_where(nodeid, 2L, state, "eq", I, count = 5L)))
 })
 
 test_that("bincount_where_wt writes into a report slice and honours the live prefix", {

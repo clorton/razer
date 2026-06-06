@@ -92,8 +92,10 @@ bincount_wt <- function(values, weights, nbins, counts, slot = 0L) {
 #' @param op       Comparison string: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`,
 #'   `"ge"`.
 #' @param value    The threshold the property is compared against.
-#' @param count    How many leading agents to scan (the active count). Defaults to the
-#'   full length of `group`.
+#' @param count    How many leading agents to scan — the ACTIVE agent count, typically
+#'   `people$count`. Required: there is no implicit population size, and the Column may be
+#'   over-allocated (`capacity > count`), so scanning its full length would tally reserved,
+#'   inactive slots (which default to node 0 / state S). Pass the active count explicitly.
 #' @param counts   Optional numeric [Column] to receive the totals; when omitted an
 #'   integer result vector is allocated and returned instead.
 #' @param slot     Which slice of `counts` to write when `counts` is supplied; a
@@ -105,11 +107,10 @@ bincount_wt <- function(values, weights, nbins, counts, slot = 0L) {
 #' states <- laser_states()
 #' state  <- allocate_scalar("u8",  6L); state$set(c(0, 1, 1, 2, 1, 0))   # S E E I E S
 #' nodeid <- allocate_scalar("u16", 6L); nodeid$set(c(0, 0, 1, 1, 1, 0))
-#' bincount_where(nodeid, 2L, state, "eq", states[["E"]])   # exposed per node: 1 2
+#' bincount_where(nodeid, 2L, state, "eq", states[["E"]], count = 6L)   # exposed per node: 1 2
 #' @export
 bincount_where <- function(group, n_groups, prop, op, value,
-                           count = NULL, counts = NULL, slot = 0L) {
-  if (is.null(count)) count <- group$length()
+                           count, counts = NULL, slot = 0L) {
   if (is.null(counts)) {
     # Ad-hoc mode: allocate a 1-D i32 result and hand back a plain integer vector.
     out <- allocate_scalar("i32", n_groups)
@@ -139,8 +140,9 @@ bincount_where <- function(group, n_groups, prop, op, value,
 #' @param op       Comparison string: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
 #' @param value    The threshold the property is compared against.
 #' @param weights  A numeric [Column] of per-agent weights to sum (any numeric type).
-#' @param count    How many leading agents to scan (the active count). Defaults to the
-#'   full length of `group`.
+#' @param count    How many leading agents to scan — the ACTIVE agent count, typically
+#'   `people$count`. Required (see [bincount_where()]): scanning the Column's full length
+#'   would tally reserved, inactive slots in an over-allocated population.
 #' @param counts   Optional numeric [Column] to receive the sums; when omitted a numeric
 #'   result vector is allocated and returned instead.
 #' @param slot     Which slice of `counts` to write when `counts` is supplied. Defaults to `0`.
@@ -153,11 +155,10 @@ bincount_where <- function(group, n_groups, prop, op, value,
 #' nodeid  <- allocate_scalar("u16", 5L); nodeid$set(c(0, 0, 1, 1, 1))
 #' shed    <- allocate_scalar("f64", 5L); shed$set(c(1.0, 0.5, 9, 2.0, 9))# infectiousness
 #' # total shedding of infectious (state==I) agents per node:
-#' bincount_where_wt(nodeid, 2L, state, "eq", states[["I"]], shed)        # 1.5  2.0
+#' bincount_where_wt(nodeid, 2L, state, "eq", states[["I"]], shed, count = 5L)  # 1.5  2.0
 #' @export
 bincount_where_wt <- function(group, n_groups, prop, op, value, weights,
-                              count = NULL, counts = NULL, slot = 0L) {
-  if (is.null(count)) count <- group$length()
+                              count, counts = NULL, slot = 0L) {
   if (is.null(counts)) {
     out <- allocate_scalar("f64", n_groups)
     bincount_where_wt_impl(group, n_groups, prop, op, value, weights, count, out, 0L)

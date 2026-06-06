@@ -11,7 +11,7 @@ bincount_where_wt(
   op,
   value,
   weights,
-  count = NULL,
+  count,
   counts = NULL,
   slot = 0L
 )
@@ -29,8 +29,9 @@ bincount_where_wt(
 
 \item{weights}{A numeric \link{Column} of per-agent weights to sum (any numeric type).}
 
-\item{count}{How many leading agents to scan (the active count). Defaults to the
-full length of \code{group}.}
+\item{count}{How many leading agents to scan — the ACTIVE agent count, typically
+\code{people$count}. Required (see \code{\link[=bincount_where]{bincount_where()}}): scanning the Column's full length
+would tally reserved, inactive slots in an over-allocated population.}
 
 \item{counts}{Optional numeric \link{Column} to receive the sums; when omitted a numeric
 result vector is allocated and returned instead.}
@@ -59,7 +60,7 @@ state   <- allocate_scalar("u8",  5L); state$set(c(2, 2, 0, 2, 1))     # I I S I
 nodeid  <- allocate_scalar("u16", 5L); nodeid$set(c(0, 0, 1, 1, 1))
 shed    <- allocate_scalar("f64", 5L); shed$set(c(1.0, 0.5, 9, 2.0, 9))# infectiousness
 # total shedding of infectious (state==I) agents per node:
-bincount_where_wt(nodeid, 2L, state, "eq", states[["I"]], shed)        # 1.5  2.0
+bincount_where_wt(nodeid, 2L, state, "eq", states[["I"]], shed, count = 5L)  # 1.5  2.0
 }
 \seealso{
 \code{\link[=bincount]{bincount()}}, \code{\link[=bincount_wt]{bincount_wt()}}, \code{\link[=bincount_where]{bincount_where()}}.
