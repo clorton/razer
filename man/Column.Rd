@@ -6,7 +6,7 @@
 \alias{$.Column}
 \title{A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).}
 \format{
-An object of class \code{environment} of length 5.
+An object of class \code{environment} of length 7.
 }
 \usage{
 Column
@@ -88,6 +88,42 @@ e.g. writing per-agent node assignments or seeding initial states from R.
 \subsection{Arguments}{
 \describe{
 \item{\code{values}}{A numeric vector of length \code{length()}.}
+}}
+\subsection{export}{
+
+}
+}
+
+\subsection{Method \code{col}}{
+Read one column (\code{slot}) of a 2-D Column as an R vector snapshot.
+
+Returns the \code{slice_len} values in column \code{slot} (e.g. all nodes for one tick),
+widened to R \code{integer}/\code{double} like \code{\link[=values]{values()}}. For a scalar column the only
+valid \code{slot} is 0 (the whole vector).
+
+\subsection{Arguments}{
+\describe{
+\item{\code{slot}}{0-based column index, less than the number of columns.}
+}}
+\subsection{return}{
+A numeric vector of length \code{slice_len}.
+}
+\subsection{export}{
+
+}
+}
+
+\subsection{Method \code{set_col}}{
+Write \code{values} into one column (\code{slot}) of a 2-D Column, in place.
+
+\code{values} must have length \code{slice_len}; each element is cast to the column's
+data type. Lets the caller update a single column (e.g. one tick's per-node
+slice — a derived population total) without rewriting the whole buffer.
+
+\subsection{Arguments}{
+\describe{
+\item{\code{slot}}{  0-based column index, less than the number of columns.}
+\item{\code{values}}{A numeric vector of length \code{slice_len}.}
 }}
 \subsection{export}{
 

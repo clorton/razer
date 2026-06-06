@@ -24,6 +24,7 @@ use rayon::prelude::*;
 use rand::Rng;
 use crate::column::Column;
 use crate::epidemic::{STATE_S, STATE_I, STATE_R};
+use crate::distributions::Distribution;
 
 /// Apply constant-population SIR vital dynamics for one tick.
 ///
@@ -148,7 +149,108 @@ fn constant_pop_vitals_sir(
     for k in 0..n { d[start + k] = tally[k] as i32; }
 }
 
+/// Import new infectious cases from a schedule, activating reserved agent slots.
+///
+/// For the given `tick`, scans the schedule (parallel `sched_tick` / `sched_node` /
+/// `sched_count` vectors) and, for every entry whose `sched_tick == tick`, activates
+/// `sched_count` new agents in node `sched_node`: each takes the next free slot after
+/// the active `count`, is set Infectious with a `timer` drawn from `duration`, and
+/// has its `nodeid` set. The new agents must fit in the reserved capacity (the
+/// `state`/`timer`/`nodeid` Columns are allocated larger than the initial `count`).
+/// Per-node import counts are added to the I census at column `tick + 1` and written
+/// to the `importations` flow at column `tick`.
+///
+/// Returns the new active agent count (the caller stores it back into `people$count`).
+/// Sequential — it touches only the handful of imported slots, not all agents.
+///
+/// @param state   Per-agent `u8` state Column (capacity-sized; imported slots set to I).
+/// @param timer   Per-agent `u8` timer Column (imported slots set from `duration`).
+/// @param nodeid  Per-agent `u16` node-id Column (imported slots set to their node).
+/// @param count   Current active agent count (the first free slot).
+/// @param i_count `n_ticks x n_nodes` i32 I census Column (mutated at `tick + 1`).
+/// @param importations `(n_ticks-1) x n_nodes` i32 flow Column (set at `tick`).
+/// @param sched_tick,sched_node,sched_count  Equal-length integer schedule vectors.
+/// @param duration A Distribution for the imported cases' infectious timer.
+/// @param tick    0-based tick index.
+/// @return The new active agent count (`count` plus the number imported this tick).
+/// @export
+#[extendr]
+fn import_infections(
+    state: &mut Column,
+    timer: &mut Column,
+    nodeid: &mut Column,
+    count: i32,
+    i_count: &mut Column,
+    importations: &mut Column,
+    sched_tick: Vec<i32>,
+    sched_node: Vec<i32>,
+    sched_count: Vec<i32>,
+    duration: &Distribution,
+    tick: i32,
+) -> i32 {
+    assert!(count >= 0, "`count` must be non-negative, got {count}");
+    assert!(tick >= 0, "`tick` must be non-negative, got {tick}");
+    assert_eq!(sched_node.len(), sched_tick.len(), "schedule vectors must have equal length");
+    assert_eq!(sched_count.len(), sched_tick.len(), "schedule vectors must have equal length");
+    let mut count = count as usize;
+    let t = tick as usize;
+
+    let n = importations.slice_len();
+    assert_eq!(i_count.slice_len(), n, "`i_count` slice length must equal n_nodes");
+    assert!(t < importations.n_slices(), "`tick` out of range for `importations`");
+    assert!(t + 1 < i_count.n_slices(), "`tick`+1 out of range for `i_count`");
+
+    // First pass: total this tick + per-node tally, validating nodes and capacity.
+    let mut per_node = vec![0i64; n];
+    let mut total = 0usize;
+    for e in 0..sched_tick.len() {
+        if sched_tick[e] == tick {
+            let cnt = sched_count[e];
+            assert!(cnt >= 0, "schedule counts must be non-negative");
+            let node = sched_node[e];
+            assert!(node >= 0 && (node as usize) < n, "schedule node {node} out of range [0, {n})");
+            per_node[node as usize] += cnt as i64;
+            total += cnt as usize;
+        }
+    }
+    let capacity = state.len();
+    assert!(
+        count + total <= capacity,
+        "importing {total} agents would exceed capacity ({capacity}); active count is {count}"
+    );
+
+    // Second pass: activate the reserved slots as infectious agents.
+    let infectious = STATE_I as u8;
+    let st = state.as_u8_mut();
+    let tm = timer.as_u8_mut();
+    let nid = nodeid.as_u16_mut();
+    let mut rng = rand::thread_rng();
+    for e in 0..sched_tick.len() {
+        if sched_tick[e] == tick {
+            let node = sched_node[e] as u16;
+            for _ in 0..sched_count[e] as usize {
+                st[count] = infectious;
+                let d = duration.sample(&mut rng);
+                tm[count] = d.round().clamp(1.0, 255.0) as u8;
+                nid[count] = node;
+                count += 1;
+            }
+        }
+    }
+
+    // Census: add imports to I at tick+1; flow: record imports at tick.
+    let dst = (t + 1) * n;
+    let ic = i_count.as_i32_mut();
+    for k in 0..n { ic[dst + k] += per_node[k] as i32; }
+    let imp = importations.as_i32_mut();
+    let src = t * n;
+    for k in 0..n { imp[src + k] = per_node[k] as i32; }
+
+    count as i32
+}
+
 extendr_module! {
     mod vitals;
     fn constant_pop_vitals_sir;
+    fn import_infections;
 }

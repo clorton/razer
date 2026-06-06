@@ -705,6 +705,33 @@ transmission <- function(state, timer, nodeid, count, foi, s_count, to_count, in
 #' @export
 constant_pop_vitals_sir <- function(state, timer, nodeid, count, rate, s_count, i_count, r_count, births, deaths, tick) .Call(wrap__constant_pop_vitals_sir, state, timer, nodeid, count, rate, s_count, i_count, r_count, births, deaths, tick)
 
+#' Import new infectious cases from a schedule, activating reserved agent slots.
+#'
+#' For the given `tick`, scans the schedule (parallel `sched_tick` / `sched_node` /
+#' `sched_count` vectors) and, for every entry whose `sched_tick == tick`, activates
+#' `sched_count` new agents in node `sched_node`: each takes the next free slot after
+#' the active `count`, is set Infectious with a `timer` drawn from `duration`, and
+#' has its `nodeid` set. The new agents must fit in the reserved capacity (the
+#' `state`/`timer`/`nodeid` Columns are allocated larger than the initial `count`).
+#' Per-node import counts are added to the I census at column `tick + 1` and written
+#' to the `importations` flow at column `tick`.
+#'
+#' Returns the new active agent count (the caller stores it back into `people$count`).
+#' Sequential — it touches only the handful of imported slots, not all agents.
+#'
+#' @param state   Per-agent `u8` state Column (capacity-sized; imported slots set to I).
+#' @param timer   Per-agent `u8` timer Column (imported slots set from `duration`).
+#' @param nodeid  Per-agent `u16` node-id Column (imported slots set to their node).
+#' @param count   Current active agent count (the first free slot).
+#' @param i_count `n_ticks x n_nodes` i32 I census Column (mutated at `tick + 1`).
+#' @param importations `(n_ticks-1) x n_nodes` i32 flow Column (set at `tick`).
+#' @param sched_tick,sched_node,sched_count  Equal-length integer schedule vectors.
+#' @param duration A Distribution for the imported cases' infectious timer.
+#' @param tick    0-based tick index.
+#' @return The new active agent count (`count` plus the number imported this tick).
+#' @export
+import_infections <- function(state, timer, nodeid, count, i_count, importations, sched_tick, sched_node, sched_count, duration, tick) .Call(wrap__import_infections, state, timer, nodeid, count, i_count, importations, sched_tick, sched_node, sched_count, duration, tick)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a
@@ -1126,6 +1153,42 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'}
 #'}
 #'
+#'\subsection{Method `col`}{
+#'Read one column (`slot`) of a 2-D Column as an R vector snapshot.
+#'
+#'Returns the `slice_len` values in column `slot` (e.g. all nodes for one tick),
+#'widened to R `integer`/`double` like [values()]. For a scalar column the only
+#'valid `slot` is 0 (the whole vector).
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`slot`}{0-based column index, less than the number of columns.}
+#'}}
+#' \subsection{return}{
+#'A numeric vector of length `slice_len`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `set_col`}{
+#'Write `values` into one column (`slot`) of a 2-D Column, in place.
+#'
+#'`values` must have length `slice_len`; each element is cast to the column's
+#'data type. Lets the caller update a single column (e.g. one tick's per-node
+#'slice — a derived population total) without rewriting the whole buffer.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`slot`}{  0-based column index, less than the number of columns.}
+#'\item{`values`}{A numeric vector of length `slice_len`.}
+#'}}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
 Column <- new.env(parent = emptyenv())
 
 Column$length <- function() .Call(wrap__Column__length, self)
@@ -1137,6 +1200,10 @@ Column$values <- function() .Call(wrap__Column__values, self)
 Column$fill <- function(value) .Call(wrap__Column__fill, self, value)
 
 Column$set <- function(values) .Call(wrap__Column__set, self, values)
+
+Column$col <- function(slot) .Call(wrap__Column__col, self, slot)
+
+Column$set_col <- function(slot, values) .Call(wrap__Column__set_col, self, slot, values)
 
 #' @rdname Column
 #' @usage NULL

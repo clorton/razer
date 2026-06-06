@@ -169,6 +169,13 @@ impl Column {
         }
     }
 
+    pub(crate) fn as_u16_mut(&mut self) -> &mut [u16] {
+        match &mut self.data {
+            Storage::U16(v) => v,
+            _ => panic!("expected a u16 Column"),
+        }
+    }
+
     pub(crate) fn as_i32_mut(&mut self) -> &mut [i32] {
         match &mut self.data {
             Storage::I32(v) => v,
@@ -309,6 +316,61 @@ impl Column {
             Storage::U32(v) => for (e, &x) in v.iter_mut().zip(&vals) { *e = x as u32 },
             Storage::F32(v) => for (e, &x) in v.iter_mut().zip(&vals) { *e = x as f32 },
             Storage::F64(v) => for (e, &x) in v.iter_mut().zip(&vals) { *e = x },
+        }
+    }
+
+    /// Read one column (`slot`) of a 2-D Column as an R vector snapshot.
+    ///
+    /// Returns the `slice_len` values in column `slot` (e.g. all nodes for one tick),
+    /// widened to R `integer`/`double` like [values()]. For a scalar column the only
+    /// valid `slot` is 0 (the whole vector).
+    ///
+    /// @param slot 0-based column index, less than the number of columns.
+    /// @return A numeric vector of length `slice_len`.
+    /// @export
+    fn col(&self, slot: i32) -> Robj {
+        assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+        let slot = slot as usize;
+        assert!(slot < self.n_slices, "`slot` ({slot}) out of range for {} columns", self.n_slices);
+        let n = self.slice_len;
+        self.gather_to_robj(n, move |k| slot * n + k)
+    }
+
+    /// Write `values` into one column (`slot`) of a 2-D Column, in place.
+    ///
+    /// `values` must have length `slice_len`; each element is cast to the column's
+    /// data type. Lets the caller update a single column (e.g. one tick's per-node
+    /// slice — a derived population total) without rewriting the whole buffer.
+    ///
+    /// @param slot   0-based column index, less than the number of columns.
+    /// @param values A numeric vector of length `slice_len`.
+    /// @export
+    fn set_col(&mut self, slot: i32, values: Robj) {
+        assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+        let slot = slot as usize;
+        assert!(slot < self.n_slices, "`slot` ({slot}) out of range for {} columns", self.n_slices);
+        let n = self.slice_len;
+        let vals: Vec<f64> = if let Some(s) = values.as_real_slice() {
+            s.to_vec()
+        } else if let Some(s) = values.as_integer_slice() {
+            s.iter().map(|&i| i as f64).collect()
+        } else {
+            panic!("`values` must be a numeric (integer or double) vector");
+        };
+        assert_eq!(vals.len(), n, "`values` length ({}) must equal slice_len ({n})", vals.len());
+        let start = slot * n;
+        macro_rules! write_slice { ($v:expr, $t:ty) => {
+            for (e, &x) in $v[start..start + n].iter_mut().zip(&vals) { *e = x as $t; }
+        } }
+        match &mut self.data {
+            Storage::I8(v)  => write_slice!(v, i8),
+            Storage::U8(v)  => write_slice!(v, u8),
+            Storage::I16(v) => write_slice!(v, i16),
+            Storage::U16(v) => write_slice!(v, u16),
+            Storage::I32(v) => write_slice!(v, i32),
+            Storage::U32(v) => write_slice!(v, u32),
+            Storage::F32(v) => write_slice!(v, f32),
+            Storage::F64(v) => write_slice!(v, f64),
         }
     }
 }

@@ -12,6 +12,34 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `import_infections(state, timer, nodeid, count, I, importations, sched_tick, sched_node, sched_count, duration, tick)`
+  — schedule-driven importation of new infectious cases (`src/rust/src/vitals.rs`).
+  For every schedule entry whose `sched_tick == tick` it activates `sched_count`
+  RESERVED agent slots (those past the live `count`, in capacity-sized property
+  arrays) in node `sched_node`: each is set Infectious with a `timer` drawn from the
+  `duration` Distribution and its `nodeid` set. Per-node imports are added to the I
+  census at column `tick+1` and written to the `importations` flow at `tick`; returns
+  the grown live count (the caller stores it back into `people$count`). Asserts the
+  imports fit the allocated capacity. Sequential (touches only the imported slots).
+  Covered by `tests/testthat/test-import-infections.R`.
+- `carry_forward_states(carry, tick, total = NULL, summands = carry)` — R convenience
+  wrapper (`R/carry_states.R`). Carries each 2-D census Column in `carry` forward one
+  tick (column `tick` -> `tick+1`, via `carry_forward`) and, if `total` is supplied,
+  sets `total`'s column `tick+1` to the elementwise sum of the `summands` Columns at
+  `tick+1` — e.g. carry S/I/R forward and total them into N (the population / FOI
+  denominator) in one call, keeping N current as births, deaths, and imports change
+  the compartments. Covered by `tests/testthat/test-carry-forward-states.R`.
+- `$col(slot)` / `$set_col(slot, values)` accessor methods on `Column`
+  (`src/rust/src/column.rs`) — read or overwrite one column (e.g. all nodes for one
+  tick) of a 2-D Column in place, widening / casting like `$values()` / `$set()`.
+  `carry_forward_states` builds on these. Covered by `tests/testthat/test-allocation.R`.
+- `examples/endemic_sir.R` — an endemic two-patch SIR model (500,000 agents per patch,
+  R0 = 3, seeded at the endemic susceptible fraction 1/R0 with the rest immune, a high
+  crude death rate of 20 with no spatial/temporal variation, a small 1% inter-patch
+  coupling). Periodic importations spark transmission so a stochastic fade-out doesn't
+  end the run; vital turnover resupplies susceptibles. Demonstrates `import_infections`,
+  `carry_forward_states` (S/I/R carried and totalled into N each tick), and
+  `constant_pop_vitals_sir` wired together; the susceptible fraction settles near 1/R0.
 - `constant_pop_vitals_sir(state, timer, nodeid, count, rate, S, I, R, births, deaths, tick)`
   — constant-population SIR vital dynamics (`src/rust/src/vitals.rs`). Each agent
   dies with probability `1 - exp(-rate[node])` (the caller passes a per-node daily

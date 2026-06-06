@@ -126,6 +126,34 @@ test_that("a large uint8 allocation has the exact requested length", {
   expect_equal(allocate_scalar("u8", n)$length(), n)
 })
 
+test_that("$col reads and $set_col writes one column of a 2-D Column", {
+  # Given a 3-tick x 2-node i32 column set from 1..6 (row-major: tick 0 = 1,2;
+  #       tick 1 = 3,4; tick 2 = 5,6)
+  # When column (slot) 1 is read, and a new node vector is written into slot 2
+  # Then $col(1) returns tick 1's node block (3, 4); after $set_col(2, c(70, 80))
+  #      the matrix row 3 (tick 2) becomes (70, 80) and the other rows are untouched.
+  # Failure would mean the single-column gather/scatter indexes the wrong slot —
+  #      which carry_forward_states relies on to total S/I/R into N.
+  vec <- allocate_vector("i32", 3L, 2L)
+  vec$set(1:6)
+
+  expect_equal(vec$col(1L), c(3L, 4L))             # tick 1's node vector
+  vec$set_col(2L, c(70L, 80L))
+  expect_equal(vec$values()[3L, ], c(70L, 80L))    # tick 2 overwritten
+  expect_equal(vec$values()[1L, ], c(1L, 2L))      # tick 0 untouched
+  expect_equal(vec$values()[2L, ], c(3L, 4L))      # tick 1 untouched
+})
+
+test_that("$col and $set_col reject an out-of-range slot", {
+  # Given a 2-column vector
+  # When a slot at or past the column count is read or written
+  # Then it errors rather than touching out-of-bounds memory.
+  # Failure would risk reading/writing past the buffer.
+  vec <- allocate_vector("i32", 2L, 3L)
+  expect_error(vec$col(2L), "out of range")
+  expect_error(vec$set_col(2L, c(1L, 2L, 3L)), "out of range")
+})
+
 test_that("allocate_scalar and $set reject contract violations", {
   # Given bad inputs
   # When the allocator or setter is called
