@@ -2,62 +2,35 @@
 % Please edit documentation in R/extendr-wrappers.R
 \name{transmission}
 \alias{transmission}
-\title{Transmission step for tick \code{tick}: move susceptibles into a receiving state.}
+\title{Stochastic transmission S→\code{to_state}, returning new infections per node.}
 \usage{
-transmission(
-  state,
-  timer,
-  nodeid,
-  count,
-  foi,
-  s_count,
-  to_count,
-  incidence,
-  tick,
-  to_state,
-  duration
-)
+transmission(state, timer, nodeid, count, foi, tick, to_state, duration)
 }
 \arguments{
 \item{state}{Per-agent \code{u8} state Column (mutated).}
 
-\item{timer}{Per-agent \code{u8} countdown Column for the receiving state (mutated).}
+\item{timer}{Per-agent \code{u16} timer Column (mutated; set from \code{duration}).}
 
 \item{nodeid}{Per-agent \code{u16} 0-based node-id Column.}
 
 \item{count}{Number of active agents to process.}
 
-\item{foi}{\verb{n_ticks x n_nodes} f64 FOI Column (from \code{\link[=calc_foi]{calc_foi()}}); column
-\code{tick} is read.}
-
-\item{s_count}{\verb{n_ticks+1 × n_nodes} i32 census Column for \code{S} (mutated at \code{tick+1}).}
-
-\item{to_count}{\verb{n_ticks+1 × n_nodes} i32 census Column for the receiving state
-\code{to_state} (mutated at \code{tick+1}).}
-
-\item{incidence}{\verb{n_ticks x n_nodes} i32 flow Column (mutated at \code{tick}).}
+\item{foi}{\verb{n_ticks x n_nodes} f64 FOI Column (from \code{\link[=calc_foi]{calc_foi()}}); column \code{tick} read.}
 
 \item{tick}{0-based tick index.}
 
-\item{to_state}{State code new infections enter (e.g. \code{laser_states()[["I"]]}
-for SIR or \verb{[["E"]]} for SEIR).}
+\item{to_state}{State code new infections enter (\code{laser_states()[["E"]]} or \verb{[["I"]]}).}
 
 \item{duration}{A Distribution from which the receiving state's timer is drawn.}
 }
 \value{
-\code{NULL} (invisibly); the Columns are modified in place.
+An integer vector of new infections per node (length \code{n_nodes}).
 }
 \description{
-Converts column \code{tick} of \code{foi} (a rate) to a per-node per-tick infection
-probability \code{p[k] = 1 - exp(-foi[k])} — computed ONCE per node, not per agent.
-Then, for each of the first \code{count} susceptible (\code{S}) agents, with probability
-\code{p[nodeid]} it moves the agent into \code{to_state} — \code{I} for an SIR model or \code{E} for
-SEIR — drawing the agent's \code{timer} for that state from \code{duration} (rounded to
-whole ticks, clamped to \verb{[1, 255]}) and tallying the event for its node. The
-timer is whatever clock the receiving state uses next (incubation for \code{E},
-infectious period for \code{I}); the caller passes the matching \code{timer} column and
-\code{duration}. New infections per node are counted in parallel (private per-thread
-buffers, summed at the end) and applied as a delta to column \code{tick + 1} of the
-census (\code{S} down, the receiving state's \code{to_count} up; the caller has already
-carried the census forward), and recorded in column \code{tick} of \code{incidence}.
+Converts column \code{tick} of \code{foi} to a per-node probability \code{1 - exp(-foi)} (once per
+node), then for each susceptible agent moves it — with that probability — into
+\code{to_state} (\code{E} or \code{I}), setting its u16 \code{timer} from \code{duration} (the incubation or
+infectious period). The node census is NOT touched: the per-node count of new
+infections is RETURNED, and the caller applies the \code{S} ↓ / \code{to_state} ↑ delta and
+records incidence as its model requires (it knows whether this is S→E or S→I).
 }

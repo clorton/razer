@@ -2,7 +2,7 @@
 
 # Simple spatial SIR example over the England & Wales measles patches. This script
 # defines a self-contained run_sir_model() that wires the Column per-tick kernels
-# (carry_forward_states -> calc_foi -> sir_step -> transmission -> vital dynamics),
+# (carry_forward_states -> calc_foi -> step_sir -> transmission -> vital dynamics),
 # does some setup, then calls it.
 #
 # Run from anywhere:  Rscript examples/simple_sir.R
@@ -66,10 +66,11 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   # into the Rust buffer.
   people$nodeid$set(rep(seq_len(nrow(scenario)) - 1L, times = scenario$population))
 
-  # Per-agent countdown timer (uint8), zero-initialized. The step kernels set it
+  # Per-agent countdown timer (uint16), zero-initialized. The step kernels set it
   # when an agent enters a timed compartment (e.g. the infectious period on S->I)
-  # and decrement it each tick; a uint8 holds durations up to 255 ticks.
-  people$timer    <- allocate_scalar("u8", n)
+  # and decrement it each tick; a uint16 holds durations up to 65535 ticks (long
+  # immunity / maternal periods need more than a uint8's 255).
+  people$timer    <- allocate_scalar("u16", n)
 
   # `nodes` is the per-patch record. `nticks` is the number of recorded time points
   # (states 0..nticks-1): state 0 is the seeded initial condition and state nticks-1
@@ -167,8 +168,8 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   #                     the agent enters I *after* this tally, so it is not counted on
   #                     its entry tick; counting it on its recovery tick instead gives
   #                     the full infectious period D — i.e. R0 = beta * D, not D - 1.
-  #                     (Run calc_foi BEFORE sir_step; this is the SIR ordering.)
-  #   sir_step:         recover (I -> R), updating the carried-forward census at t+1.
+  #                     (Run calc_foi BEFORE step_sir; this is the SIR ordering.)
+  #   step_sir:         recover (I -> R), updating the carried-forward census at t+1.
   #   transmission:     infect susceptibles from FOI[t] (S -> I) at t+1. For SIR the
   #                     receiving state is I directly (an SEIR model would pass E and
   #                     an incubation-period distribution instead).
@@ -183,11 +184,16 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
       carry_forward(nodes$I, t0)
       carry_forward(nodes$R, t0)
       calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
-      sir_step(people$state, people$timer, people$nodeid, people$count,
-               nodes$I, nodes$R, nodes$recoveries, t0)
-      transmission(people$state, people$timer, people$nodeid, people$count,
-                   nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
-                   states[["I"]], inf_duration)
+      # step_sir(absorbing = R): I->R recovery. SIR has no M/E, so waned/onset are 0.
+      rec <- step_sir(people$state, people$timer, people$nodeid, people$count,
+                      nodes$count, inf_duration, states[["R"]])
+      move_count(nodes$I, nodes$R, rec$cleared, t0)
+      nodes$recoveries$set_col(t0, rec$cleared)
+      # transmission S->I returns new infections per node; apply the S->I delta.
+      inf <- transmission(people$state, people$timer, people$nodeid, people$count,
+                          nodes$foi, t0, states[["I"]], inf_duration)
+      move_count(nodes$S, nodes$I, inf, t0)
+      nodes$incidence$set_col(t0, inf)
       constant_pop_vitals_sir(people$state, people$timer, people$nodeid, people$count,
                               nodes$death_rate, nodes$S, nodes$I, nodes$R,
                               nodes$births, nodes$deaths, t0)

@@ -2,21 +2,9 @@
 % Please edit documentation in R/extendr-wrappers.R
 \name{mortality}
 \alias{mortality}
-\title{Apply natural mortality for one tick: retire agents whose date of death has arrived.}
+\title{Apply natural mortality for one tick, returning deaths per node by compartment.}
 \usage{
-mortality(
-  state,
-  dod,
-  nodeid,
-  count,
-  m_count,
-  s_count,
-  e_count,
-  i_count,
-  r_count,
-  deaths,
-  tick
-)
+mortality(state, dod, nodeid, count, n_nodes, tick)
 }
 \arguments{
 \item{state}{Per-agent \code{u8} state Column (mutated; the deceased become D = 255).}
@@ -27,22 +15,16 @@ mortality(
 
 \item{count}{Number of active agents to process.}
 
-\item{m_count, s_count, e_count, i_count, r_count}{\verb{n_ticks x n_nodes} i32 census
-Columns kept in sync (mutated at column \code{tick + 1}).}
+\item{n_nodes}{Number of nodes (the length of each returned vector).}
 
-\item{deaths}{\verb{(n_ticks-1) x n_nodes} i32 flow Column; column \code{tick} receives the
-per-node death counts (added).}
-
-\item{tick}{0-based tick index.}
+\item{tick}{0-based tick index; agents with \code{dod <= tick} die.}
 }
 \value{
-\code{NULL} (invisibly); the Columns are modified in place.
+\code{list(m, s, e, i, r)} of \code{integer[n_nodes]} death counts by source compartment.
 }
 \description{
-For each of the first \code{count} agents that is still alive (state != D) and whose
-\code{dod} (an absolute tick) is \verb{<= tick}, the agent's \code{state} is set to D and the
-living compartment it currently occupies (M, S, E, I, or R) is decremented by one at
-census column \code{tick + 1} (the working column the caller has already carried
-forward). The per-node total of deaths this tick is added to the \code{deaths} flow at
-column \code{tick}. Parallelized with private per-thread node buffers summed at the end.
+For each of the first \code{count} living agents (state != D) whose \code{dod} (an absolute
+tick) is \verb{<= tick}, sets the agent's \code{state} to D and tallies the death against the
+compartment it occupied. Returns \code{list(m, s, e, i, r)} of per-node death counts; the
+caller decrements those census compartments (and records the total deaths flow).
 }

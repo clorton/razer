@@ -15,13 +15,13 @@
 # final size, so the SEIR attack fraction obeys the same relation as SIR with R0
 # determined by the infectious period alone.
 #
-# Built on the Column kernels. SEIR reuses the measles kernels with the maternal
-# compartment M left empty: `measles_step` performs the timed transitions E->I
-# (drawing the infectious timer) and I->R, and `transmission_u16` performs S->E
-# (drawing the u16 incubation timer). Per-tick order: carry_forward ->
-# measles_step -> calc_foi -> transmission_u16. Because an agent enters I via
-# measles_step (a step run *before* the FOI tally), it is counted on its entry tick,
-# so the effective infectious period is the full D ticks and
+# Built on the Column kernels. SEIR is `step_sir` with the absorbing state set to R:
+# it performs E->I (drawing the infectious timer) and I->R, returning per-node counts
+# the model applies to its E/I/R census; `transmission` performs S->E (drawing the
+# incubation timer) and returns new infections per node. Per-tick order: carry_forward
+# -> step_sir -> calc_foi -> transmission. Because an agent enters I via step_sir (a
+# step run *before* the FOI tally), it is counted on its entry tick, so the effective
+# infectious period is the full D ticks and
 #
 #     R0 = beta * D.
 #
@@ -35,8 +35,9 @@ set.seed(20260604L)
 states <- laser_states()   # c(S = 0, E = 1, I = 2, R = 3, M = 4, D = -1)
 
 # ── one single-node SEIR run over `horizon` recorded states ──────────────────────────
-# Column-based well-mixed population. The timer is u16 (the measles kernels' width). M
-# is allocated but stays empty (no births). `stop_extinct = TRUE` breaks once E + I == 0.
+# Column-based well-mixed population (u16 timer). SEIR is `step_sir` with absorbing = R;
+# there is no M compartment, so its `waned` count is ignored. `stop_extinct = TRUE`
+# breaks once E + I == 0.
 run_seir_columns <- function(n, n_seed, exp_duration, inf_duration, beta_val, horizon,
                              stop_extinct = FALSE) {
   nn <- 1L
@@ -46,16 +47,16 @@ run_seir_columns <- function(n, n_seed, exp_duration, inf_duration, beta_val, ho
   s0 <- rep(states[["S"]], n); s0[seq_len(n_seed)] <- states[["I"]]; state$set(s0)
   tm <- rep(0L, n);            tm[seq_len(n_seed)] <- inf_duration; timer$set(tm)
 
-  M <- allocate_vector("i32", horizon, nn)   # stays empty (no births in this example)
+  # No M (maternal) compartment: step_sir's `waned` (M->S) count is always 0 here, so we
+  # simply never allocate or update an M census — the return-counts kernels let a model
+  # carry only the compartments it actually has.
   S <- allocate_vector("i32", horizon, nn)
   E <- allocate_vector("i32", horizon, nn)
   I <- allocate_vector("i32", horizon, nn)
   R <- allocate_vector("i32", horizon, nn)
-  foi       <- allocate_vector("f64", horizon - 1L, nn)
-  incidence <- allocate_vector("i32", horizon - 1L, nn)
+  foi <- allocate_vector("f64", horizon - 1L, nn)
   zeros <- rep(0L, (horizon - 1L) * nn)
-  M$set(c(0L, zeros)); S$set(c(n - n_seed, zeros)); E$set(c(0L, zeros))
-  I$set(c(n_seed, zeros)); R$set(c(0L, zeros))
+  S$set(c(n - n_seed, zeros)); E$set(c(0L, zeros)); I$set(c(n_seed, zeros)); R$set(c(0L, zeros))
   N      <- values_map(n,        horizon, nn)
   beta   <- values_map(beta_val, horizon, nn)
   season <- values_map(1,        horizon, nn)
@@ -66,13 +67,17 @@ run_seir_columns <- function(n, n_seed, exp_duration, inf_duration, beta_val, ho
   last <- horizon - 1L
   for (tick in seq_len(horizon - 1L)) {
     t <- tick - 1L
-    carry_forward_states(list(M, S, E, I, R), t)
-    measles_step(state, timer, nodeid, n, M, S, E, I, R, inf_dist, t)   # E->I, I->R
-    calc_foi(I, N, beta, season, net, foi, t)                          # entry-counted -> beta*D
-    transmission_u16(state, timer, nodeid, n, foi, S, E, incidence, t, states[["E"]], exp_dist)
+    carry_forward_states(list(S, E, I, R), t)
+    # step_sir(absorbing = R): E->I onset and I->R recovery. (waned is 0 — no M.)
+    prog <- step_sir(state, timer, nodeid, n, nn, inf_dist, states[["R"]])
+    move_count(E, I, prog$onset,   t)
+    move_count(I, R, prog$cleared, t)
+    calc_foi(I, N, beta, season, net, foi, t)                       # after E->I -> beta*D
+    inf <- transmission(state, timer, nodeid, n, foi, t, states[["E"]], exp_dist)
+    move_count(S, E, inf, t)
     if (stop_extinct && sum(E$col(tick)) + sum(I$col(tick)) == 0L) { last <- tick; break }
   }
-  list(M = M, S = S, E = E, I = I, R = R, last = last)
+  list(S = S, E = E, I = I, R = R, last = last)
 }
 
 # ── one SEIR run over a fixed horizon, returning the S / E / I / R trajectory matrix ─

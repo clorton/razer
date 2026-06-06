@@ -20,7 +20,7 @@ test_that("import_infections activates reserved slots and updates census + flow"
   #      at tick 0 is (1, 0); and tick 1's entry is left alone (processed on its tick).
   # Failure would mean imports land in the wrong slot/node/tick or miscount the census.
   state  <- mk("u8",  c(I, I, I, I, S, S))     # slots 4,5 reserved (state S, inactive)
-  timer  <- mk("u8",  c(3, 3, 3, 3, 0, 0))
+  timer  <- mk("u16",  c(3, 3, 3, 3, 0, 0))
   nodeid <- mk("u16", c(0, 0, 1, 1, 0, 0))
   i_count <- allocate_vector("i32", 3L, 2L)
   importations <- allocate_vector("i32", 2L, 2L)
@@ -48,7 +48,7 @@ test_that("import_infections imports nothing on a tick with no schedule entries"
   # When import_infections runs for tick 0
   # Then the count is unchanged, no slot is touched, and the census/flow stay zero.
   # Failure would mean it imports on the wrong tick.
-  state  <- mk("u8",  c(I, S)); timer <- mk("u8", c(2, 0)); nodeid <- mk("u16", c(0, 0))
+  state  <- mk("u8",  c(I, S)); timer <- mk("u16", c(2, 0)); nodeid <- mk("u16", c(0, 0))
   i_count <- allocate_vector("i32", 3L, 1L)
   importations <- allocate_vector("i32", 2L, 1L)
 
@@ -68,7 +68,7 @@ test_that("import_infections aggregates multiple entries for the same tick", {
   # When import_infections runs for tick 0
   # Then 5 agents activate (count 0 -> 5), the I census at tick+1 is (2, 3), and the
   #      flow is (2, 3). Failure would mean per-tick entries are not summed per node.
-  state  <- mk("u8",  rep(S, 5L)); timer <- mk("u8", rep(0, 5L)); nodeid <- mk("u16", rep(0, 5L))
+  state  <- mk("u8",  rep(S, 5L)); timer <- mk("u16", rep(0, 5L)); nodeid <- mk("u16", rep(0, 5L))
   i_count <- allocate_vector("i32", 2L, 2L)
   importations <- allocate_vector("i32", 1L, 2L)
 
@@ -88,7 +88,7 @@ test_that("import_infections errors when imports would exceed capacity", {
   # When import_infections runs
   # Then it errors rather than writing past the allocated buffer.
   # Failure would risk an out-of-bounds slot write.
-  state  <- mk("u8",  c(I, I)); timer <- mk("u8", c(1, 1)); nodeid <- mk("u16", c(0, 0))
+  state  <- mk("u8",  c(I, I)); timer <- mk("u16", c(1, 1)); nodeid <- mk("u16", c(0, 0))
   i_count <- allocate_vector("i32", 2L, 1L)
   importations <- allocate_vector("i32", 1L, 1L)
 

@@ -26,7 +26,7 @@ test_that("constant_pop_vitals_sir reverts the dead to S and keeps the census in
   # Failure would mean the reversion, the per-compartment census delta, or the tally
   #       is wrong.
   state  <- mk("u8",  c(I, I, R, S, R))
-  timer  <- mk("u8",  c(7, 3, 0, 0, 5))
+  timer  <- mk("u16",  c(7, 3, 0, 0, 5))
   nodeid <- mk("u16", c(0, 0, 0, 1, 1))
   rate   <- allocate_vector("f64", 2L, 2L); rate$set(c(100, 0, 0, 0))
   Sc <- carried(c(0, 1)); Ic <- carried(c(2, 0)); Rc <- carried(c(1, 1))
@@ -53,7 +53,7 @@ test_that("constant_pop_vitals_sir does nothing at a zero death rate", {
   # When constant_pop_vitals_sir runs
   # Then no agent changes, the census is unchanged, and births/deaths are zero.
   # Failure would mean spurious deaths or census drift at zero hazard.
-  state  <- mk("u8",  c(I, R, S)); timer <- mk("u8", c(4, 0, 0)); nodeid <- mk("u16", c(0, 0, 1))
+  state  <- mk("u8",  c(I, R, S)); timer <- mk("u16", c(4, 0, 0)); nodeid <- mk("u16", c(0, 0, 1))
   rate   <- allocate_vector("f64", 2L, 2L)
   Sc <- carried(c(1, 1)); Ic <- carried(c(1, 0)); Rc <- carried(c(1, 0))
   births <- allocate_vector("i32", 1L, 2L); deaths <- allocate_vector("i32", 1L, 2L)
@@ -77,7 +77,7 @@ test_that("constant_pop_vitals_sir's parallel tally and census match a census at
   set.seed(3L)
   n_agents <- 1000000L; n_nodes <- 200L
   nid <- sample.int(n_nodes, n_agents, replace = TRUE) - 1L
-  state  <- mk("u8",  rep(I, n_agents)); timer <- mk("u8", rep(7L, n_agents)); nodeid <- mk("u16", nid)
+  state  <- mk("u8",  rep(I, n_agents)); timer <- mk("u16", rep(7L, n_agents)); nodeid <- mk("u16", nid)
   per_node <- as.numeric(tabulate(nid + 1L, n_nodes))
   rate   <- allocate_vector("f64", 1L, n_nodes); rate$set(rep(0.7, n_nodes))
   Sc <- carried(rep(0, n_nodes)); Ic <- carried(per_node); Rc <- carried(rep(0, n_nodes))
@@ -101,7 +101,7 @@ test_that("constant_pop_vitals_sir validates the tick range and shapes", {
   # When constant_pop_vitals_sir is called
   # Then it errors rather than writing out of bounds.
   # Failure would risk out-of-bounds access.
-  state <- mk("u8", c(I, I)); timer <- mk("u8", c(1, 1)); nodeid <- mk("u16", c(0, 1))
+  state <- mk("u8", c(I, I)); timer <- mk("u16", c(1, 1)); nodeid <- mk("u16", c(0, 1))
   rate <- allocate_vector("f64", 2L, 2L)
   Sc <- carried(c(1, 1)); Ic <- carried(c(1, 1)); Rc <- carried(c(0, 0))
   births <- allocate_vector("i32", 2L, 2L); deaths <- allocate_vector("i32", 2L, 2L)

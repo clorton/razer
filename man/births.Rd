@@ -11,9 +11,8 @@ births(
   dob,
   dod,
   count,
+  n_nodes,
   birth_rate,
-  m_count,
-  births_flow,
   maternal_duration,
   km,
   tick
@@ -32,12 +31,9 @@ births(
 
 \item{count}{Current active agent count (the first free slot).}
 
-\item{birth_rate}{\verb{n_ticks x n_nodes} f64 daily-birth-rate grid (from values_map);
-column \code{tick} is read.}
+\item{n_nodes}{Number of nodes (the length of the returned \code{born} vector).}
 
-\item{m_count}{\verb{n_ticks x n_nodes} i32 \code{M} census Column (mutated at \code{tick + 1}).}
-
-\item{births_flow}{\verb{(n_ticks-1) x n_nodes} i32 flow Column (mutated at \code{tick}).}
+\item{birth_rate}{\verb{n_ticks x n_nodes} f64 daily-birth-rate grid; column \code{tick} is read.}
 
 \item{maternal_duration}{A Distribution for the newborns' maternal-immunity timer.}
 
@@ -46,13 +42,13 @@ column \code{tick} is read.}
 \item{tick}{0-based tick index.}
 }
 \value{
-The new active agent count (\code{count} plus the number born this tick).
+\verb{list(count = <new active count>, born = integer[n_nodes])}.
 }
 \description{
-For each of the first \code{count} living agents, draws a birth with probability
+For each of the first \code{count} living agents, draws a birth with per-node probability
 \code{1 - exp(-birth_rate[node, tick])}. Each birth activates the next reserved slot as a
-new agent: state M, \code{timer} from \code{maternal_duration}, \code{nodeid} = the parent's node,
-\code{dob} = \code{tick}, and \code{dod} = \code{tick} + a Kaplan–Meier age at death (from \code{km}). The
-per-node birth count is added to the \code{M} census at column \code{tick + 1} and to the
-\code{births} flow at column \code{tick}. Returns the new active agent count.
+new agent: state M, \code{timer} from \code{maternal_duration}, \code{dob = tick}, and \code{dod = tick}
+plus a Kaplan–Meier age at death (from \code{km}). Returns \code{list(count, born)}: the new
+active count (store it back into \code{people$count}) and the per-node birth count (add it
+to the \code{M} census and a birth report). Capped at the allocated capacity.
 }

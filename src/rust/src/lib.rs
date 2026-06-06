@@ -5,12 +5,12 @@ mod distributions;
 mod migration;
 mod column;
 mod bincount;
-mod sir;
+mod transmission;
+mod steps;
 mod vitals;
 mod pyramid;
 mod kmestimator;
 mod mortality;
-mod measles;
 mod births;
 pub use distributions::Distribution;
 pub use column::Column;
@@ -22,11 +22,11 @@ extendr_module! {
     use migration;
     use column;
     use bincount;
-    use sir;
+    use transmission;
+    use steps;
     use vitals;
     use pyramid;
     use kmestimator;
     use mortality;
-    use measles;
     use births;
 }

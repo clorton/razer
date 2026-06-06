@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Changed
+- **Unified the per-tick kernels into a return-counts menagerie (all `u16` timers).**
+  The transmission and step kernels no longer take node census/flow buffers: they mutate
+  the per-agent arrays and **return per-node counts**, which the model applies to the
+  compartments it maintains via the new `move_count(from, to, counts, tick)` helper (so a
+  model allocates only the states it has). The agent `timer` is now `u16` everywhere.
+  - `transmission(state, timer, nodeid, count, foi, tick, to_state, duration)` →
+    per-node infection counts (S→E or S→I, sets a u16 timer). Replaces the old
+    `transmission` / `transmission_u16` (their `s_count`/`to_count`/`incidence` args are
+    gone). New `transmission_si(state, nodeid, count, foi, tick)` → counts is the SI
+    model's S→I into an absorbing `I` (no timer).
+  - Three step kernels cover all of SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS, replacing
+    `sir_step` and `measles_step`: `step_si` (M→S, E→I), `step_sir` (+ I→`absorbing_state`,
+    S or R), `step_sirs` (+ I→R with immunity timer, R→S). Each is a single u16-timer pass
+    leading with M→S and returns a named list of per-node transition counts.
+  - `mortality(...)` → `list(m, s, e, i, r)` of per-node deaths by source compartment, and
+    `births(...)` → `list(count, born)` (new active count + per-node births), instead of
+    writing the census/flow directly. (`calc_foi` is unchanged; `constant_pop_vitals_sir`
+    and `import_infections` keep writing their own census, now u16-timer-aware.)
+  - All examples and tests migrated; the attack-fraction pair still validates
+    Kermack–McKendrick with `R0 = beta · D`. Docs (`CLAUDE.md`, READMEs, `_pkgdown.yml`)
+    updated with the menagerie table and the return-counts convention.
+
 ### Removed
 - **The legacy `LaserFrame` world.** The package now has a single agent-storage and
   kernel stack — the `Column` typed arrays plus the per-tick Column kernels. Removed:

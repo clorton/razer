@@ -14,8 +14,8 @@
 #      whose non-trivial root gives the attack fraction for a large, well-mixed,
 #      fully susceptible population.
 #
-# Built on the Column kernels (`calc_foi` / `sir_step` / `transmission`). Per-tick
-# order: carry_forward -> calc_foi -> sir_step (I->R) -> transmission (S->I). Running
+# Built on the Column kernels (`calc_foi` / `step_sir` / `transmission`). Per-tick
+# order: carry_forward -> calc_foi -> step_sir (I->R) -> transmission (S->I). Running
 # `calc_foi` BEFORE recovery counts each infectious agent on its recovery tick; since a
 # directly-infected agent enters I *after* the FOI tally (so it is not counted on its
 # entry tick), counting it on its recovery tick instead gives the full infectious period
@@ -50,20 +50,18 @@ states <- laser_states()   # c(S = 0, E = 1, I = 2, R = 3, M = 4, D = -1)
 # Returns the census Columns and the last completed column index.
 run_sir_columns <- function(n, n_seed, beta_val, D, horizon, stop_extinct = FALSE) {
   nn <- 1L                                   # single well-mixed node
-  # Per-agent arrays (state u8, infectious timer u8, node id u16 — all node 0).
+  # Per-agent arrays (state u8, timer u16, node id u16 — all node 0).
   state  <- allocate_scalar("u8",  n)
-  timer  <- allocate_scalar("u8",  n)
+  timer  <- allocate_scalar("u16", n)
   nodeid <- allocate_scalar("u16", n)
   s0 <- rep(states[["S"]], n); s0[seq_len(n_seed)] <- states[["I"]]; state$set(s0)
   tm <- rep(0L, n);            tm[seq_len(n_seed)] <- D;            timer$set(tm)
 
-  # Census (horizon x 1) and per-interval flow buffers.
+  # Census (horizon x 1) only — the kernels return counts; no flow buffers needed here.
   S <- allocate_vector("i32", horizon, nn)
   I <- allocate_vector("i32", horizon, nn)
   R <- allocate_vector("i32", horizon, nn)
-  foi        <- allocate_vector("f64", horizon - 1L, nn)
-  incidence  <- allocate_vector("i32", horizon - 1L, nn)
-  recoveries <- allocate_vector("i32", horizon - 1L, nn)
+  foi <- allocate_vector("f64", horizon - 1L, nn)
   zeros <- rep(0L, (horizon - 1L) * nn)
   S$set(c(n - n_seed, zeros)); I$set(c(n_seed, zeros)); R$set(c(0L, zeros))
   # Constant population (no vital dynamics) and a flat transmission grid; values_map
@@ -79,8 +77,12 @@ run_sir_columns <- function(n, n_seed, beta_val, D, horizon, stop_extinct = FALS
     t <- tick - 1L
     carry_forward_states(list(S, I, R), t)              # copy column t -> t+1
     calc_foi(I, N, beta, season, net, foi, t)           # BEFORE recovery -> R0 = beta*D
-    sir_step(state, timer, nodeid, n, I, R, recoveries, t)
-    transmission(state, timer, nodeid, n, foi, S, I, incidence, t, states[["I"]], inf_dist)
+    # step_sir with absorbing = R: I->R recovery (no M/E agents, so waned/onset are 0).
+    rec <- step_sir(state, timer, nodeid, n, nn, inf_dist, states[["R"]])
+    move_count(I, R, rec$cleared, t)
+    # transmission S->I returns new infections per node; apply the S->I census delta.
+    inf <- transmission(state, timer, nodeid, n, foi, t, states[["I"]], inf_dist)
+    move_count(S, I, inf, t)
     if (stop_extinct && sum(I$col(tick)) == 0L) { last <- tick; break }  # I[tick] is current
   }
   list(S = S, I = I, R = R, last = last)

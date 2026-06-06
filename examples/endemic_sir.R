@@ -55,7 +55,7 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   # [count, capacity) exist for import_infections() to fill. state defaults to 0 = S.
   people$state    <- allocate_scalar("u8",  capacity)
   people$nodeid   <- allocate_scalar("u16", capacity)
-  people$timer    <- allocate_scalar("u8",  capacity)
+  people$timer    <- allocate_scalar("u16", capacity)
 
   # nodeid is 0-BASED (0..N-1), matching the Rust kernels (they index per-node arrays
   # directly by it). `rep(ids, times = pops)` repeats each node id by its patch's
@@ -132,7 +132,7 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   #                         not counted on its entry tick (it enters I after this tally),
   #                         so counting it on its recovery tick instead yields the full
   #                         infectious period D: R0 = beta * D, not beta * (D - 1).
-  #   sir_step:             recover expired infectious (I -> R) at column t0+1.
+  #   step_sir:             recover expired infectious (I -> R) at column t0+1.
   #   transmission:         infect susceptibles (S -> I) at t0+1, timer from inf_duration.
   #   constant_pop_vitals_sir: deaths (reborn susceptible) = births, census kept in sync.
   #   import_infections:    activate reserved slots as new infectious cases per the
@@ -153,11 +153,14 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
       t0 <- tick - 1L
       carry_forward_states(list(nodes$S, nodes$I, nodes$R), t0, total = nodes$N)
       calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
-      sir_step(people$state, people$timer, people$nodeid, people$count,
-               nodes$I, nodes$R, nodes$recoveries, t0)
-      transmission(people$state, people$timer, people$nodeid, people$count,
-                   nodes$foi, nodes$S, nodes$I, nodes$incidence, t0,
-                   states[["I"]], inf_duration)
+      rec <- step_sir(people$state, people$timer, people$nodeid, people$count,
+                      nodes$count, inf_duration, states[["R"]])   # I->R (no M/E here)
+      move_count(nodes$I, nodes$R, rec$cleared, t0)
+      nodes$recoveries$set_col(t0, rec$cleared)
+      inf <- transmission(people$state, people$timer, people$nodeid, people$count,
+                          nodes$foi, t0, states[["I"]], inf_duration)
+      move_count(nodes$S, nodes$I, inf, t0)
+      nodes$incidence$set_col(t0, inf)
       constant_pop_vitals_sir(people$state, people$timer, people$nodeid, people$count,
                               nodes$death_rate, nodes$S, nodes$I, nodes$R,
                               nodes$births, nodes$deaths, t0)

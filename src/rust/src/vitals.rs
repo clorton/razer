@@ -103,7 +103,7 @@ fn constant_pop_vitals_sir(
     let nthreads = rayon::current_num_threads().max(1);
     let chunk = ((count + nthreads - 1) / nthreads).max(1);
     let st = &mut state.as_u8_mut()[..count];
-    let tm = &mut timer.as_u8_mut()[..count];
+    let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let tally: Vec<i64> = st
         .par_chunks_mut(chunk)
@@ -222,7 +222,7 @@ fn import_infections(
     // Second pass: activate the reserved slots as infectious agents.
     let infectious = STATE_I as u8;
     let st = state.as_u8_mut();
-    let tm = timer.as_u8_mut();
+    let tm = timer.as_u16_mut();
     let nid = nodeid.as_u16_mut();
     let mut rng = rand::thread_rng();
     for e in 0..sched_tick.len() {
@@ -231,7 +231,7 @@ fn import_infections(
             for _ in 0..sched_count[e] as usize {
                 st[count] = infectious;
                 let d = duration.sample(&mut rng);
-                tm[count] = d.round().clamp(1.0, 255.0) as u8;
+                tm[count] = d.round().clamp(1.0, 65535.0) as u16;
                 nid[count] = node;
                 count += 1;
             }

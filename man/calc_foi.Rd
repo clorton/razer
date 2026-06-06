@@ -11,8 +11,7 @@ calc_foi(infected, population, beta, seasonality, network, foi, tick)
 
 \item{population}{Per-node population census Column (\code{nodes$N}); the FOI denominator.}
 
-\item{beta}{Transmission-coefficient grid (\verb{n_ticks x n_nodes}, from
-\code{\link[=values_map]{values_map()}}).}
+\item{beta}{Transmission-coefficient grid (\verb{n_ticks x n_nodes}, from \code{\link[=values_map]{values_map()}}).}
 
 \item{seasonality}{Seasonal-modifier grid (\verb{n_ticks x n_nodes}, from \code{\link[=values_map]{values_map()}}).}
 
@@ -30,8 +29,8 @@ calc_foi(infected, population, beta, seasonality, network, foi, tick)
 Computes the frequency-dependent, network-redistributed FOI \strong{rate} into column
 \code{tick} of \code{foi}. The local rate per node is
 \code{r[k] = beta[k] * seasonality[k] * infected[k] / population[k]}, redistributed as
-\verb{foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]}. \code{transmission()}
-turns this rate into a per-tick probability \code{1 - exp(-foi)}.
+\verb{foi[k] = r[k] * (1 - sum_j W[k, j]) + sum_i r[i] * W[i, k]}. The transmission
+kernels turn this rate into a per-tick probability \code{1 - exp(-foi)}.
 }
 \details{
 Index conventions: \code{infected} and \code{population} are census buffers read at the
@@ -43,13 +42,12 @@ read at the interval column \code{tick}; the result is written to \code{foi[tick
 pre- or post-recovery count depends on where you place this call, and that choice
 sets the realized infectious period:
 \itemize{
-\item For \strong{direct S→I} (SIR), call \code{calc_foi} BEFORE the recovery step (\code{sir_step}), so
-an agent is still counted on its recovery tick. Because a directly-infected agent
-is added to \code{I} \emph{after} this tally (so it is not counted on its entry tick),
-counting it on its recovery tick instead yields the full period: \code{R0 = beta * D},
-not \code{beta * (D - 1)}.
-\item For \strong{SEIR-style} entry (agents arrive in \code{I} via a separate step run before this
-tally, e.g. \code{measles_step}'s E→I), call \code{calc_foi} AFTER that step: the new
-infectious are counted on their entry tick and recoveries excluded — also \code{beta * D}.
+\item For \strong{direct S→I} (SIR), call \code{calc_foi} BEFORE the recovery step, so an agent is
+still counted on its recovery tick. Because a directly-infected agent is added to
+\code{I} \emph{after} this tally (not counted on its entry tick), counting it on its recovery
+tick instead yields the full period: \code{R0 = beta * D}, not \code{beta * (D - 1)}.
+\item For \strong{SEIR-style} entry (agents arrive in \code{I} via a step run before this tally,
+e.g. \code{step_sir}'s E→I), call \code{calc_foi} AFTER that step: the new infectious are
+counted on their entry tick and recoveries excluded — also \code{beta * D}.
 }
 }

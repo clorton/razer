@@ -2,43 +2,63 @@
 
 ## Modeling convention: the Column kernels and per-tick ordering
 
-Models are composed from the **Column-based** per-tick kernels operating on
-`Column` buffers (allocated with `allocate_scalar` / `allocate_vector`):
+Models are composed from the **Column-based** per-tick kernels over `Column` buffers
+(`allocate_scalar` / `allocate_vector`). Agent `state` is a `u8`; the per-agent `timer`
+is a **`u16`** everywhere (maternal / immunity periods exceed a `u8`'s 255).
 
-- `carry_forward(col, t)` / `carry_forward_states(list, t, total)` — copy each census
-  counter from column `t` to `t+1` (and optionally total them into `N`); every kernel
-  then applies only its *delta* to column `t+1`, so `count[t+1] = count[t] ± delta`.
-- `calc_foi(I, N, beta, seasonality, network, foi, t)` — per-node force of infection.
-- `sir_step(...)` — I→R recovery (u8 timer); `measles_step(...)` — M→S, E→I, I→R in one
-  u16-timer pass (use it for SEIR/SEIRS too, M left empty).
-- `transmission(...)` — S→I writing a u8 timer; `transmission_u16(...)` — S→E (or S→I)
-  writing a u16 timer.
-- `constant_pop_vitals_sir(...)`, `mortality(...)`, `births(...)` — vital dynamics.
+**Kernels mutate the per-agent arrays and RETURN per-node counts; the model applies the
+deltas to the census it maintains.** So no kernel takes census/flow buffers, and a model
+allocates only the compartments it has. The flow is: `carry_forward(_states)` copies each
+census column `t → t+1`, then the model applies each kernel's returned counts to column
+`t+1` with `move_count(from, to, counts, t)` (`from`/`to` may be `NULL` for one-sided
+moves — a death decrements only, a birth increments only).
 
-**No `beta · (D − 1)` models — always realize the full `beta · D`.** An agent must
-contribute to the force of infection on exactly the `D` ticks it is infectious. The
-trap is the placement of `calc_foi` relative to the entry into / exit from `I`:
+- `calc_foi(I, N, beta, seasonality, network, foi, t)` — per-node force of infection
+  (writes the `foi` report Column; the one kernel that still reads/writes Columns).
+- `transmission(state, timer, nodeid, count, foi, t, to_state, duration) → counts` —
+  S→`to_state` (E or I), sets the u16 timer; returns new infections per node.
+- `transmission_si(state, nodeid, count, foi, t) → counts` — S→I **absorbing** (no
+  timer); the SI model.
+- `step_si(…, inf_dur) → list(waned, onset)` — M→S, E→I.
+- `step_sir(…, inf_dur, absorbing_state) → list(waned, onset, cleared)` — adds
+  I→`absorbing_state` (S or R).
+- `step_sirs(…, inf_dur, imm_dur) → list(waned, onset, recovered, waned_r)` — adds I→R
+  (sets an immunity timer) and R→S.
+- `births(…) → list(count, born)`, `mortality(…) → list(m, s, e, i, r)`,
+  `constant_pop_vitals_sir(…)` (constant-pop convenience; still writes its census),
+  `import_infections(…)`.
 
-- **Direct S→I (SIR), Column kernels.** A directly-infected agent enters `I` *after*
-  the tick's FOI tally, so it is never counted on its entry tick. Run **`calc_foi`
-  before `sir_step`** so it is still counted on its *recovery* tick — losing the entry
-  tick but gaining the recovery tick nets the full `D`. Per-tick order:
-  `carry_forward` → **`calc_foi`** → `sir_step` → `transmission` → (vitals).
-- **SEIR-style entry (`measles_step`'s E→I).** Agents enter `I` via `measles_step`,
-  which runs *before* the tally, so run **`calc_foi` after `measles_step`**: new
-  infectious are counted on entry, recoveries excluded — also `beta · D`. Per-tick
-  order: `carry_forward` → `measles_step` → **`calc_foi`** → `transmission_u16` →
-  (births, mortality). `calc_foi`'s docstring spells out both orderings.
+**The eight-model menagerie** — every model is a transmission + a step kernel:
 
-This is validated by `examples/sir_attack_fraction.R` and `seir_attack_fraction.R`:
-both match the Kermack–McKendrick final size `A = 1 − exp(−R0·A)` with `R0 = beta · D`.
+| Model | transmission | step kernel |
+|---|---|---|
+| SI | `transmission_si` (S→I absorbing) | `step_si` |
+| SEI | `transmission` (S→E) | `step_si` |
+| SIS / SIR | `transmission` (S→I) | `step_sir`, absorbing = S / R |
+| SEIS / SEIR | `transmission` (S→E) | `step_sir`, absorbing = S / R |
+| SIRS | `transmission` (S→I) | `step_sirs` |
+| SEIRS | `transmission` (S→E) | `step_sirs` |
 
-**Combined timed transitions avoid the residency artifact structurally.**
-`measles_step` advances M→S, E→I, and I→R in a *single* pass, branching on each agent's
-state at the start of the pass, so an agent that does E→I this tick is not also recovered
-this tick. (A newly entered timed state must not be decremented again in the same tick,
-or its residency would be `duration − 1`.) See `examples/engwal_measles.R` (full M-S-E-I-R
-model), `simple_sir.R` / `endemic_sir.R` (Column SIR, `beta · D`).
+Each step kernel is a **single pass branching on the agent's entry state** (and leads
+with M→S, so any model can add a maternal compartment), so a just-entered timed state is
+never decremented again the same tick — the residency artifact (`duration − 1`) is
+avoided structurally.
+
+**No `beta · (D − 1)` models — always realize the full `beta · D`.** An agent must count
+in the FOI on exactly the `D` ticks it is infectious; the trap is where `calc_foi` sits:
+
+- **Direct S→I** (SI/SIS/SIR/SIRS): a directly-infected agent enters `I` *after* the
+  tally, so run **`calc_foi` before the step kernel** (which clears I) — it loses its
+  entry tick but gains its recovery tick → full `D`. Order: `carry_forward` →
+  **`calc_foi`** → `step_*` (apply counts) → `transmission` (apply counts).
+- **E-entry** (SEI/SEIS/SEIR/SEIRS): agents enter `I` via the step kernel's E→I, which
+  runs *before* the tally, so run **`calc_foi` after the step kernel**: new infectious
+  counted on entry, recoveries excluded → also `beta · D`. Order: `carry_forward` →
+  `step_*` (apply counts) → **`calc_foi`** → `transmission` (apply counts).
+
+Validated by `examples/sir_attack_fraction.R` / `seir_attack_fraction.R` (both match the
+Kermack–McKendrick final size with `R0 = beta · D`). See `examples/engwal_measles.R` for
+a full M-S-E-I-R model and `simple_sir.R` / `endemic_sir.R` for spatial Column SIR.
 
 ## Commenting conventions
 

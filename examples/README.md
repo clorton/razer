@@ -6,17 +6,18 @@ example with `Rscript`. Only base-R graphics are used (no extra dependencies). P
 are written to `examples/output/`.
 
 All examples are built on the **Column kernels** (`allocate_scalar` / `allocate_vector`
-buffers advanced by `calc_foi`, `sir_step`, `measles_step`, `transmission` /
-`transmission_u16`, `carry_forward_states`, and the vital-dynamics kernels). The
-per-tick ordering follows the modeling note in the repository `CLAUDE.md`; in
-particular `calc_foi` is placed so the effective reproduction number is the full
-`R0 = beta * D` (never `beta * (D - 1)`).
+buffers advanced by `calc_foi`, the `transmission` / `transmission_si` kernels, the
+`step_si` / `step_sir` / `step_sirs` step kernels, `carry_forward_states` + `move_count`,
+and the vital-dynamics kernels). The agent-loop kernels return per-node counts that the
+model applies to its census. The per-tick ordering follows the modeling note in the
+repository `CLAUDE.md`; in particular `calc_foi` is placed so the effective reproduction
+number is the full `R0 = beta * D` (never `beta * (D - 1)`).
 
 ## `sir_attack_fraction.R`
 
 An agent-based SIR epidemic in a single well-mixed node. Per tick:
-`carry_forward_states` → `calc_foi` → `sir_step` (I→R) → `transmission` (S→I) with a
-fixed infectious period (`dist_constant`).
+`carry_forward_states` → `calc_foi` → `step_sir` (absorbing = R; I→R) → `transmission`
+(S→I) with a fixed infectious period (`dist_constant`).
 
 ```sh
 Rscript examples/sir_attack_fraction.R
@@ -28,16 +29,16 @@ final-size curve `A = 1 - exp(-R0 * A)`), and prints a comparison table plus tim
 
 **Effective R0 = `beta * D`.** A directly-infected agent enters `I` *after* the tick's
 force-of-infection tally, so it is not counted on its entry tick. Running `calc_foi`
-*before* the recovery step (`sir_step`) counts it on its recovery tick instead — losing
+*before* the step kernel counts it on its recovery tick instead — losing
 the entry tick but gaining the recovery tick nets the full `D`-tick infectious period.
 The simulated attack fraction matches Kermack–McKendrick to within a few thousandths for
 `R0 >= 1.5`.
 
 ## `seir_attack_fraction.R`
 
-An agent-based SEIR epidemic (the measles kernels with the maternal compartment M left
-empty). Per tick: `carry_forward_states` → `measles_step` (E→I, I→R) → `calc_foi` →
-`transmission_u16` (S→E) with fixed incubation and infectious periods.
+An agent-based SEIR epidemic (`step_sir` with absorbing = R; no M compartment). Per tick:
+`carry_forward_states` → `step_sir` (E→I, I→R) → `calc_foi` → `transmission` (S→E) with
+fixed incubation and infectious periods.
 
 ```sh
 Rscript examples/seir_attack_fraction.R
@@ -46,7 +47,7 @@ Rscript examples/seir_attack_fraction.R
 Produces `seir_trajectories.png` (S/E/I/R over time, showing the E peak preceding the I
 peak) and `seir_attack_fraction.png` (the same Kermack–McKendrick comparison).
 
-**Effective R0 = `beta * D`.** An agent enters `I` via `measles_step`, a step run
+**Effective R0 = `beta * D`.** An agent enters `I` via the step kernel's E→I, run
 *before* the force-of-infection tally, so it is counted from its entry tick — the full
 `D`-tick period. The latent (exposed) period only delays the epidemic and does not affect
 the final size, so the SEIR attack fraction obeys the same relation and matches it to

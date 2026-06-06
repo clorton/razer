@@ -38,13 +38,14 @@ library(razer)
 #   km                   KaplanMeierEstimator for sampling each agent's age at death.
 #   progress             draw a text progress bar over the per-tick loop.
 #
-# Per-tick structure (downstream-first):
+# Per-tick structure (measles = SEIR + M, so step_sir with absorbing = R). Each kernel
+# returns per-node counts that the model applies to the census with move_count():
 #   carry_forward_states(list(M, S, E, I, R), t0, total = N)
-#   measles_step(...)        # M->S waning, E->I incubation, I->R recovery (one u16 pass)
-#   calc_foi(...)            # force of infection from post-step I[t+1] / N[t+1]
-#   transmission_u16(...)    # S->E exposures, drawing the u16 incubation timer
-#   births(...)              # CBR newborns into M (maternal timer + a KM date of death)
-#   mortality(...)           # retire agents whose dod has arrived; keep census in sync
+#   step_sir(absorbing = R) # M->S waning, E->I incubation, I->R recovery (one u16 pass)
+#   calc_foi(...)           # force of infection from post-step I[t+1] / N[t+1]
+#   transmission(... E)     # S->E exposures, drawing the incubation timer
+#   births(...)             # CBR newborns into M (maternal timer + a KM date of death)
+#   mortality(...)          # retire agents whose dod has arrived (deaths by compartment)
 #
 # Returns (invisibly) a list with the `people` and `nodes` environments.
 run_measles_model <- function(scenario, network, nticks,
@@ -72,7 +73,7 @@ run_measles_model <- function(scenario, network, nticks,
   capacity   <- as.integer(sum(calc_capacity(birthrates, pops, safety_factor = 1)))
 
   # Transmission coefficient: R0 = beta * mean infectious period, so beta = R0 / mean.
-  # (For SEIR-style models agents enter I via measles_step BEFORE the FOI tally, so the
+  # (For SEIR-style models agents enter I via step_sir BEFORE the FOI tally, so the
   # full infectious period D counts — see CLAUDE.md.)
   beta <- r0 / mean(inf_duration$sample_n(100000L))
 
@@ -120,7 +121,7 @@ run_measles_model <- function(scenario, network, nticks,
   people$state$set(state0)
 
   # Seed the infectious timer (u16) for the initial I agents from `inf_duration`, so
-  # measles_step counts them down to recovery rather than recovering them immediately
+  # step_sir counts them down to recovery rather than recovering them immediately
   # (a timer of 0 would expire on the first step). Everyone else starts at 0 (M/E start
   # empty; S and R are untimed).
   timer0  <- rep(0L, capacity)
@@ -174,23 +175,34 @@ run_measles_model <- function(scenario, network, nticks,
       t0 <- tick - 1L
       # Carry M/S/E/I/R forward and total them into N (the FOI denominator).
       carry_forward_states(list(nodes$M, nodes$S, nodes$E, nodes$I, nodes$R), t0, total = nodes$N)
-      # Timed transitions in one pass: M->S (waning), E->I (incubation; draws an
-      # infectious timer), I->R (recovery).
-      measles_step(people$state, people$timer, people$nodeid, people$count,
-                   nodes$M, nodes$S, nodes$E, nodes$I, nodes$R, inf_duration, t0)
+      # Timed transitions in one pass (measles = SEIR + M, so step_sir absorbing = R):
+      # M->S (waning), E->I (incubation; draws an infectious timer), I->R (recovery).
+      # The kernel returns per-node counts; apply each to the census.
+      prog <- step_sir(people$state, people$timer, people$nodeid, people$count,
+                       nodes$count, inf_duration, states[["R"]])
+      move_count(nodes$M, nodes$S, prog$waned,   t0)   # M -> S
+      move_count(nodes$E, nodes$I, prog$onset,   t0)   # E -> I
+      move_count(nodes$I, nodes$R, prog$cleared, t0)   # I -> R
       # Force of infection from the post-step infectious census, then S->E exposures
-      # (drawing the u16 incubation timer); incidence records new exposures.
+      # (drawing the incubation timer); incidence records new exposures.
       calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
-      transmission_u16(people$state, people$timer, people$nodeid, people$count,
-                       nodes$foi, nodes$S, nodes$E, nodes$incidence, t0,
-                       states[["E"]], incubation_duration)
-      # Births: CBR newborns into M (maternal timer + a Kaplan-Meier date of death); the
-      # active count grows. Then natural mortality retires agents whose dod has arrived.
-      people$count <- births(people$state, people$timer, people$nodeid, people$dob, people$dod,
-                             people$count, nodes$birth_rate, nodes$M, nodes$births,
-                             maternal_duration, km, t0)
-      mortality(people$state, people$dod, people$nodeid, people$count,
-                nodes$M, nodes$S, nodes$E, nodes$I, nodes$R, nodes$deaths, t0)
+      inf <- transmission(people$state, people$timer, people$nodeid, people$count,
+                          nodes$foi, t0, states[["E"]], incubation_duration)
+      move_count(nodes$S, nodes$E, inf, t0)
+      nodes$incidence$set_col(t0, inf)
+      # Births: CBR newborns into M (maternal timer + a Kaplan-Meier date of death);
+      # `births` returns the grown count and the per-node birth count.
+      b <- births(people$state, people$timer, people$nodeid, people$dob, people$dod,
+                  people$count, nodes$count, nodes$birth_rate, maternal_duration, km, t0)
+      people$count <- b$count
+      move_count(NULL, nodes$M, b$born, t0)            # newborns enter M
+      nodes$births$set_col(t0, b$born)
+      # Natural mortality: returns deaths per node by source compartment; decrement each.
+      d <- mortality(people$state, people$dod, people$nodeid, people$count, nodes$count, t0)
+      move_count(nodes$M, NULL, d$m, t0); move_count(nodes$S, NULL, d$s, t0)
+      move_count(nodes$E, NULL, d$e, t0); move_count(nodes$I, NULL, d$i, t0)
+      move_count(nodes$R, NULL, d$r, t0)
+      nodes$deaths$set_col(t0, d$m + d$s + d$e + d$i + d$r)
       if (!is.null(pb) && (tick %% update_every == 0L || tick == nticks - 1L))
         utils::setTxtProgressBar(pb, tick)
     }

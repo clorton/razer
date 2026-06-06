@@ -1,93 +1,69 @@
 # Tests for mortality(): natural-mortality step that retires agents whose date of death
-# `dod` (an absolute tick) has arrived. For each living agent with dod <= tick it sets
-# state to D and decrements the M/S/E/I/R census it occupied (at column tick+1), adding
-# to the per-node deaths flow at column tick. Written given-when-then.
-#
-# Note: D = -1 is stored in the u8 state Column as 255, so $values() reads a deceased
-# agent as 255 (not -1).
+# `dod` (an absolute tick) has arrived. It mutates the per-agent state (D = 255) and
+# RETURNS per-node death counts broken down by source compartment, `list(m, s, e, i, r)`;
+# the caller decrements those census compartments. Written given-when-then.
 
 states <- laser_states()                       # c(S=0, E=1, I=2, R=3, M=4, D=-1)
-S <- states[["S"]]; E <- states[["E"]]; I <- states[["I"]]
-R <- states[["R"]]; M <- states[["M"]]
+S <- states[["S"]]; E <- states[["E"]]; I <- states[["I"]]; R <- states[["R"]]; M <- states[["M"]]
 D_U8 <- 255L                                   # how D (-1) reads back from a u8 column
 
 mk <- function(dt, x) { col <- allocate_scalar(dt, length(x)); col$set(x); col }
-# A 2-column i32 census with columns 0 and 1 both = `col0` (column 1 simulates the
-# caller's carry_forward for tick 0).
-carried <- function(col0) {
-  buf <- allocate_vector("i32", 2L, length(col0)); buf$set(c(col0, col0)); buf
-}
 
-test_that("mortality retires due agents and decrements the right compartment", {
-  # Given (tick 0, two nodes) node 0 = {I(dod0), S(dod0), R(dod5)} and node 1 =
-  #       {M(dod0), S(dod3)}, census carried to tick 1
+test_that("mortality retires due agents and returns deaths by compartment", {
+  # Given (tick 0, two nodes) node 0 = {I(dod0), S(dod0), R(dod5)}, node 1 = {M(dod0),
+  #       S(dod3)}
   # When mortality runs for tick 0
-  # Then the agents with dod <= 0 (the I and S in node 0, the M in node 1) become D and
-  #      are removed from their compartments at tick 1; the R (dod 5) and the node-1 S
-  #      (dod 3) survive; deaths are 2 in node 0 and 1 in node 1. Failure would mean the
-  #      due-date test, the compartment decrement, or the death tally is wrong.
+  # Then the agents with dod <= 0 (the I and S in node 0, the M in node 1) become D; the
+  #       R (dod 5) and node-1 S (dod 3) survive; the returned counts are i=(1,0),
+  #       s=(1,0), m=(0,1), with e and r zero. Failure would mean the due-date test or the
+  #       per-compartment tally is wrong.
   state  <- mk("u8",  c(I, S, R, M, S))
   dod    <- mk("u32", c(0, 0, 5, 0, 3))
   nodeid <- mk("u16", c(0, 0, 0, 1, 1))
-  Mc <- carried(c(0, 1)); Sc <- carried(c(1, 1)); Ec <- carried(c(0, 0))
-  Ic <- carried(c(1, 0)); Rc <- carried(c(1, 0))
-  deaths <- allocate_vector("i32", 1L, 2L)
 
-  mortality(state, dod, nodeid, 5L, Mc, Sc, Ec, Ic, Rc, deaths, 0L)
+  d <- mortality(state, dod, nodeid, 5L, 2L, 0L)
 
-  expect_equal(state$values(), c(D_U8, D_U8, R, D_U8, S))   # I,S,M retired; R,S survive
-  expect_equal(Ic$values()[2L, ], c(0, 0))                  # node0 I: 1 -> 0
-  expect_equal(Sc$values()[2L, ], c(0, 1))                  # node0 S: 1 -> 0; node1 S stays
-  expect_equal(Mc$values()[2L, ], c(0, 0))                  # node1 M: 1 -> 0
-  expect_equal(Rc$values()[2L, ], c(1, 0))                  # R untouched
-  expect_equal(deaths$values(), c(2, 1))                    # node0: I+S; node1: M
-  # conservation: every death is exactly one compartment decrement
-  total_dec <- (Mc$values()[1L,]-Mc$values()[2L,]) + (Sc$values()[1L,]-Sc$values()[2L,]) +
-               (Ic$values()[1L,]-Ic$values()[2L,]) + (Rc$values()[1L,]-Rc$values()[2L,])
-  expect_equal(deaths$values(), total_dec)
+  expect_equal(state$values(), c(D_U8, D_U8, R, D_U8, S))
+  expect_equal(d$i, c(1L, 0L)); expect_equal(d$s, c(1L, 0L)); expect_equal(d$m, c(0L, 1L))
+  expect_equal(d$e, c(0L, 0L)); expect_equal(d$r, c(0L, 0L))
 })
 
 test_that("mortality leaves agents whose dod is in the future untouched", {
   # Given agents all with dod > tick
   # When mortality runs
-  # Then nobody dies, the census is unchanged, and deaths are zero.
-  # Failure would mean premature deaths.
-  state  <- mk("u8",  c(S, I, R)); dod <- mk("u32", c(5, 9, 7)); nodeid <- mk("u16", c(0, 0, 0))
-  Mc <- carried(0); Sc <- carried(1); Ec <- carried(0); Ic <- carried(1); Rc <- carried(1)
-  deaths <- allocate_vector("i32", 1L, 1L)
-
-  mortality(state, dod, nodeid, 3L, Mc, Sc, Ec, Ic, Rc, deaths, 0L)  # all dod > 0
+  # Then nobody dies and every returned count is zero.
+  state  <- mk("u8", c(S, I, R)); dod <- mk("u32", c(5, 9, 7)); nodeid <- mk("u16", c(0, 0, 0))
+  d <- mortality(state, dod, nodeid, 3L, 1L, 0L)
 
   expect_equal(state$values(), c(S, I, R))
-  expect_equal(Sc$values()[2L, ], 1); expect_equal(Ic$values()[2L, ], 1)
-  expect_equal(deaths$values(), 0)
+  expect_equal(d$s, 0L); expect_equal(d$i, 0L); expect_equal(d$r, 0L)
 })
 
-test_that("mortality does not re-kill or re-count already-deceased agents", {
-  # Given an agent already in D (255) alongside a due living agent
+test_that("mortality does not re-count already-deceased agents", {
+  # Given an agent already D (255) alongside a due living agent
   # When mortality runs
-  # Then only the living agent is retired and counted; the already-dead agent is left
-  #      alone (no double-count). Failure would mean dead agents leak into the deaths
-  #      tally or corrupt the census.
-  state  <- mk("u8",  c(D_U8, I)); dod <- mk("u32", c(0, 0)); nodeid <- mk("u16", c(0, 0))
-  Mc <- carried(0); Sc <- carried(0); Ec <- carried(0); Ic <- carried(1); Rc <- carried(0)
-  deaths <- allocate_vector("i32", 1L, 1L)
-
-  mortality(state, dod, nodeid, 2L, Mc, Sc, Ec, Ic, Rc, deaths, 0L)
+  # Then only the living agent is retired and counted (no double-count).
+  state  <- mk("u8", c(D_U8, I)); dod <- mk("u32", c(0, 0)); nodeid <- mk("u16", c(0, 0))
+  d <- mortality(state, dod, nodeid, 2L, 1L, 0L)
 
   expect_equal(state$values(), c(D_U8, D_U8))
-  expect_equal(Ic$values()[2L, ], 0)        # the one live I retired
-  expect_equal(deaths$values(), 1)          # exactly one death recorded
+  expect_equal(d$i, 1L)                          # the one live I retired
 })
 
-test_that("mortality validates the tick range", {
-  # Given a tick whose census column tick+1 does not exist
-  # When mortality is called
-  # Then it errors rather than writing out of bounds.
-  state <- mk("u8", c(I)); dod <- mk("u32", c(0)); nodeid <- mk("u16", c(0))
-  Mc <- carried(0); Sc <- carried(0); Ec <- carried(0); Ic <- carried(1); Rc <- carried(0)
-  deaths <- allocate_vector("i32", 2L, 1L)
-  expect_error(
-    mortality(state, dod, nodeid, 1L, Mc, Sc, Ec, Ic, Rc, deaths, 1L),
-    "out of range")
+test_that("mortality's per-node counts match a census at scale", {
+  # Given 1,000,000 infectious agents over 50 nodes, half with dod = 0 (due) and half in
+  #       the future
+  # When mortality runs for tick 0 (work split across cores)
+  # Then the returned per-node I-death counts equal a serial tabulate of the now-D agents.
+  set.seed(13L)
+  n_agents <- 1000000L; n_nodes <- 50L
+  nid <- sample.int(n_nodes, n_agents, replace = TRUE) - 1L
+  due <- sample(c(0L, 10L), n_agents, replace = TRUE)   # dod 0 (die) or 10 (survive tick 0)
+  state <- mk("u8", rep(I, n_agents)); dod <- mk("u32", due); nodeid <- mk("u16", nid)
+
+  d <- mortality(state, dod, nodeid, n_agents, n_nodes, 0L)
+
+  dead <- as.integer(tabulate(nid[state$values() == D_U8] + 1L, n_nodes))
+  expect_equal(d$i, dead)
+  expect_gt(sum(d$i), 0); expect_lt(sum(d$i), n_agents)
 })

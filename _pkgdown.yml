@@ -25,15 +25,18 @@ reference:
 - title: Transmission & disease dynamics
   desc: >
     Per-tick Column kernels for force of infection and the timed compartment
-    transitions of SIR / SEIR / measles-family models. Place `calc_foi` so the
-    effective reproduction number is the full `beta * D` (see the modeling note in
-    the package README / CLAUDE.md).
+    transitions of the SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS menagerie. The kernels
+    return per-node counts the model applies to its census via `move_count`; place
+    `calc_foi` so the effective reproduction number is the full `beta * D` (see the
+    modeling note in the package README / CLAUDE.md).
   contents:
   - calc_foi
-  - sir_step
-  - measles_step
   - transmission
-  - transmission_u16
+  - transmission_si
+  - step_si
+  - step_sir
+  - step_sirs
+  - move_count
 - title: Vital dynamics & importation
   desc: >
     Births, deaths, and externally-seeded cases.
