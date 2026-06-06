@@ -1,8 +1,9 @@
 #!/usr/bin/env Rscript
 
-# Simple SIR example built on the high-level run_sir() runner (R/models.R),
-# rather than wiring the per-tick step kernels together by hand. This script
-# defines run_sir_model(), does some setup, then calls it.
+# Simple spatial SIR example over the England & Wales measles patches. This script
+# defines a self-contained run_sir_model() that wires the Column per-tick kernels
+# (carry_forward_states -> calc_foi -> sir_step -> transmission -> vital dynamics),
+# does some setup, then calls it.
 #
 # Run from anywhere:  Rscript examples/simple_sir.R
 
@@ -10,7 +11,7 @@
 # (like a wildcard `import`); the package name is given bare, not as a string.
 library(razer)
 
-# ── run_sir_model: assemble parameters and hand off to run_sir() ────────────────
+# ── run_sir_model: assemble parameters and run the Column SIR loop ──────────────
 # `function(args) body` is a first-class closure value, bound here with `<-`.
 # `scenario` is a data.frame with one row per patch (name, population, latitude,
 # longitude); it is the model's geographic scaffold. Optional integer `I` / `R`

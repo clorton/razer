@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Removed
+- **The legacy `LaserFrame` world.** The package now has a single agent-storage and
+  kernel stack — the `Column` typed arrays plus the per-tick Column kernels. Removed:
+  the `LaserFrame` struct (`src/rust/src/laser_frame.rs`, `R/laser_frame.R`), the
+  monolithic `epidemic.rs` step kernels (`step_transmission_si`/`_se`,
+  `step_timer_expire`/`_set`, `step_exposed_ei`, `step_infectious_ir`/`_is`,
+  `step_recovered_rs`, `step_mortality_cdr`, `step_births_cbr`), the `run_sir()` runner
+  (`R/models.R`) and the `model-composition` help topic. `epidemic.rs` now provides only
+  the shared state codes (`laser_states()`). The monolithic `step_transmission_si` was
+  the one kernel that could not realize the full `beta · D` (see Fixed); retiring it
+  removes the last `beta · (D − 1)` path. `examples/sir_attack_fraction.R` and
+  `seir_attack_fraction.R` were rewritten on the Column kernels (both now validate
+  Kermack–McKendrick with `R0 = beta · D`); SEIR reuses `measles_step` with the maternal
+  compartment empty. Associated tests removed; `laser_states` keeps its own test.
+
 ### Fixed
 - **SIR models now realize the full `R0 = beta · D`, not `beta · (D − 1)`.** With direct
   `S→I` transmission a newly infectious agent enters `I` *after* the force-of-infection

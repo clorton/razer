@@ -1,60 +1,44 @@
 # razer — project notes for Claude
 
-## Modeling convention: downstream-first transition ordering
+## Modeling convention: the Column kernels and per-tick ordering
 
-When composing a model from the per-tick step kernels, **call the transitions in
-downstream-first order** — i.e. move agents *out* of each timed compartment before
-moving agents *into* it, walking the disease-progression chain backwards:
+Models are composed from the **Column-based** per-tick kernels operating on
+`Column` buffers (allocated with `allocate_scalar` / `allocate_vector`):
 
-| Model  | Per-tick call order                                                        |
-|--------|----------------------------------------------------------------------------|
-| SIR    | `step_infectious_ir` → `step_transmission_si`                              |
-| SEIR   | `step_infectious_ir` → `step_exposed_ei` → `step_transmission_se`         |
-| SEIRS  | `step_recovered_rs` → `step_infectious_ir` → `step_exposed_ei` → `step_transmission_se` |
-| SIS    | `step_infectious_is` → `step_transmission_si`                             |
+- `carry_forward(col, t)` / `carry_forward_states(list, t, total)` — copy each census
+  counter from column `t` to `t+1` (and optionally total them into `N`); every kernel
+  then applies only its *delta* to column `t+1`, so `count[t+1] = count[t] ± delta`.
+- `calc_foi(I, N, beta, seasonality, network, foi, t)` — per-node force of infection.
+- `sir_step(...)` — I→R recovery (u8 timer); `measles_step(...)` — M→S, E→I, I→R in one
+  u16-timer pass (use it for SEIR/SEIRS too, M left empty).
+- `transmission(...)` — S→I writing a u8 timer; `transmission_u16(...)` — S→E (or S→I)
+  writing a u16 timer.
+- `constant_pop_vitals_sir(...)`, `mortality(...)`, `births(...)` — vital dynamics.
 
-**Why.** Each timed transition sets a fresh duration timer when an agent *enters*
-a state, and the step for the *next* transition decrements that timer. If the
-inflow step runs before the outflow step within the same tick, a just-arrived
-agent is decremented immediately and loses one tick of residency — its effective
-exposed/infectious period is `duration − 1` instead of `duration`. Running
-downstream-first (outflow before inflow) prevents this: a newly exposed or newly
-infectious agent is not touched again until the next tick.
+**No `beta · (D − 1)` models — always realize the full `beta · D`.** An agent must
+contribute to the force of infection on exactly the `D` ticks it is infectious. The
+trap is the placement of `calc_foi` relative to the entry into / exit from `I`:
 
-This is validated by the attack-fraction examples: with downstream-first ordering
-the **SEIR** model matches the Kermack–McKendrick final size `A = 1 − exp(−R0·A)`
-with `R0 = beta · D` (full infectious period `D`).
+- **Direct S→I (SIR), Column kernels.** A directly-infected agent enters `I` *after*
+  the tick's FOI tally, so it is never counted on its entry tick. Run **`calc_foi`
+  before `sir_step`** so it is still counted on its *recovery* tick — losing the entry
+  tick but gaining the recovery tick nets the full `D`. Per-tick order:
+  `carry_forward` → **`calc_foi`** → `sir_step` → `transmission` → (vitals).
+- **SEIR-style entry (`measles_step`'s E→I).** Agents enter `I` via `measles_step`,
+  which runs *before* the tally, so run **`calc_foi` after `measles_step`**: new
+  infectious are counted on entry, recoveries excluded — also `beta · D`. Per-tick
+  order: `carry_forward` → `measles_step` → **`calc_foi`** → `transmission_u16` →
+  (births, mortality). `calc_foi`'s docstring spells out both orderings.
 
-**No `beta · (D − 1)` models — always realize the full `beta · D`.** With direct
-`S→I` transmission a newly infectious agent enters `I` *after* the tick's
-force-of-infection tally, so it is never counted on its entry tick. If recoveries are
-*also* excluded from the tally, the agent contributes on only `D − 1` ticks and the
-effective reproduction number collapses to `R0 = beta · (D − 1)`. **This is a bug, not
-an accepted convention; no model in this package should exhibit it.**
+This is validated by `examples/sir_attack_fraction.R` and `seir_attack_fraction.R`:
+both match the Kermack–McKendrick final size `A = 1 − exp(−R0·A)` with `R0 = beta · D`.
 
-The fix depends on which kernels you use:
-
-- **Column kernels (`calc_foi` / `sir_step` / `transmission`) — the standard path.**
-  Run `calc_foi` *before* the recovery step (`sir_step`), so an agent is still counted
-  on its recovery tick. The directly-infected agent loses its entry tick but gains its
-  recovery tick → the full `D`. Per-tick order: `carry_forward` → **`calc_foi`** →
-  `sir_step` → `transmission` → (vitals). (SEIR-style models — where agents enter `I`
-  via a step run *before* the tally, e.g. `measles_step`'s E→I — instead run `calc_foi`
-  *after* that step: the new infectious are counted on entry and recoveries excluded,
-  also `beta · D`.) `calc_foi`'s docstring spells out both orderings.
-- **Monolithic LaserFrame `step_transmission_si`.** Because it computes its infectious
-  tally and applies the S→I infection in the *same* call, neither reordering can
-  recover the full `D` — it structurally yields `beta · (D − 1)`. **Do not use it for
-  new SIR models; prefer the Column kernels** (or SEIR-style entry). `run_sir()` and
-  `examples/sir_attack_fraction.R` still ride this legacy kernel — see their notes.
-
-See `examples/simple_sir.R` / `endemic_sir.R` (Column SIR, `beta · D`) and
-`examples/seir_attack_fraction.R` (SEIR, `beta · D`).
-
-Steps that transition into untimed states (`step_infectious_is`,
-`step_recovered_rs` into S; `step_mortality_cdr` into D; `step_births_cbr`) do not
-themselves suffer the artifact, but `step_recovered_rs` is still an *outflow* of R
-and so leads in SEIRS.
+**Combined timed transitions avoid the residency artifact structurally.**
+`measles_step` advances M→S, E→I, and I→R in a *single* pass, branching on each agent's
+state at the start of the pass, so an agent that does E→I this tick is not also recovered
+this tick. (A newly entered timed state must not be decremented again in the same tick,
+or its residency would be `duration − 1`.) See `examples/engwal_measles.R` (full M-S-E-I-R
+model), `simple_sir.R` / `endemic_sir.R` (Column SIR, `beta · D`).
 
 ## Commenting conventions
 
@@ -68,12 +52,12 @@ Python** but **not** in Rust or R. Comment for that reader.
   / `Result` / `?`, the turbofish (`::<T>`), `unsafe` blocks and their SAFETY
   contracts, and what attribute macros like `#[extendr]` generate. Don't explain
   general programming; explain what differs from the languages above.
-  `src/rust/src/epidemic.rs` is the reference exemplar for the level and style.
+  `src/rust/src/sir.rs` is the reference exemplar for the level and style.
 - **Always comment R code (`.R`) for this audience.** Explain R idioms that trip
   up non-R programmers — `<-` assignment, S3 dispatch (`generic.class`,
   `` `$<-` `` replacement methods), `.Call` into compiled code, environments and
   closure rebinding, vectors / `c()` / `%in%`, `[[` vs `$`, `invisible()`, `NULL`,
-  column-major matrices, and vectorized operations. `R/laser_frame.R` is the
+  column-major matrices, and vectorized operations. `R/pyramid.R` is the
   reference exemplar. Note: `R/extendr-wrappers.R` and `tools/*.R` are
   auto-generated — do not comment them (regeneration overwrites edits).
 

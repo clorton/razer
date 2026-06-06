@@ -1,5 +1,5 @@
-# Distribution constructors (razer$normal, razer$constant) and their use as the
-# infectious-period parameter of step_exposed_ei.
+# Distribution constructors (dist_normal, dist_constant, …) and their sampling /
+# validation behaviour. (Each kernel that draws durations is tested in its own file.)
 #
 # The sampler RNG is thread-local (rand::thread_rng) and cannot be seeded from R,
 # so stochastic tests assert distributional properties over large samples with
@@ -218,92 +218,4 @@ test_that("dist_lognormal: negative sdlog is rejected", {
   # When:  dist_lognormal() is called
   # Then:  an error is raised (sdlog must be non-negative)
   expect_error(dist_lognormal(0, -0.5))
-})
-
-# ── Use as the infectious-period distribution of step_exposed_ei ─────────────────
-
-# A local test fixture/factory. `function(args)` defines an anonymous function
-# bound to `make_exposed`; `timer = 1L` is a default argument.
-make_exposed <- function(n, timer = 1L) {
-  # n exposed (state E) agents in a single node, each with the given timer so
-  # that one step of step_exposed_ei expires the timer and forces E→I.
-  ppl <- LaserFrame$new(n, n)
-  ppl$add_scalar_property("state", "integer", 1L)   # E
-  ppl$add_scalar_property("node",  "integer", 0L)
-  ppl$add_scalar_property("timer", "integer", timer)
-  ppl
-}
-
-test_that("step_exposed_ei: constant distribution sets a fixed infectious timer", {
-  # Given: 1 000 exposed agents whose timers expire this tick
-  # When:  step_exposed_ei is run with a dist_constant(9) infectious-period distribution
-  # Then:  all agents become infectious (state I) with timer exactly 9
-  # Failure would mean the constant distribution is not being sampled as a fixed
-  # duration on the E→I transition.
-  ppl <- make_exposed(1000L, timer = 1L)
-  # `inf_dist =` passes the distribution by keyword argument. The frame `ppl` is a
-  # reference (external pointer), so the step mutates it in place.
-  step_exposed_ei(ppl, inf_dist = dist_constant(9))
-  expect_true(all(ppl$state == 2L))
-  expect_true(all(ppl$timer == 9L))
-})
-
-test_that("step_exposed_ei: normal distribution produces varied integer timers", {
-  # Given: 20 000 exposed agents whose timers expire this tick
-  # When:  step_exposed_ei is run with a dist_normal(mean = 12, variance = 9) period
-  # Then:  all transition to I; their infectious timers are integers >= 1, vary
-  #        across agents (sd > 0), and average near the requested mean of 12
-  # This is the headline behavior: a per-agent stochastic infectious period drawn
-  # from the supplied distribution. Failure indicates the distribution is not
-  # actually sampled per agent (e.g. a single shared draw) or the step's
-  # round-and-clamp to whole ticks is wrong.
-  ppl <- make_exposed(20000L, timer = 1L)
-  step_exposed_ei(ppl, inf_dist = dist_normal(12, 9))
-
-  timers <- ppl$timer
-  expect_true(all(ppl$state == 2L))
-  # `as.integer` truncates to whole numbers; equality with the originals asserts
-  # the durations are already whole ticks.
-  expect_true(all(timers == as.integer(timers)))  # whole-tick durations
-  expect_true(all(timers >= 1L))                   # clamped to a positive period
-  expect_gt(sd(timers), 1)                         # genuinely stochastic spread
-  expect_gt(mean(timers), 11)
-  expect_lt(mean(timers), 13)
-})
-
-test_that("step_transmission_si: newly infected agents draw their timer from any family", {
-  # Given: a single node where every susceptible is infected this tick (beta huge),
-  #        seeded with infectious agents to drive the force of infection, and a
-  #        dist_uniform(10, 20) infectious-period distribution
-  # When:  one transmission step is run
-  # Then:  every newly infected agent gets an integer timer within the support of
-  #        the distribution (rounded dist_uniform(10, 20) lies in 10:20), and those
-  #        timers vary across agents
-  # This confirms the new distribution families flow through a transmission kernel
-  # (not just the timer-decrement kernels) and are sampled per agent.
-  n <- 10000L
-  ppl <- LaserFrame$new(n, n)
-  ppl$add_scalar_property("state", "integer", 0L)              # S
-  ppl$add_scalar_property("node",  "integer", 0L)
-  ppl$add_scalar_property("timer", "integer", 0L)
-  # Build the initial state vector in R, then write it to the frame. `;` separates
-  # statements on one line; `seq_len(100L)` is 1:100 (but safe when the count is 0);
-  # `sv[1:100] <- 2L` assigns into a slice; `2L` is the I (infectious) state code.
-  sv <- rep(0L, n); sv[seq_len(100L)] <- 2L; ppl$state <- sv   # 100 seeded I
-
-  nd <- LaserFrame$new(1L, 1L)
-  nd$add_scalar_property("N", "integer", n)
-  nd$add_scalar_property("I", "integer", 0L)
-
-  state_before <- ppl$state
-  step_transmission_si(ppl, nd, beta = 100.0, inf_dist = dist_uniform(10, 20), network = matrix(0, 1, 1))
-
-  # `which(logical_vec)` returns the 1-based indices where the condition is TRUE
-  # (here: was S, now I). `ppl$timer[newly_infected]` then gathers those agents' timers.
-  newly_infected <- which(state_before == 0L & ppl$state == 2L)
-  timers <- ppl$timer[newly_infected]
-  expect_gt(length(newly_infected), 0L)
-  expect_true(all(timers == as.integer(timers)))   # whole-tick durations
-  expect_true(all(timers >= 10L & timers <= 20L))   # within rounded uniform support
-  expect_gt(sd(timers), 0)                          # per-agent draws, not a shared value
 })

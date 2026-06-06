@@ -4,12 +4,16 @@ template:
   bootstrap: 5
 
 reference:
-- title: Population frame
+- title: Agent & node storage
   desc: >
-    Struct-of-arrays data store for agents and patches, and the epidemic state
-    codes used by the model kernels.
+    Rust-owned, dtype-tagged property arrays (per-agent and per-node/per-tick), the
+    incremental-census carry-forward helpers, and the epidemic state codes.
   contents:
-  - LaserFrame
+  - Column
+  - allocate_scalar
+  - allocate_vector
+  - carry_forward
+  - carry_forward_states
   - laser_states
 - title: Distributions
   desc: >
@@ -18,18 +22,52 @@ reference:
   contents:
   - Distribution
   - starts_with("dist_")
-- title: Model step kernels
+- title: Transmission & disease dynamics
   desc: >
-    Per-tick transition kernels for composing SI / SIR / SEIR / SEIRS-family
-    models. Call them downstream-first within a tick — see "Composing models:
-    order of per-tick update operations" below.
+    Per-tick Column kernels for force of infection and the timed compartment
+    transitions of SIR / SEIR / measles-family models. Place `calc_foi` so the
+    effective reproduction number is the full `beta * D` (see the modeling note in
+    the package README / CLAUDE.md).
   contents:
-  - model-composition
-  - starts_with("step_")
-- title: Model runners
+  - calc_foi
+  - sir_step
+  - measles_step
+  - transmission
+  - transmission_u16
+- title: Vital dynamics & importation
   desc: >
-    High-level functions that assemble the step kernels and their parameters into
-    a single call: build the population from a node table, run the tick loop, and
-    return the people frame with per-node trajectories and flows attached.
+    Births, deaths, and externally-seeded cases.
   contents:
-  - starts_with("run_")
+  - births
+  - mortality
+  - constant_pop_vitals_sir
+  - import_infections
+- title: Demographics & initialization
+  desc: >
+    Realistic age structure and dates of death, and capacity sizing.
+  contents:
+  - AliasedDistribution
+  - aliased_distribution
+  - KaplanMeierEstimator
+  - kaplan_meier_estimator
+  - load_pyramid_csv
+  - sample_pyramid_ages
+  - calc_capacity
+- title: Spatial coupling & migration
+  desc: >
+    Pairwise distances and migration-network models for spatial coupling of the
+    force of infection.
+  contents:
+  - distances
+  - gravity
+  - radiation
+  - stouffer
+  - competing_destinations
+  - row_normalizer
+- title: Utilities
+  desc: >
+    Grid broadcasting and binning helpers.
+  contents:
+  - values_map
+  - bincount
+  - bincountw

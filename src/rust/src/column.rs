@@ -3,8 +3,7 @@
 //
 // A `Column` is the backing store for one agent property (e.g. `state`). The
 // data lives in a Rust `Vec<T>` that R never sees directly: R holds only an
-// opaque external-pointer handle (the same mechanism as `LaserFrame` /
-// `Distribution`). This buys us:
+// opaque external-pointer handle (the same mechanism as `Distribution`). This buys us:
 //
 //   * Every integer/float width — i8/u8/i16/u16/i32/u32/f32/f64 — even though R's
 //     own atomic vectors only cover i32 (integer), f64 (double), and u8 (raw).

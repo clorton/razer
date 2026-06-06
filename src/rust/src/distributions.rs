@@ -46,8 +46,8 @@ enum DistKind {
 /// appropriate — the simulation kernels round to the nearest tick.
 ///
 /// The handle is opaque to R — it is passed to simulation kernels (e.g.
-/// `step_exposed_ei`) by reference, so the same object can be reused every tick
-/// and shared across all worker threads.
+/// `measles_step` or `transmission`) by reference, so the same object can be reused
+/// every tick and shared across all worker threads.
 ///
 /// @export
 #[extendr]

@@ -16,8 +16,7 @@
 // sequencing separate kernels.
 //
 // The timer is a uint16 because maternal immunity lasts ~270 days, beyond a uint8's 255
-// range. Decrement is GUARDED (`if t > 0 { t -= 1 }`) so a u16 never underflows (unlike
-// the i32 LaserFrame kernels in epidemic.rs, which decrement then test `<= 0`).
+// range. Decrement is GUARDED (`if t > 0 { t -= 1 }`) so a u16 never underflows.
 //
 // Parallel across agents with a private per-task per-node tally reduced at the end (see
 // the project memory). RNG (for the E->I infectious-period draw) is thread-local.
