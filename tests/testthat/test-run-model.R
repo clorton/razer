@@ -111,21 +111,30 @@ test_that("flow accounting matches the census changes (SEIR)", {
   expect_equal(diff(R), rec)                         # R only ever grows via recovery
 })
 
-test_that("run_model fires the init and per-tick callbacks", {
-  # Given init/step_enter/step_exit callbacks
+test_that("run_model fires the init and per-tick callbacks in order", {
+  # Given init and all three per-tick callbacks (step_enter, step_update, step_exit)
   # When an SIR model is run for nticks
-  # Then init runs once (here it tags the model and adds a counter), and step_enter/
-  #      step_exit each fire once per interval (nticks - 1). Failure would mean callbacks
-  #      are not invoked at the documented points.
+  # Then init runs once, each per-tick callback fires once per interval (nticks - 1), and
+  #      within a tick they fire in the order enter -> update -> exit (so update sits
+  #      between the step kernel and calc_foi). Failure would mean a callback is not invoked
+  #      at the documented point or in the documented order.
   scen <- data.frame(population = 5000L, I = 20L)
-  counters <- new.env(); counters$enter <- 0L; counters$exit <- 0L
+  counters <- new.env()
+  counters$enter <- 0L; counters$update <- 0L; counters$exit <- 0L
+  counters$order <- character(0)
   m <- run_model(scen, "SIR", nticks = 12L, r0 = 2, infectious_period = 6,
                  init = function(model) model$nodes$inited <- TRUE,
-                 step_enter = function(model) counters$enter <- counters$enter + 1L,
-                 step_exit  = function(model) counters$exit  <- counters$exit  + 1L)
+                 step_enter  = function(model) { counters$enter  <- counters$enter  + 1L
+                                                 counters$order <- c(counters$order, "enter") },
+                 step_update = function(model) { counters$update <- counters$update + 1L
+                                                 counters$order <- c(counters$order, "update") },
+                 step_exit   = function(model) { counters$exit   <- counters$exit   + 1L
+                                                 counters$order <- c(counters$order, "exit") })
   expect_true(isTRUE(m$nodes$inited))
   expect_equal(counters$enter, 11L)
+  expect_equal(counters$update, 11L)
   expect_equal(counters$exit, 11L)
+  expect_equal(counters$order[1:3], c("enter", "update", "exit"))   # within-tick order
 })
 
 test_that("run_model seeds only states the model has (item 3)", {

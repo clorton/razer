@@ -17,8 +17,10 @@ All notable changes to this project are documented here.
   all examples/tests updated to the single ordering.
 - **`run_model()` now returns a `model` environment and takes lifecycle callbacks.** It
   bundles `$people`, `$nodes`, `$network`, and `$carry` into one environment (returned, and
-  passed to the callbacks), and accepts optional `init(model)` (once, before the loop) and
-  `step_enter(model)` / `step_exit(model)` (start / end of each tick). It now seeds **any**
+  passed to the callbacks), and accepts optional `init(model)` (once, before the loop) plus
+  three per-tick callbacks: `step_enter(model)` (start of tick), `step_update(model)`
+  (between the step kernel and `calc_foi`), and `step_exit(model)` (end of tick). It now
+  seeds **any**
   of the model's `E`/`I`/`R` compartments that the scenario supplies a column for (a state
   absent from the scenario, or from the model, is not seeded), and records the per-node
   flows `incidence` (all models), `onset` (E→I), `recovery` (I-exit), and `waning` (R→S).

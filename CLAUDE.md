@@ -67,8 +67,9 @@ a full M-S-E-I-R model and `simple_sir.R` / `endemic_sir.R` for spatial Column S
 correct order and returns a **`model` environment** bundling `$people`, `$nodes`,
 `$network`, and `$carry`; it seeds only the states the model has (any `E`/`I`/`R` column
 the scenario supplies), records the per-node flows `incidence` / `onset` / `recovery` /
-`waning` as applicable, and takes optional `init(model)` / `step_enter(model)` /
-`step_exit(model)` callbacks for user extension. `squash(people)` compacts dead agents
+`waning` as applicable, and takes optional `init(model)` plus the three per-tick callbacks
+`step_enter` (start) / `step_update` (between the step kernel and `calc_foi`) / `step_exit`
+(end of tick) for user extension. `squash(people)` compacts dead agents
 out; `calc_capacity(...)` bounds cumulative-births capacity (no reclaim) while
 `calc_capacity_cdr(...)` bounds peak-living capacity for squash-reclaimed long runs. The
 binning family is `bincount()` / `bincount_wt()` (weighted) / `bincount_where()` (predicate-

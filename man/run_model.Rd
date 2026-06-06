@@ -18,6 +18,7 @@ run_model(
   progress = FALSE,
   init = NULL,
   step_enter = NULL,
+  step_update = NULL,
   step_exit = NULL
 )
 }
@@ -60,6 +61,10 @@ so changing agent states in \code{init} keeps the census consistent.}
 \item{step_enter}{Optional \verb{function(model)} called at the start of every tick (before
 the carry-forward). Receives the \code{model} environment; \code{model$tick} is the current
 0-based interval index.}
+
+\item{step_update}{Optional \verb{function(model)} called every tick AFTER the step kernel
+(the disease-state progression) and BEFORE \code{calc_foi} — the place to adjust the census
+or drivers based on the post-step state before the force of infection is computed.}
 
 \item{step_exit}{Optional \verb{function(model)} called at the end of every tick (after
 transmission). Receives the \code{model} environment (with \code{model$tick} set).}

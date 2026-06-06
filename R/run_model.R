@@ -64,6 +64,9 @@
 #' @param step_enter Optional `function(model)` called at the start of every tick (before
 #'   the carry-forward). Receives the `model` environment; `model$tick` is the current
 #'   0-based interval index.
+#' @param step_update Optional `function(model)` called every tick AFTER the step kernel
+#'   (the disease-state progression) and BEFORE `calc_foi` — the place to adjust the census
+#'   or drivers based on the post-step state before the force of infection is computed.
 #' @param step_exit Optional `function(model)` called at the end of every tick (after
 #'   transmission). Receives the `model` environment (with `model$tick` set).
 #' @return Invisibly, the `model` environment, with:
@@ -86,7 +89,7 @@
 run_model <- function(scenario, model, nticks, r0, infectious_period,
                       incubation_period = NULL, immunity_period = NULL,
                       network = NULL, seasonality = 1, seed = NULL, progress = FALSE,
-                      init = NULL, step_enter = NULL, step_exit = NULL) {
+                      init = NULL, step_enter = NULL, step_update = NULL, step_exit = NULL) {
   model <- toupper(model)
   valid <- c("SI", "SEI", "SIS", "SEIS", "SIR", "SEIR", "SIRS", "SEIRS")
   if (!model %in% valid)
@@ -96,7 +99,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nticks <- as.integer(nticks)
   if (length(nticks) != 1L || is.na(nticks) || nticks < 2L)
     stop("`nticks` must be an integer >= 2")
-  for (cb in c("init", "step_enter", "step_exit")) {
+  for (cb in c("init", "step_enter", "step_update", "step_exit")) {
     f <- get(cb)
     if (!is.null(f) && !is.function(f)) stop(sprintf("`%s` must be a function or NULL", cb))
   }
@@ -242,6 +245,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
     if (!is.null(step_enter)) step_enter(m)
     carry_forward_states(m$carry, t, total = nodes$N)
     progress_step(t)                                                  # step always before FOI
+    if (!is.null(step_update)) step_update(m)                         # between step and FOI
     calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t)
     transmit(t)                                                       # FOI immediately before transmit
     if (!is.null(step_exit)) step_exit(m)
