@@ -63,6 +63,8 @@ test_that("run_model validates its inputs", {
   expect_error(run_model(scen, "SIR", nticks = 1L, r0 = 2, infectious_period = 5), "nticks")
   expect_error(run_model(scen, "SIR", nticks = 10L, r0 = 2, infectious_period = 5, init = 7),
                "init.*function")
+  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = -2, infectious_period = 5), "r0")
+  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = NA, infectious_period = 5), "r0")
 })
 
 test_that("run_model returns a model environment bundling people/nodes/network/carry", {

@@ -102,6 +102,8 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nticks <- as.integer(nticks)
   if (length(nticks) != 1L || is.na(nticks) || nticks < 2L)
     stop("`nticks` must be an integer >= 2")
+  if (!is.numeric(r0) || length(r0) != 1L || !is.finite(r0) || r0 < 0)
+    stop("`r0` must be a single finite, non-negative number")
   for (cb in c("init", "step_enter", "step_update", "step_exit")) {
     f <- get(cb)
     if (!is.null(f) && !is.function(f)) stop(sprintf("`%s` must be a function or NULL", cb))
