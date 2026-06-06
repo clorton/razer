@@ -53,6 +53,30 @@ test_that("calc_foi uses a per-node beta", {
   expect_equal(foi$values(), c(0.5 * 20 / 100, 0.2 * 10 / 50))
 })
 
+test_that("calc_foi applies time-varying beta and seasonality across ticks", {
+  # Given a 3-tick setup with the SAME infectious/population at every read column,
+  #       but beta and seasonality grids that differ by tick (built by values_map's
+  #       per-tick path: beta 0.2 then 0.5, seasonality 1 then 2)
+  # When calc_foi runs for tick 0 and tick 1
+  # Then each tick's FOI uses that tick's beta and seasonality column, so the two
+  #      tick rows differ exactly by the time-varying factors.
+  # Failure would mean calc_foi ignores time variation (reads a fixed column).
+  n <- 2L; nticks <- 3L
+  infected   <- allocate_vector("i32", nticks, n); infected$set(rep(c(100L, 50L),  nticks))
+  population <- allocate_vector("i32", nticks, n); population$set(rep(c(1000L, 500L), nticks))
+  beta   <- values_map(c(0.2, 0.5, 0), nticks, n)   # per-tick: tick 0 -> 0.2, tick 1 -> 0.5
+  season <- values_map(c(1,   2,   1), nticks, n)   # per-tick: tick 0 -> 1,   tick 1 -> 2
+  foi    <- allocate_vector("f64", nticks - 1L, n)
+
+  calc_foi(infected, population, beta, season, matrix(0, 2L, 2L), foi, 0L)
+  calc_foi(infected, population, beta, season, matrix(0, 2L, 2L), foi, 1L)
+
+  m <- foi$values()
+  expect_equal(m[1L, ], c(0.2 * 1 * 100 / 1000, 0.2 * 1 * 50 / 500))   # tick 0 factors
+  expect_equal(m[2L, ], c(0.5 * 2 * 100 / 1000, 0.5 * 2 * 50 / 500))   # tick 1 factors
+  expect_false(isTRUE(all.equal(m[1L, ], m[2L, ])))                    # genuinely time-varying
+})
+
 test_that("calc_foi redistributes force across a directed edge", {
   # Given infection only in node 0 and an edge exporting fraction m to node 1
   # When calc_foi runs
