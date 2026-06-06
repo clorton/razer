@@ -84,6 +84,8 @@ Every model in the SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS menagerie is a transmissi
 
 Each step kernel is a single pass branching on each agent's entry state, so a just-entered timed state is never decremented again the same tick. See `CLAUDE.md` for the full rationale and the per-model table.
 
+For the closed-population menagerie you usually don't wire this by hand: **`run_model(scenario, model, nticks, r0, …)`** builds the population, runs the correct per-tick loop (right `calc_foi` placement, all census deltas), and returns the per-node census — e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0 = 2.5, infectious_period = 8, incubation_period = 5, seed = 1)`. The hand-wired examples below show what it does under the hood (and how to go beyond the menagerie with vital dynamics, importation, and maternal immunity).
+
 ## Worked examples
 
 The [`examples/`](examples/) directory has runnable scripts (`Rscript examples/<name>.R`); plots are written to `examples/output/`.

@@ -5,6 +5,18 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- **`run_model()` — a high-level runner for the closed-population menagerie**
+  (`R/run_model.R`). One call builds the agent population and per-node census from a
+  scenario, seeds it, and runs any of the eight SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS
+  models on the Column kernels in the correct order — the `calc_foi` placement that
+  yields `R0 = beta · D`, and every `move_count` census delta — so a model is one call
+  instead of ~100 lines of hand-wiring, and the census cannot silently desync from the
+  agents. Optional spatial `network`, `seasonality`, and a reproducible `seed`. Returns
+  the `people`/`nodes` environments (census + `incidence`/`recoveries` flows). Validated
+  against Kermack–McKendrick (SIR/SEIR attack fractions match to ~1e-3); covered by
+  `tests/testthat/test-run-model.R` (all eight models, population conservation,
+  reproducibility, input validation). (Hand-wired examples remain for models beyond the
+  closed-population menagerie — vital dynamics, importation, maternal immunity.)
 - **Reproducible, seedable RNG (`set_seed()` / `unset_seed()`).** All kernel randomness
   now flows through `src/rust/src/rng.rs`: after `set_seed(s)` an entire razer run is a
   deterministic function of `s` and the order of kernel calls, **independent of CPU/thread

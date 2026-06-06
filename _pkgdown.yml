@@ -4,6 +4,12 @@ template:
   bootstrap: 5
 
 reference:
+- title: Model runner
+  desc: >
+    One call to build, seed, and run a closed-population compartmental model
+    (SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS) on the Column kernels.
+  contents:
+  - run_model
 - title: Agent & node storage
   desc: >
     Rust-owned, dtype-tagged property arrays (per-agent and per-node/per-tick), the
