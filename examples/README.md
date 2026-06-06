@@ -79,3 +79,10 @@ predicts zero — the expected near-critical behavior.
   applies a one-time pulse vaccination mid-epidemic (S→R), and records a custom
   under-five-by-node report each tick with `bincount_where()`. Plots baseline vs.
   intervention.
+- **`long_run_squash.R`** — a 100-year demographic run (1,000,000 initial agents, CBR 30,
+  CDR 15) that stays within a bounded agent array by reclaiming dead slots with `squash()`
+  once a year. The array is sized with `calc_capacity_cdr()` (the peak-living bound, ~9.1M
+  slots) instead of `calc_capacity()` (the cumulative-births bound, ~84M — 9× more). Plots
+  the living population against both capacity bounds, the annual squash sawtooth in active
+  slots, and daily births/deaths. Demonstrates `squash` + `calc_capacity_cdr` + the
+  `births`/`mortality` vital-dynamics kernels end to end.
