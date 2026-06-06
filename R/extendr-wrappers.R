@@ -732,6 +732,36 @@ constant_pop_vitals_sir <- function(state, timer, nodeid, count, rate, s_count, 
 #' @export
 import_infections <- function(state, timer, nodeid, count, i_count, importations, sched_tick, sched_node, sched_count, duration, tick) .Call(wrap__import_infections, state, timer, nodeid, count, i_count, importations, sched_tick, sched_node, sched_count, duration, tick)
 
+#' Build an [AliasedDistribution] from a vector of non-negative bin counts.
+#'
+#' The probability of drawing bin `i` (0-based) is `counts[i] / sum(counts)`. Counts
+#' are rounded to whole numbers; they must be finite and non-negative and sum to a
+#' positive total. A typical use is the per-age-bin population of a demographic
+#' pyramid (e.g. males + females in each five-year band).
+#'
+#' @param counts A numeric vector of non-negative per-bin counts (length >= 1).
+#' @return An `AliasedDistribution` object.
+#' @examples
+#' d <- aliased_distribution(c(10, 30, 60))   # bin 2 drawn ~60% of the time
+#' table(d$sample_n(10000L))                  # 0-based bin indices
+#' @export
+aliased_distribution <- function(counts) .Call(wrap__aliased_distribution, counts)
+
+#' Build a [KaplanMeierEstimator] from cumulative deaths by year.
+#'
+#' `cumulative_deaths[y]` is the number of a synthetic cohort dead by the end of year
+#' `y`; it must be non-negative and monotonically non-decreasing. Values are rounded to
+#' whole numbers. (A leading zero is prepended internally; do not include it yourself.)
+#'
+#' @param cumulative_deaths A non-decreasing numeric vector of cumulative deaths by
+#'   year (length >= 1).
+#' @return A `KaplanMeierEstimator` object.
+#' @examples
+#' # toy life table: 10 deaths/year for 80 years, then 100/year for 21 more
+#' km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
+#' @export
+kaplan_meier_estimator <- function(cumulative_deaths) .Call(wrap__kaplan_meier_estimator, cumulative_deaths)
+
 #' Fixed-capacity struct-of-arrays population or patch data store.
 #'
 #' Mirrors `laser.core.LaserFrame` from Python. Each property occupies a
@@ -1212,5 +1242,190 @@ Column$set_col <- function(slot, values) .Call(wrap__Column__set_col, self, slot
 
 #' @export
 `[[.Column` <- `$.Column`
+
+#' A discrete distribution over bin indices `0..n`, sampled by the Vose alias method.
+#'
+#' Construct with [aliased_distribution()] from a vector of non-negative counts; the
+#' probability of drawing bin `i` is `counts[i] / sum(counts)`. Draws are 0-based bin
+#' indices. The handle is opaque to R.
+#'
+#' @export
+#'
+#' @section Methods:
+#'\subsection{Method `sample_one`}{
+#'Draw a single bin index (0-based) using a thread-local RNG.
+#'
+#' \subsection{return}{
+#'A single integer bin index in `0..n_bins()`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `sample_n`}{
+#'Draw `n` bin indices (0-based), returned as an integer vector.
+#'
+#'The draws are split across CPU cores (each with its own thread-local RNG), so
+#'generating a national-scale population in one call is cheap.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`n`}{Number of samples to draw; must be non-negative.}
+#'}}
+#' \subsection{return}{
+#'An integer vector of length `n` of bin indices in `0..n_bins()`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `n_bins`}{
+#'The number of bins.
+#' \subsection{return}{
+#'An integer.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `total`}{
+#'The total weight (sum of the original counts).
+#' \subsection{return}{
+#'A numeric scalar (the sum may exceed R's integer range).
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `alias`}{
+#'The alias table (0-based partner bin per bin, or -1 for none). For inspection.
+#' \subsection{return}{
+#'An integer vector of length `n_bins()`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `probs`}{
+#'The per-bin own-mass thresholds (out of `total()`). For inspection.
+#' \subsection{return}{
+#'A numeric vector of length `n_bins()`.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+AliasedDistribution <- new.env(parent = emptyenv())
+
+AliasedDistribution$sample_one <- function() .Call(wrap__AliasedDistribution__sample_one, self)
+
+AliasedDistribution$sample_n <- function(n) .Call(wrap__AliasedDistribution__sample_n, self, n)
+
+AliasedDistribution$n_bins <- function() .Call(wrap__AliasedDistribution__n_bins, self)
+
+AliasedDistribution$total <- function() .Call(wrap__AliasedDistribution__total, self)
+
+AliasedDistribution$alias <- function() .Call(wrap__AliasedDistribution__alias, self)
+
+AliasedDistribution$probs <- function() .Call(wrap__AliasedDistribution__probs, self)
+
+#' @rdname AliasedDistribution
+#' @usage NULL
+#' @export
+`$.AliasedDistribution` <- function (self, name) { func <- AliasedDistribution[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.AliasedDistribution` <- `$.AliasedDistribution`
+
+#' A Kaplan–Meier sampler over a cumulative-deaths-by-year life table.
+#'
+#' Construct with [kaplan_meier_estimator()] from a non-decreasing vector of
+#' cumulative deaths by year. The handle is opaque to R.
+#'
+#' @export
+#'
+#' @section Methods:
+#'\subsection{Method `predict_year_of_death`}{
+#'Predict a year of death for each individual given their current age in years.
+#'
+#'For each age, samples a year of death `>= age` and `<= max_year`, conditioned on
+#'survival to that age (Kaplan–Meier). Ages must be in `0..=max_year`.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`ages_years`}{Integer vector of current ages in whole years.}
+#'\item{`max_year`}{  Maximum year of death to consider; pass a negative value (e.g. `-1L`) to use the last year in the life table.}
+#'}}
+#' \subsection{return}{
+#'An integer vector of predicted years of death (same length as input).
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `predict_age_at_death`}{
+#'Predict an age at death (in DAYS) for each individual given their age in days.
+#'
+#'Samples the year of death as in [predict_year_of_death()], then a day within
+#'that year: a uniform day of a later year, or — if death falls in the individual's
+#'current year — a uniform day at or after their current day-of-year (so the
+#'predicted age at death is never earlier than the current age). Ages in days must
+#'be `< (max_year + 1) * 365`.
+#'
+#' \subsection{Arguments}{
+#'\describe{
+#'\item{`ages_days`}{Integer vector of current ages in whole days.}
+#'\item{`max_year`}{ Maximum year of death to consider; pass a negative value (e.g. `-1L`) to use the last year in the life table.}
+#'}}
+#' \subsection{return}{
+#'An integer vector of predicted ages at death in days (same length).
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#'\subsection{Method `cumulative_deaths`}{
+#'The cumulative-deaths-by-year table (without the internal leading zero).
+#' \subsection{return}{
+#'A numeric vector of length equal to the number of years.
+#'}
+#' \subsection{export}{
+#'
+#'}
+#'}
+#'
+#' @examples
+#'## ---- Method `predict_year_of_death` ---- ##
+#'km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
+#'km$predict_year_of_death(c(40L, 50L, 60L), -1L)
+#'
+#'## ---- Method `predict_age_at_death` ---- ##
+#'km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
+#'km$predict_age_at_death(c(40L, 50L, 60L) * 365L, -1L)
+#'
+#'
+KaplanMeierEstimator <- new.env(parent = emptyenv())
+
+KaplanMeierEstimator$predict_year_of_death <- function(ages_years, max_year) .Call(wrap__KaplanMeierEstimator__predict_year_of_death, self, ages_years, max_year)
+
+KaplanMeierEstimator$predict_age_at_death <- function(ages_days, max_year) .Call(wrap__KaplanMeierEstimator__predict_age_at_death, self, ages_days, max_year)
+
+KaplanMeierEstimator$cumulative_deaths <- function() .Call(wrap__KaplanMeierEstimator__cumulative_deaths, self)
+
+#' @rdname KaplanMeierEstimator
+#' @usage NULL
+#' @export
+`$.KaplanMeierEstimator` <- function (self, name) { func <- KaplanMeierEstimator[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.KaplanMeierEstimator` <- `$.KaplanMeierEstimator`
 
 # nolint end

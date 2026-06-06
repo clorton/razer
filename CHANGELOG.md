@@ -12,6 +12,31 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- **Demographics: realistic age structure and dates of death**, ported from
+  laser.core.
+  - `AliasedDistribution` + `aliased_distribution(counts)` (`src/rust/src/pyramid.rs`)
+    — a Vose alias-method sampler over 0-based bin indices weighted by integer counts
+    (e.g. per-age-band populations). O(1) per draw, all-integer construction (no
+    floating-point round-off). Methods `$sample_one()`, `$sample_n(n)` (parallelized
+    across cores, each with a thread-local RNG), `$n_bins()`, `$total()`, `$alias()`,
+    `$probs()`. Covered by `tests/testthat/test-aliased-distribution.R`.
+  - `KaplanMeierEstimator` + `kaplan_meier_estimator(cumulative_deaths)`
+    (`src/rust/src/kmestimator.rs`) — given a non-decreasing cumulative-deaths-by-year
+    life table, samples a year or age (in days) of death conditioned on survival to a
+    given age (Kaplan–Meier). Methods `$predict_year_of_death(ages_years, max_year)`,
+    `$predict_age_at_death(ages_days, max_year)` (both parallelized), and
+    `$cumulative_deaths()`. A negative `max_year` selects the last year in the table.
+    Covered by `tests/testthat/test-kmestimator.R`.
+  - R helpers (`R/pyramid.R`): `load_pyramid_csv(file)` parses a laser.core-format
+    pyramid CSV (`"Age,M,F"` header, `"low-high,M,F"` bands, open-ended `"max+"`) into a
+    `start`/`end`/`M`/`F` integer matrix; `sample_pyramid_ages(pyramid, n)` draws
+    per-agent ages in days (band by population via the alias sampler, then a uniform day
+    within the band). Covered by `tests/testthat/test-pyramid.R`.
+  - `examples/aged_population.R` (+ `examples/data/pyramid_example.csv`) — end-to-end
+    demo: load a pyramid, generate one million age-structured agents, build a synthetic
+    Gompertz life table, and assign each agent a Kaplan–Meier date of death conditioned
+    on its current age. Writes a two-panel age-structure / age-at-death plot to
+    `examples/output/aged_population.png`.
 - `import_infections(state, timer, nodeid, count, I, importations, sched_tick, sched_node, sched_count, duration, tick)`
   — schedule-driven importation of new infectious cases (`src/rust/src/vitals.rs`).
   For every schedule entry whose `sched_tick == tick` it activates `sched_count`
