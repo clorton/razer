@@ -80,7 +80,8 @@ Invisibly, the \code{model} environment, with:
 \code{foi}, and the per-interval flows: \code{incidence} (new infections, all models),
 \code{onset} (E→I, \verb{SE*} models), \code{recovery} (I→{S,R}, models with an I-exit), and
 \code{waning} (R→S, \code{SIRS}/\code{SEIRS}) — each an \code{n_nodes}-wide, time-major Column.
-\item \verb{$network} — the coupling matrix.
+\item \verb{$network} — the coupling weights as a 2-D f64 \link{Column} (\verb{n_nodes x n_nodes},
+column-major), built once from the \code{network} matrix and read by \code{calc_foi} each tick.
 \item \verb{$carry} — the list of census Columns carried forward each tick.
 \item \verb{$tick} — during the loop, the current 0-based interval index (for the callbacks).
 }

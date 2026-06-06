@@ -90,7 +90,8 @@
 #'     `foi`, and the per-interval flows: `incidence` (new infections, all models),
 #'     `onset` (E→I, `SE*` models), `recovery` (I→{S,R}, models with an I-exit), and
 #'     `waning` (R→S, `SIRS`/`SEIRS`) — each an `n_nodes`-wide, time-major Column.
-#'   * `$network` — the coupling matrix.
+#'   * `$network` — the coupling weights as a 2-D f64 [Column] (`n_nodes x n_nodes`,
+#'     column-major), built once from the `network` matrix and read by `calc_foi` each tick.
 #'   * `$carry` — the list of census Columns carried forward each tick.
 #'   * `$tick` — during the loop, the current 0-based interval index (for the callbacks).
 #' @examples
@@ -150,6 +151,16 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   beta     <- r0 / mean(inf_dist$sample_n(100000L))
 
   if (is.null(network)) network <- matrix(0, n_nodes, n_nodes)
+  if (!is.matrix(network) || nrow(network) != n_nodes || ncol(network) != n_nodes)
+    stop(sprintf("`network` must be a %d x %d matrix", n_nodes, n_nodes))
+  # Copy the coupling matrix into a persistent 2-D f64 Column (column-major, as `as.vector`
+  # produces) so calc_foi reads it Rust-side every tick instead of re-marshalling the R
+  # matrix. `as.vector` on a matrix yields column-major order, matching calc_foi's indexing.
+  network <- {
+    nc <- allocate_vector("f64", n_nodes, n_nodes)
+    nc$set(as.vector(network))
+    nc
+  }
 
   # ── people: state (u8), node id (u16), timer (u16) ─────────────────────────────────
   people <- new.env()

@@ -86,7 +86,10 @@ fn read_col(col: &Column, slot: usize, n: usize) -> Vec<f64> {
 /// @param population Per-node population census Column (`nodes$N`); the FOI denominator.
 /// @param beta       Transmission-coefficient grid (`n_ticks x n_nodes`, from [values_map()]).
 /// @param seasonality Seasonal-modifier grid (`n_ticks x n_nodes`, from [values_map()]).
-/// @param network    An `n_nodes x n_nodes` numeric coupling matrix.
+/// @param network    The `n_nodes x n_nodes` coupling weights, column-major. Either an R
+///   numeric matrix, OR a razer [Column] of `n_nodes * n_nodes` f64 holding the matrix in
+///   column-major order. The Column form avoids re-marshalling the matrix from R on every
+///   tick (build it once, e.g. `nc <- allocate_vector("f64", n, n); nc$set(as.vector(W))`).
 /// @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
 /// @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
 ///   `infected[tick]`/`population[tick]` (the start-of-interval census), writes `foi[tick]`.
@@ -119,7 +122,18 @@ fn calc_foi(
     let s   = read_col(seasonality, tick, n);
     let inf = read_col(infected, tick, n);
     let pop = read_col(population, tick, n);
-    let w   = read_square_matrix(&network, n);
+    // `network` may be a Column (persistent, no per-tick copy) or an R matrix. Borrow the
+    // Column's f64 buffer directly; otherwise copy the matrix into an owned Vec.
+    let matrix_buf: Vec<f64>;
+    let w: &[f64] = match <&Column>::try_from(&network) {
+        Ok(col) => {
+            let wslice = col.as_f64();
+            assert_eq!(wslice.len(), n * n,
+                "`network` Column must have n*n = {} f64 elements, got {}", n * n, wslice.len());
+            wslice
+        }
+        Err(_) => { matrix_buf = read_square_matrix(&network, n); &matrix_buf }
+    };
 
     let r: Vec<f64> = (0..n)
         .map(|k| if pop[k] > 0.0 { b[k] * s[k] * inf[k] / pop[k] } else { 0.0 })

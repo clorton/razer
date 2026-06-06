@@ -85,7 +85,8 @@ test_that("run_model returns a model environment bundling people/nodes/network/c
   expect_true(is.environment(m))
   expect_true(all(c("people", "nodes", "network", "carry") %in% ls(m)))
   expect_true(is.environment(m$people) && is.environment(m$nodes))
-  expect_true(is.matrix(m$network) && is.list(m$carry))
+  expect_true(inherits(m$network, "Column") && is.list(m$carry))   # network as a 2-D Column
+  expect_equal(m$network$length(), m$nodes$count^2)
 })
 
 test_that("run_model records the per-model node flows", {

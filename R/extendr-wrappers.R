@@ -470,7 +470,10 @@ bincount_where_wt_impl <- function(group, n_groups, prop, op, value, weights, co
 #' @param population Per-node population census Column (`nodes$N`); the FOI denominator.
 #' @param beta       Transmission-coefficient grid (`n_ticks x n_nodes`, from [values_map()]).
 #' @param seasonality Seasonal-modifier grid (`n_ticks x n_nodes`, from [values_map()]).
-#' @param network    An `n_nodes x n_nodes` numeric coupling matrix.
+#' @param network    The `n_nodes x n_nodes` coupling weights, column-major. Either an R
+#'   numeric matrix, OR a razer [Column] of `n_nodes * n_nodes` f64 holding the matrix in
+#'   column-major order. The Column form avoids re-marshalling the matrix from R on every
+#'   tick (build it once, e.g. `nc <- allocate_vector("f64", n, n); nc$set(as.vector(W))`).
 #' @param foi        A 2-D f64 Column (`(n_ticks-1) x n_nodes`); column `tick` is overwritten.
 #' @param tick       0-based tick index: reads `beta[tick]`/`seasonality[tick]` and
 #'   `infected[tick]`/`population[tick]` (the start-of-interval census), writes `foi[tick]`.

@@ -124,6 +124,21 @@ test_that("calc_foi reads modifiers and census at tick, writing foi at tick", {
   expect_equal(m[3L, ], c(0, 0))
 })
 
+test_that("calc_foi accepts the network as a Column identically to a matrix", {
+  # Given a coupling matrix and the same matrix copied (column-major) into a 2-D f64 Column
+  # When calc_foi runs with each form
+  # Then the FOI is identical — the Column path (no per-tick R-matrix copy) matches the
+  #      matrix path. Failure would mean the Column indexing or extraction is wrong.
+  W <- matrix(c(0.0, 0.4, 0.1, 0.0), nrow = 2L, byrow = TRUE)
+  foi_m <- foi2(); foi_c <- foi2()
+  calc_foi(inf_now(c(20, 5)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.3)),
+           grid_at0(c(1, 1)), W, foi_m, 0L)
+  netcol <- allocate_vector("f64", 2L, 2L); netcol$set(as.vector(W))   # column-major
+  calc_foi(inf_now(c(20, 5)), pop_now(c(100, 50)), grid_at0(c(0.5, 0.3)),
+           grid_at0(c(1, 1)), netcol, foi_c, 0L)
+  expect_equal(foi_c$values(), foi_m$values())
+})
+
 test_that("calc_foi guards against a zero-population node", {
   # Given a node with zero population
   # When calc_foi runs

@@ -15,7 +15,10 @@ calc_foi(infected, population, beta, seasonality, network, foi, tick)
 
 \item{seasonality}{Seasonal-modifier grid (\verb{n_ticks x n_nodes}, from \code{\link[=values_map]{values_map()}}).}
 
-\item{network}{An \verb{n_nodes x n_nodes} numeric coupling matrix.}
+\item{network}{The \verb{n_nodes x n_nodes} coupling weights, column-major. Either an R
+numeric matrix, OR a razer \link{Column} of \code{n_nodes * n_nodes} f64 holding the matrix in
+column-major order. The Column form avoids re-marshalling the matrix from R on every
+tick (build it once, e.g. \verb{nc <- allocate_vector("f64", n, n); nc$set(as.vector(W))}).}
 
 \item{foi}{A 2-D f64 Column (\verb{(n_ticks-1) x n_nodes}); column \code{tick} is overwritten.}
 
