@@ -390,6 +390,33 @@ bincount_impl <- function(values, nbins, counts, slot) .Call(wrap__bincount_impl
 #' @noRd
 bincountw_impl <- function(values, weights, nbins, counts, slot) .Call(wrap__bincountw_impl, values, weights, nbins, counts, slot)
 
+#' Count, per group, the agents whose property satisfies a comparison (filtered bincount).
+#'
+#' For each group `g` in `0..n_groups`, counts how many of the first `count` agents both
+#' have `group[i] == g` AND satisfy `prop[i] <op> value`, and writes the totals into
+#' **slice `slot`** of `counts` (entries `slot*slice_len .. slot*slice_len + n_groups`),
+#' overwriting them. This is `bincount` restricted to a predicate and to the live prefix
+#' `0..count` — e.g. with `group = nodeid`, `prop = state`, `op = "eq"`, `value = E` it
+#' tallies the exposed by node; with `prop = dob`, `op = "gt"`, `value = tick - 5*365` it
+#' tallies the under-fives by node (since `dob = -age`). `group` must be an integer-typed
+#' [Column] of indices in `0..n_groups`; `prop` is any numeric [Column] (compared as
+#' `f64`); `counts` is numeric with slice length `>= n_groups`. Parallelized with private
+#' per-thread histograms, so there are no write collisions.
+#'
+#' @param group    An integer-typed `Column` of group indices (`i8`..`u32`), e.g. nodeid.
+#' @param n_groups Number of groups; a non-negative integer `<= counts`'s slice length.
+#' @param prop     A numeric `Column` (any type) holding the per-agent property to test.
+#' @param op       Comparison: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+#' @param value    The threshold the property is compared against (a double).
+#' @param count    How many leading agents to scan (the active count); `<= group`/`prop`
+#'   length.
+#' @param counts   A numeric `Column` that receives the per-group totals (modified in place).
+#' @param slot     Which slice of `counts` to write; a non-negative integer
+#'   `< counts`'s slice count. Defaults to `0`.
+#' @return `NULL` (invisibly); the result is written into `counts`.
+#' @noRd
+count_by_where_impl <- function(group, n_groups, prop, op, value, count, counts, slot) .Call(wrap__count_by_where_impl, group, n_groups, prop, op, value, count, counts, slot)
+
 #' Compute the per-node force of infection (FOI) for one tick.
 #'
 #' Computes the frequency-dependent, network-redistributed FOI **rate** into column

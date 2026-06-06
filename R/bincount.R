@@ -61,3 +61,55 @@ bincount <- function(values, nbins, counts, slot = 0L) {
 bincountw <- function(values, weights, nbins, counts, slot = 0L) {
   bincountw_impl(values, weights, nbins, counts, slot)
 }
+
+#' Count, per group, the agents whose property satisfies a comparison.
+#'
+#' A predicate-filtered, count-aware [bincount()]: for each group `g` in
+#' `0..n_groups`, counts how many of the first `count` agents both have
+#' `group[i] == g` AND satisfy `prop[i] <op> value`. This answers flexible
+#' agent queries directly on the Columns — e.g. "exposed by node"
+#' (`prop = state`, `op = "eq"`, `value = laser_states()[["E"]]`) or "under-fives
+#' by node" (`prop = dob`, `op = "gt"`, `value = tick - 5 * 365`, since `dob` is the
+#' negative age) — in one parallel pass with no copy of `prop` into R.
+#'
+#' Two output modes: leave `counts` `NULL` (the default) for an ad-hoc query and an
+#' integer vector of length `n_groups` is allocated and returned; or pass a numeric
+#' [Column] `counts` (e.g. a `n_ticks x n_nodes` report) and the totals are written
+#' into its slice `slot` (and `NULL` returned invisibly), avoiding an allocation in a
+#' per-tick model loop.
+#'
+#' @param group    An integer-typed [Column] of group indices (`i8`..`u32`), each in
+#'   `0..n_groups` — typically `nodeid`.
+#' @param n_groups Number of groups; a non-negative integer.
+#' @param prop     A numeric [Column] holding the per-agent property to test
+#'   (compared as a double).
+#' @param op       Comparison string: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`,
+#'   `"ge"`.
+#' @param value    The threshold the property is compared against.
+#' @param count    How many leading agents to scan (the active count). Defaults to the
+#'   full length of `group`.
+#' @param counts   Optional numeric [Column] to receive the totals; when omitted an
+#'   integer result vector is allocated and returned instead.
+#' @param slot     Which slice of `counts` to write when `counts` is supplied; a
+#'   non-negative integer less than `counts`'s slice count. Defaults to `0`.
+#' @return When `counts` is `NULL`, an integer vector of per-group counts; otherwise
+#'   `NULL` invisibly (the result is written into `counts`).
+#' @examples
+#' states <- laser_states()
+#' state  <- allocate_scalar("u8",  6L); state$set(c(0, 1, 1, 2, 1, 0))   # S E E I E S
+#' nodeid <- allocate_scalar("u16", 6L); nodeid$set(c(0, 0, 1, 1, 1, 0))
+#' count_by_where(nodeid, 2L, state, "eq", states[["E"]])   # exposed per node: 1 2
+#' @export
+count_by_where <- function(group, n_groups, prop, op, value,
+                           count = NULL, counts = NULL, slot = 0L) {
+  if (is.null(count)) count <- group$length()
+  if (is.null(counts)) {
+    # Ad-hoc mode: allocate a 1-D i32 result and hand back a plain integer vector.
+    out <- allocate_scalar("i32", n_groups)
+    count_by_where_impl(group, n_groups, prop, op, value, count, out, 0L)
+    out$values()
+  } else {
+    # Report mode: write into the caller's buffer (slice `slot`); return NULL.
+    count_by_where_impl(group, n_groups, prop, op, value, count, counts, slot)
+  }
+}

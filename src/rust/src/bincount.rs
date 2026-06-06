@@ -333,8 +333,162 @@ fn bincountw_impl(values: &Column, weights: &Column, nbins: i32, counts: &mut Co
     }
 }
 
+// ── count_by_where: predicate-filtered, count-aware bincount ─────────────────────
+//
+// "How many agents in each node are in state E?" or "...are under five (tick - dob <
+// 5*365)?" Both are a bincount of `group` (e.g. nodeid) restricted to the agents whose
+// some-property `prop` satisfies a comparison against a threshold `value`, scanning only
+// the first `count` agents (the live prefix — capacity-sized Columns may trail inactive
+// slots). One parallel pass, no intermediate mask Column, no copy of `prop` to R.
+
+// Build a per-group histogram counting only elements where `pred(prop[i])` holds.
+// `pred` is a non-capturing comparison baked from the op + threshold, so it is `Copy`
+// and trivially `Send + Sync`. Same private-buffer-then-reduce trick as `histogram`.
+fn histogram_filtered<V: BinIndex, P: ToWeight, F: Fn(f64) -> bool + Sync + Send>(
+    group: &[V],
+    prop: &[P],
+    nbins: usize,
+    pred: F,
+) -> Vec<u64> {
+    group
+        .par_iter()
+        .zip(prop.par_iter())
+        .fold(
+            || vec![0u64; nbins],
+            |mut local, (&g, &p)| {
+                if pred(p.to_weight()) {
+                    local[g.to_index()] += 1;
+                }
+                local
+            },
+        )
+        .reduce(
+            || vec![0u64; nbins],
+            |mut a, b| {
+                for i in 0..nbins {
+                    a[i] += b[i];
+                }
+                a
+            },
+        )
+}
+
+/// Count, per group, the agents whose property satisfies a comparison (filtered bincount).
+///
+/// For each group `g` in `0..n_groups`, counts how many of the first `count` agents both
+/// have `group[i] == g` AND satisfy `prop[i] <op> value`, and writes the totals into
+/// **slice `slot`** of `counts` (entries `slot*slice_len .. slot*slice_len + n_groups`),
+/// overwriting them. This is `bincount` restricted to a predicate and to the live prefix
+/// `0..count` — e.g. with `group = nodeid`, `prop = state`, `op = "eq"`, `value = E` it
+/// tallies the exposed by node; with `prop = dob`, `op = "gt"`, `value = tick - 5*365` it
+/// tallies the under-fives by node (since `dob = -age`). `group` must be an integer-typed
+/// [Column] of indices in `0..n_groups`; `prop` is any numeric [Column] (compared as
+/// `f64`); `counts` is numeric with slice length `>= n_groups`. Parallelized with private
+/// per-thread histograms, so there are no write collisions.
+///
+/// @param group    An integer-typed `Column` of group indices (`i8`..`u32`), e.g. nodeid.
+/// @param n_groups Number of groups; a non-negative integer `<= counts`'s slice length.
+/// @param prop     A numeric `Column` (any type) holding the per-agent property to test.
+/// @param op       Comparison: one of `"eq"`, `"ne"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+/// @param value    The threshold the property is compared against (a double).
+/// @param count    How many leading agents to scan (the active count); `<= group`/`prop`
+///   length.
+/// @param counts   A numeric `Column` that receives the per-group totals (modified in place).
+/// @param slot     Which slice of `counts` to write; a non-negative integer
+///   `< counts`'s slice count. Defaults to `0`.
+/// @return `NULL` (invisibly); the result is written into `counts`.
+/// @noRd
+#[extendr]
+fn count_by_where_impl(
+    group: &Column,
+    n_groups: i32,
+    prop: &Column,
+    op: &str,
+    value: f64,
+    count: i32,
+    counts: &mut Column,
+    slot: i32,
+) {
+    assert!(n_groups >= 0, "`n_groups` must be non-negative, got {n_groups}");
+    let n_groups = n_groups as usize;
+    assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
+    let slot = slot as usize;
+    assert!(
+        slot < counts.n_slices(),
+        "`slot` ({slot}) out of range for counts with {} slices",
+        counts.n_slices()
+    );
+    let slice_len = counts.slice_len();
+    assert!(
+        n_groups <= slice_len,
+        "`counts` slice length ({slice_len}) must be at least `n_groups` ({n_groups})"
+    );
+    assert!(count >= 0, "`count` must be non-negative, got {count}");
+    let count = count as usize;
+    assert!(
+        count <= group.len() && count <= prop.len(),
+        "`count` ({count}) exceeds `group` ({}) or `prop` ({}) length",
+        group.len(), prop.len()
+    );
+
+    // Bake the comparison into a non-capturing fn pointer (all arms share one type), then
+    // wrap it with the captured threshold. `move` copies `value` into the closure.
+    let cmp: fn(f64, f64) -> bool = match op {
+        "eq" => |a, b| a == b,
+        "ne" => |a, b| a != b,
+        "lt" => |a, b| a < b,
+        "le" => |a, b| a <= b,
+        "gt" => |a, b| a > b,
+        "ge" => |a, b| a >= b,
+        _ => panic!("`op` must be one of \"eq\", \"ne\", \"lt\", \"le\", \"gt\", \"ge\", got {op:?}"),
+    };
+    let pred = move |x: f64| cmp(x, value);
+
+    // Recover both element types (group's integer index type, prop's numeric type) over
+    // the live prefix `[..count]` and run the single generic filtered histogram. `pred`
+    // is `Copy`, so each arm gets its own copy.
+    macro_rules! dispatch_prop {
+        ($g:expr) => {
+            match prop.storage() {
+                Storage::I8(p)  => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::U8(p)  => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::I16(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::U16(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::I32(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::U32(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::F32(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+                Storage::F64(p) => histogram_filtered($g, &p[..count], n_groups, pred),
+            }
+        };
+    }
+    let totals: Vec<u64> = match group.storage() {
+        Storage::I8(g)  => dispatch_prop!(&g[..count]),
+        Storage::U8(g)  => dispatch_prop!(&g[..count]),
+        Storage::I16(g) => dispatch_prop!(&g[..count]),
+        Storage::U16(g) => dispatch_prop!(&g[..count]),
+        Storage::I32(g) => dispatch_prop!(&g[..count]),
+        Storage::U32(g) => dispatch_prop!(&g[..count]),
+        Storage::F32(_) | Storage::F64(_) =>
+            panic!("`group` must be an integer-typed Column (group indices), not float"),
+    };
+
+    let start = slot * slice_len;
+    let end = start + n_groups;
+    match counts.storage_mut() {
+        Storage::I8(c)  => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::U8(c)  => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::I16(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::U16(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::I32(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::U32(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::F32(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+        Storage::F64(c) => write_counts_u64(&mut c[start..end], &totals, n_groups),
+    }
+}
+
 extendr_module! {
     mod bincount;
     fn bincount_impl;
     fn bincountw_impl;
+    fn count_by_where_impl;
 }

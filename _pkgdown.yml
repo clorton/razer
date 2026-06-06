@@ -87,3 +87,5 @@ reference:
   - values_map
   - bincount
   - bincountw
+  - count_by_where
+  - squash

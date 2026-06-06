@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- **`count_by_where()` — flexible predicate-filtered agent binning by group**
+  (`src/rust/src/bincount.rs`, `R/bincount.R`). A count-aware, filtered `bincount`: for
+  each group `g` in `0..n_groups`, counts how many of the first `count` agents both have
+  `group[i] == g` and satisfy `prop[i] <op> value` (`op` ∈ eq/ne/lt/le/gt/ge), in one
+  parallel pass with no copy of the property into R. Answers queries like "exposed by
+  node" (`prop = state, op = "eq", value = E`) or "under-fives by node"
+  (`prop = dob, op = "gt", value = tick - 5*365`). Returns an integer vector for ad-hoc
+  use, or writes into a report Column slice for per-tick model loops. Scans only the live
+  prefix `count`, so it stays correct for variable-population (post-`squash`/birth) models.
+  Covered by `tests/testthat/test-count-by-where.R`.
 - **Agent compaction: `Column$squash(keep)` + the `squash(people)` helper**
   (`src/rust/src/column.rs`, `R/squash.R`). `Column$squash(keep)` stably compacts a 1-D
   Column to the elements flagged by a logical mask, returning the kept count;
