@@ -65,8 +65,11 @@
 #'   the carry-forward). Receives the `model` environment; `model$tick` is the current
 #'   0-based interval index.
 #' @param step_update Optional `function(model)` called every tick AFTER the step kernel
-#'   (the disease-state progression) and BEFORE `calc_foi` — the place to adjust the census
-#'   or drivers based on the post-step state before the force of infection is computed.
+#'   (the disease-state progression) and BEFORE `calc_foi`. Because `calc_foi` reads the
+#'   *settled* start-of-interval census `I[t]` (slice `model$tick`), edit the FOI **drivers**
+#'   here — `model$nodes$beta`, `model$nodes$seasonality`, or `model$network` (all read at
+#'   slice `t`) — to influence the CURRENT tick's force of infection. Census edits made here
+#'   land in the working slice `t+1`, so they affect the NEXT tick's FOI, not this one.
 #' @param step_exit Optional `function(model)` called at the end of every tick (after
 #'   transmission). Receives the `model` environment (with `model$tick` set).
 #' @return Invisibly, the `model` environment, with:

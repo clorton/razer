@@ -63,8 +63,11 @@ the carry-forward). Receives the \code{model} environment; \code{model$tick} is 
 0-based interval index.}
 
 \item{step_update}{Optional \verb{function(model)} called every tick AFTER the step kernel
-(the disease-state progression) and BEFORE \code{calc_foi} — the place to adjust the census
-or drivers based on the post-step state before the force of infection is computed.}
+(the disease-state progression) and BEFORE \code{calc_foi}. Because \code{calc_foi} reads the
+\emph{settled} start-of-interval census \code{I[t]} (slice \code{model$tick}), edit the FOI \strong{drivers}
+here — \code{model$nodes$beta}, \code{model$nodes$seasonality}, or \code{model$network} (all read at
+slice \code{t}) — to influence the CURRENT tick's force of infection. Census edits made here
+land in the working slice \code{t+1}, so they affect the NEXT tick's FOI, not this one.}
 
 \item{step_exit}{Optional \verb{function(model)} called at the end of every tick (after
 transmission). Receives the \code{model} environment (with \code{model$tick} set).}
