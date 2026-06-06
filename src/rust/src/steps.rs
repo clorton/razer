@@ -27,15 +27,11 @@ use rayon::prelude::*;
 use crate::column::Column;
 use crate::distributions::Distribution;
 use crate::epidemic::{STATE_S, STATE_E, STATE_I, STATE_R, STATE_M};
+use crate::rng;
 
 #[inline]
 fn timer_u16(x: f64) -> u16 {
     x.round().max(1.0).min(u16::MAX as f64) as u16
-}
-
-fn chunk_size(count: usize) -> usize {
-    let nthreads = rayon::current_num_threads().max(1);
-    ((count + nthreads - 1) / nthreads).max(1)
 }
 
 // Convert one per-node block of the tally to an R integer vector.
@@ -70,16 +66,18 @@ fn step_si(
     let (m_code, s_code, e_code, i_code) =
         (STATE_M as u8, STATE_S as u8, STATE_E as u8, STATE_I as u8);
 
-    let chunk = chunk_size(count);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let tally: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(tm.par_chunks_mut(chunk))
         .zip(nid.par_chunks(chunk))
-        .map(|((s, t), node)| {
-            let mut rng = rand::thread_rng();
+        .map(|(((ci, s), t), node)| {
+            let mut rng = rng::chunk_rng(base, ci);
             let mut local = vec![0i64; 2 * n];
             for j in 0..s.len() {
                 let k = node[j] as usize;
@@ -130,16 +128,18 @@ fn step_sir(
         (STATE_M as u8, STATE_S as u8, STATE_E as u8, STATE_I as u8);
     let abs = absorbing_state as u8;
 
-    let chunk = chunk_size(count);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let tally: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(tm.par_chunks_mut(chunk))
         .zip(nid.par_chunks(chunk))
-        .map(|((s, t), node)| {
-            let mut rng = rand::thread_rng();
+        .map(|(((ci, s), t), node)| {
+            let mut rng = rng::chunk_rng(base, ci);
             let mut local = vec![0i64; 3 * n];
             for j in 0..s.len() {
                 let k = node[j] as usize;
@@ -190,16 +190,18 @@ fn step_sirs(
     let (m_code, s_code, e_code, i_code, r_code) =
         (STATE_M as u8, STATE_S as u8, STATE_E as u8, STATE_I as u8, STATE_R as u8);
 
-    let chunk = chunk_size(count);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let tally: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(tm.par_chunks_mut(chunk))
         .zip(nid.par_chunks(chunk))
-        .map(|((s, t), node)| {
-            let mut rng = rand::thread_rng();
+        .map(|(((ci, s), t), node)| {
+            let mut rng = rng::chunk_rng(base, ci);
             let mut local = vec![0i64; 4 * n];
             for j in 0..s.len() {
                 let k = node[j] as usize;

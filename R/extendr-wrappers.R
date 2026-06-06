@@ -15,6 +15,26 @@ NULL
 #' @export
 laser_states <- function() .Call(wrap__laser_states)
 
+#' Set the global random seed, making subsequent razer runs reproducible.
+#'
+#' After `set_seed(s)`, every kernel's randomness is a deterministic function of `s` and
+#' the order of kernel calls — identical on every run and every machine, regardless of
+#' CPU/thread count. Call it once at the start of a script. `unset_seed()` reverts to a
+#' fresh (entropy-seeded) RNG.
+#'
+#' @param seed A finite, non-negative number (used as a 64-bit seed).
+#' @return `NULL`, invisibly.
+#' @examples
+#' set_seed(42)
+#' @export
+set_seed <- function(seed) .Call(wrap__set_seed, seed)
+
+#' Revert to a non-reproducible, entropy-seeded RNG (undo [set_seed()]).
+#'
+#' @return `NULL`, invisibly.
+#' @export
+unset_seed <- function() .Call(wrap__unset_seed)
+
 #' Create a normal (Gaussian) distribution.
 #'
 #' The second argument is the **variance** (σ²), not the standard deviation, to

@@ -20,9 +20,9 @@
 //   * `slice.partition_point(|&x| x < draw)` is C++'s `lower_bound`: on a sorted slice
 //     it returns the index of the first element `>= draw` (NumPy `searchsorted` left).
 //   * `gen_range(lo..=hi)` is an INCLUSIVE uniform integer draw; `lo..hi` is half-open.
-//   * Work is split across cores with `par_chunks_mut` (Rayon) + a per-thread RNG —
-//     the same across-agents parallelism used by the simulation kernels (and by the
-//     `@njit(parallel=True)` original). The RNG is thread-local and not R-seedable.
+//   * Work is split across cores with `par_chunks_mut` (Rayon) + a per-chunk RNG from
+//     `rng.rs` (the same across-agents parallelism as the simulation kernels, and like
+//     the `@njit(parallel=True)` original). The RNG is seedable via `set_seed`.
 //   * A negative `max_year` argument is the sentinel for "use the last year in the
 //     table" (extendr methods have no native default-argument support).
 // ════════════════════════════════════════════════════════════════════════════
@@ -30,6 +30,7 @@
 use extendr_api::prelude::*;
 use rayon::prelude::*;
 use rand::Rng;
+use crate::rng;
 
 const DAYS_PER_YEAR: i64 = 365;
 
@@ -117,14 +118,19 @@ impl KaplanMeierEstimator {
         self.sample_age_at_death_days(rng, 0, max_year, total_deaths)
     }
 
-    // Per-chunk parallel helper shared by the two predict methods.
-    fn par_fill(&self, len: usize, f: impl Fn(&mut [i32], usize) + Sync) -> Vec<i32> {
+    // Per-chunk parallel helper shared by the two predict methods. Seeds a per-chunk RNG
+    // from the shared seed (fixed chunk size for reproducibility); `f` receives the chunk,
+    // its starting global index, and that RNG.
+    fn par_fill(&self, len: usize, f: impl Fn(&mut [i32], usize, &mut rng::ModelRng) + Sync) -> Vec<i32> {
         let mut out = vec![0i32; len];
-        let nthreads = rayon::current_num_threads().max(1);
-        let chunk = ((len + nthreads - 1) / nthreads).max(1);
+        let base = rng::next_call_base();
+        let chunk = rng::RNG_CHUNK;
         out.par_chunks_mut(chunk)
             .enumerate()
-            .for_each(|(ci, c)| f(c, ci * chunk));
+            .for_each(|(ci, c)| {
+                let mut r = rng::chunk_rng(base, ci);
+                f(c, ci * chunk, &mut r);
+            });
         out
     }
 }
@@ -154,11 +160,10 @@ impl KaplanMeierEstimator {
                 "all ages must be <= max_year ({max_year}), got {a}"
             );
         }
-        self.par_fill(ages_years.len(), |c, start| {
-            let mut rng = rand::thread_rng();
+        self.par_fill(ages_years.len(), |c, start, rng| {
             for (j, slot) in c.iter_mut().enumerate() {
                 let age = ages_years[start + j] as usize;
-                *slot = self.draw_year_of_death(&mut rng, age, max_year, total_deaths) as i32;
+                *slot = self.draw_year_of_death(rng, age, max_year, total_deaths) as i32;
             }
         })
     }
@@ -190,11 +195,10 @@ impl KaplanMeierEstimator {
                 "all ages in days must be < (max_year + 1) * 365 = {limit}, got {ad}"
             );
         }
-        self.par_fill(ages_days.len(), |c, start| {
-            let mut rng = rand::thread_rng();
+        self.par_fill(ages_days.len(), |c, start, rng| {
             for (j, slot) in c.iter_mut().enumerate() {
                 let age_days = ages_days[start + j] as i64;
-                *slot = self.sample_age_at_death_days(&mut rng, age_days, max_year, total_deaths) as i32;
+                *slot = self.sample_age_at_death_days(rng, age_days, max_year, total_deaths) as i32;
             }
         })
     }

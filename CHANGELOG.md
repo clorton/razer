@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+- **Reproducible, seedable RNG (`set_seed()` / `unset_seed()`).** All kernel randomness
+  now flows through `src/rust/src/rng.rs`: after `set_seed(s)` an entire razer run is a
+  deterministic function of `s` and the order of kernel calls, **independent of CPU/thread
+  count**. The parallel kernels split agents into FIXED-size chunks (not one-per-thread)
+  and seed each chunk deterministically from `(call_base, chunk_index)`, so the result is
+  reproducible regardless of how Rayon schedules the work; a per-call counter gives each
+  kernel invocation (and tick) an independent stream. Without a seed the behaviour is
+  unchanged (entropy-seeded, random). The model RNG is `SmallRng` (xoshiro256++). All
+  agent-loop kernels and the `Distribution` / `AliasedDistribution` / `KaplanMeierEstimator`
+  samplers were converted off `thread_rng`. Covered by `tests/testthat/test-rng.R`.
+
 ### Changed
 - **Unified the per-tick kernels into a return-counts menagerie (all `u16` timers).**
   The transmission and step kernels no longer take node census/flow buffers: they mutate

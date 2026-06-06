@@ -13,8 +13,9 @@
 //                          a Distribution. Used by every model with a timed I.
 //   * `transmission_si`  — S→I with I ABSORBING (no timer). Used by the SI model only.
 //
-// Parallel across agents (Rayon) with a private per-node tally reduced at the end;
-// RNG is thread-local (not R-seedable). See sir.rs history / vitals.rs for the idioms.
+// Parallel across agents (Rayon) with a private per-node tally reduced at the end. RNG
+// comes from `rng.rs`: per-chunk seeded streams that make a run reproducible after
+// `set_seed()` (and entropy-seeded otherwise).
 // ════════════════════════════════════════════════════════════════════════════
 
 use extendr_api::prelude::*;
@@ -23,17 +24,12 @@ use rand::Rng;
 use crate::column::Column;
 use crate::distributions::Distribution;
 use crate::epidemic::STATE_S;
+use crate::rng;
 
 // Round a draw to a whole-tick u16 timer, clamped to [1, u16::MAX].
 #[inline]
 fn timer_u16(x: f64) -> u16 {
     x.round().max(1.0).min(u16::MAX as f64) as u16
-}
-
-// Chunk size that splits `count` agents into ~one block per worker thread.
-fn chunk_size(count: usize) -> usize {
-    let nthreads = rayon::current_num_threads().max(1);
-    ((count + nthreads - 1) / nthreads).max(1)
 }
 
 // Read an R numeric/integer matrix into a column-major Vec<f64> of n*n entries.
@@ -187,16 +183,18 @@ fn transmission(
     let p = infection_probs(foi, tick, n);
 
     let susceptible = STATE_S as u8;
-    let chunk = chunk_size(count);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let new: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(tm.par_chunks_mut(chunk))
         .zip(nid.par_chunks(chunk))
-        .map(|((s, t), node)| {
-            let mut rng = rand::thread_rng();
+        .map(|(((ci, s), t), node)| {
+            let mut rng = rng::chunk_rng(base, ci);
             let mut local = vec![0i64; n];
             for j in 0..s.len() {
                 if s[j] == susceptible {
@@ -247,14 +245,16 @@ fn transmission_si(
 
     let susceptible = STATE_S as u8;
     let infectious  = crate::epidemic::STATE_I as u8;
-    let chunk = chunk_size(count);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let new: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(nid.par_chunks(chunk))
-        .map(|(s, node)| {
-            let mut rng = rand::thread_rng();
+        .map(|((ci, s), node)| {
+            let mut rng = rng::chunk_rng(base, ci);
             let mut local = vec![0i64; n];
             for j in 0..s.len() {
                 if s[j] == susceptible {

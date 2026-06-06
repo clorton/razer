@@ -25,6 +25,7 @@ use rand::Rng;
 use crate::column::Column;
 use crate::epidemic::{STATE_S, STATE_I, STATE_R};
 use crate::distributions::Distribution;
+use crate::rng;
 
 /// Apply constant-population SIR vital dynamics for one tick.
 ///
@@ -100,17 +101,18 @@ fn constant_pop_vitals_sir(
     let s_code = STATE_S as u8;
     let i_code = STATE_I as u8;
     let r_code = STATE_R as u8;
-    let nthreads = rayon::current_num_threads().max(1);
-    let chunk = ((count + nthreads - 1) / nthreads).max(1);
+    let base = rng::next_call_base();
+    let chunk = rng::RNG_CHUNK;
     let st = &mut state.as_u8_mut()[..count];
     let tm = &mut timer.as_u16_mut()[..count];
     let nid = &nodeid.as_u16()[..count];
     let tally: Vec<i64> = st
         .par_chunks_mut(chunk)
+        .enumerate()
         .zip(tm.par_chunks_mut(chunk))
         .zip(nid.par_chunks(chunk))
-        .map(|((s, t), node)| {
-            let mut rng = rand::thread_rng();   // per-worker thread-local RNG
+        .map(|(((ci, s), t), node)| {
+            let mut rng = rng::chunk_rng(base, ci);   // per-chunk seeded RNG
             let mut local = vec![0i64; 3 * n];
             for j in 0..s.len() {
                 let k = node[j] as usize;
@@ -224,7 +226,7 @@ fn import_infections(
     let st = state.as_u8_mut();
     let tm = timer.as_u16_mut();
     let nid = nodeid.as_u16_mut();
-    let mut rng = rand::thread_rng();
+    let mut rng = rng::single_rng();
     for e in 0..sched_tick.len() {
         if sched_tick[e] == tick {
             let node = sched_node[e] as u16;

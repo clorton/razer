@@ -22,12 +22,13 @@
 //     the body only while BOTH yield a value — `pop()` returns `Option` (nullable).
 //   * `par_chunks_mut` (Rayon) splits a mutable slice into contiguous chunks handed
 //     to worker threads — the same across-agents parallelism used elsewhere (see the
-//     project memory). Each worker uses its own thread-local RNG (not R-seedable).
+//     project memory). Each chunk's RNG comes from `rng.rs` (seedable via `set_seed`).
 // ════════════════════════════════════════════════════════════════════════════
 
 use extendr_api::prelude::*;
 use rayon::prelude::*;
 use rand::Rng;
+use crate::rng;
 
 /// A discrete distribution over bin indices `0..n`, sampled by the Vose alias method.
 ///
@@ -66,7 +67,7 @@ impl AliasedDistribution {
     /// @return A single integer bin index in `0..n_bins()`.
     /// @export
     fn sample_one(&self) -> i32 {
-        self.sample_index(&mut rand::thread_rng())
+        self.sample_index(&mut rng::single_rng())
     }
 
     /// Draw `n` bin indices (0-based), returned as an integer vector.
@@ -81,12 +82,11 @@ impl AliasedDistribution {
         assert!(n >= 0, "n must be non-negative, got {n}");
         let n = n as usize;
         let mut out = vec![0i32; n];
-        let nthreads = rayon::current_num_threads().max(1);
-        let chunk = ((n + nthreads - 1) / nthreads).max(1);
-        out.par_chunks_mut(chunk).for_each(|c| {
-            let mut rng = rand::thread_rng(); // per-worker RNG; no shared state, no lock
+        let base = rng::next_call_base();
+        out.par_chunks_mut(rng::RNG_CHUNK).enumerate().for_each(|(ci, c)| {
+            let mut r = rng::chunk_rng(base, ci); // per-chunk seeded RNG (reproducible)
             for x in c.iter_mut() {
-                *x = self.sample_index(&mut rng);
+                *x = self.sample_index(&mut r);
             }
         });
         out

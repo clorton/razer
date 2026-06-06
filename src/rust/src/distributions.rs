@@ -92,7 +92,7 @@ impl Distribution {
     /// @return A single numeric (double) draw from the distribution.
     /// @export
     fn sample_one(&self) -> f64 {
-        self.sample(&mut rand::thread_rng())
+        self.sample(&mut crate::rng::single_rng())
     }
 
     /// Draw `n` samples using a thread-local RNG, returned as a numeric vector.
@@ -106,7 +106,7 @@ impl Distribution {
     /// @export
     fn sample_n(&self, n: i32) -> Vec<f64> {
         assert!(n >= 0, "n must be non-negative, got {n}");
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rng::single_rng();
         (0..n).map(|_| self.sample(&mut rng)).collect()
     }
 }

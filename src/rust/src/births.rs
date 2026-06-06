@@ -22,6 +22,7 @@ use crate::column::Column;
 use crate::distributions::Distribution;
 use crate::kmestimator::KaplanMeierEstimator;
 use crate::epidemic::{STATE_M, STATE_D};
+use crate::rng;
 
 #[inline]
 fn timer_u16(x: f64) -> u16 {
@@ -80,15 +81,16 @@ fn births(
     let d_code = STATE_D as u8;
 
     // ── Phase 1: parallel per-node birth tally (read-only over the living agents) ─────
+    let base = rng::next_call_base();
     let births_per_node: Vec<i64> = {
         let st  = &state.as_u8()[..count];
         let nid = &nodeid.as_u16()[..count];
-        let nthreads = rayon::current_num_threads().max(1);
-        let chunk = ((count + nthreads - 1) / nthreads).max(1);
+        let chunk = rng::RNG_CHUNK;
         st.par_chunks(chunk)
+            .enumerate()
             .zip(nid.par_chunks(chunk))
-            .map(|(s_chunk, node_chunk)| {
-                let mut rng = rand::thread_rng();
+            .map(|((ci, s_chunk), node_chunk)| {
+                let mut rng = rng::chunk_rng(base, ci);
                 let mut local = vec![0i64; n];
                 for j in 0..s_chunk.len() {
                     if s_chunk[j] != d_code {
@@ -108,7 +110,7 @@ fn births(
     let nidm = nodeid.as_u16_mut();
     let dobm = dob.as_i32_mut();
     let dodm = dod.as_u32_mut();
-    let mut rng = rand::thread_rng();
+    let mut rng = rng::single_rng();
     let mut idx = count;
     let mut born = vec![0i32; n];
     for k in 0..n {

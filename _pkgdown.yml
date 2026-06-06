@@ -67,6 +67,13 @@ reference:
   - stouffer
   - competing_destinations
   - row_normalizer
+- title: Reproducibility
+  desc: >
+    Seed the simulation RNG. After `set_seed()`, a run is reproducible regardless of
+    CPU/thread count; `unset_seed()` reverts to entropy-seeded (random) runs.
+  contents:
+  - set_seed
+  - unset_seed
 - title: Utilities
   desc: >
     Grid broadcasting and binning helpers.

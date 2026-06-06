@@ -1,6 +1,7 @@
 use extendr_api::prelude::*;
 
 mod epidemic;
+mod rng;
 mod distributions;
 mod migration;
 mod column;
@@ -18,6 +19,7 @@ pub use column::Column;
 extendr_module! {
     mod razer;
     use epidemic;
+    use rng;
     use distributions;
     use migration;
     use column;
