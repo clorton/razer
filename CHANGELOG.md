@@ -12,6 +12,16 @@ All notable changes to this project are documented here.
   per-node force of infection). All existing callers were updated.
 
 ### Added
+- `calc_capacity(birthrates, initial_pop, safety_factor = 1)` (`R/calc_capacity.R`) —
+  estimate the per-node agent capacity to preallocate for a population growing under a
+  (possibly time-varying) crude birth rate, ported from laser.core. Treats births as
+  geometric growth (daily rate `(1 + CBR/1000)^(1/365) - 1` summed over steps and
+  exponentiated) with a `safety_factor` headroom term. Returns whole-valued R doubles
+  (which represent integers exactly to `2^53`); unlike laser.core's `uint32` array it
+  does **not** clamp, but `warning`s if any per-node estimate exceeds
+  `.Machine$integer.max` — the `i32` `count` limit of razer's allocators. Accepts
+  `birthrates` as an `nsteps x nnodes` matrix or a 2-D razer `Column` (e.g. from
+  `values_map`). Covered by `tests/testthat/test-calc-capacity.R`.
 - **Demographics: realistic age structure and dates of death**, ported from
   laser.core.
   - `AliasedDistribution` + `aliased_distribution(counts)` (`src/rust/src/pyramid.rs`)
