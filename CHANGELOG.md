@@ -36,10 +36,26 @@ All notable changes to this project are documented here.
 - `examples/endemic_sir.R` — an endemic two-patch SIR model (500,000 agents per patch,
   R0 = 3, seeded at the endemic susceptible fraction 1/R0 with the rest immune, a high
   crude death rate of 20 with no spatial/temporal variation, a small 1% inter-patch
-  coupling). Periodic importations spark transmission so a stochastic fade-out doesn't
-  end the run; vital turnover resupplies susceptibles. Demonstrates `import_infections`,
-  `carry_forward_states` (S/I/R carried and totalled into N each tick), and
-  `constant_pop_vitals_sir` wired together; the susceptible fraction settles near 1/R0.
+  coupling) run for 10 years. Periodic importations spark transmission so a stochastic
+  fade-out doesn't end the run; vital turnover resupplies susceptibles. Demonstrates
+  `import_infections`, `carry_forward_states` (S/I/R carried and totalled into N each
+  tick), and `constant_pop_vitals_sir` wired together; the susceptible fraction settles
+  near 1/R0. The `run_endemic_sir()` runner takes a `progress` flag (text progress bar
+  over the per-tick loop) and returns the `people`/`nodes` environments; the script
+  then writes an S/I/R-over-time plot to `examples/output/endemic_sir_SIR.png` (the
+  shared example output directory).
+- `examples/endemic_sir_seasonal.R` — the endemic two-patch SIR model with a gentle
+  annual sinusoid on the transmission coefficient (`beta * (1 + A*sin(2*pi*day/365))`).
+  An amplitude sweep (A = 0.05–0.25, two stochastic runs each at 500k agents/patch)
+  showed that seeding at the endemic susceptible fraction S ≈ N/R0 leaves R_eff ≈ 1
+  (critically poised), so even a small forcing is amplified into large, phase-locked
+  annual epidemic waves (peaks recur near the same day each year; autocorrelation at
+  lag 365 ≈ 0.5). **A = 0.10 (±10%)** is the chosen default: the smallest forcing that
+  gives clear annual waves while the per-year prevalence trough never collapses to zero
+  — A ≥ 0.15 occasionally faded a patch out in the off-season (the importation floor
+  then re-sparks it). The `run_endemic_sir()` runner gains a `seasonality` argument (any
+  `values_map`-broadcastable shape); the script writes a two-panel forcing-vs-prevalence
+  plot to `examples/output/endemic_sir_seasonal.png`.
 - `constant_pop_vitals_sir(state, timer, nodeid, count, rate, S, I, R, births, deaths, tick)`
   — constant-population SIR vital dynamics (`src/rust/src/vitals.rs`). Each agent
   dies with probability `1 - exp(-rate[node])` (the caller passes a per-node daily
