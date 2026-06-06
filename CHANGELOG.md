@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 ## Unreleased
 
 ### Added
+- **Generic composable transition kernels** `step_timer_expire(from, to)` and
+  `step_timer_expire_set(from, to, duration)` (`src/rust/src/steps.rs`). One timed
+  `from_state → to_state` transition each (untimed vs timed destination), returning
+  per-node counts — the building blocks for composing models beyond the named menagerie
+  (a vaccinated `V`, a second infectious stage, …) from R without writing Rust. Covered
+  by `tests/testthat/test-timer-expire.R`, including a hand-built SIRS assembled purely
+  from the generics that conserves population. (Also confirmed `bincount` / `bincountw`
+  remain Column-native and usable with the Column model — they tally a per-agent property
+  Column into a per-node census/report slot; a model-use test was added.)
 - **`run_model()` — a high-level runner for the closed-population menagerie**
   (`R/run_model.R`). One call builds the agent population and per-node census from a
   scenario, seeds it, and runs any of the eight SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS

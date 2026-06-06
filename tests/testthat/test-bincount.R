@@ -253,3 +253,19 @@ test_that("bincountw validates lengths, nbins, buffer size, and value type", {
   expect_error(bincountw(values, weights, -1L, ok), "non-negative")
   expect_error(bincountw(make("f32", c(0, 1, 2)), weights, 3L, ok), "integer")
 })
+
+test_that("bincount tallies agent node ids into a per-node census slot (column-model use)", {
+  # Given a per-agent u16 `nodeid` Column and a 2-D (ticks x nodes) i32 census buffer
+  # When bincount writes the per-node agent counts into one tick's slot
+  # Then that slot holds the node histogram (matching tabulate) and the other slots are
+  #      untouched. This is the Column-model aggregation pattern: roll per-agent
+  #      properties up into a per-node, per-tick report.
+  set.seed(1)
+  n <- 10000L; n_nodes <- 8L
+  nid    <- sample.int(n_nodes, n, replace = TRUE) - 1L
+  nodeid <- allocate_scalar("u16", n); nodeid$set(nid)
+  census <- allocate_vector("i32", 5L, n_nodes)            # 5 ticks x 8 nodes
+  bincount(nodeid, n_nodes, census, slot = 2L)             # write tick 2 (0-based)
+  expect_equal(census$values()[3L, ], as.integer(tabulate(nid + 1L, n_nodes)))   # row 3 == slot 2
+  expect_true(all(census$values()[1L, ] == 0L))            # other slots untouched
+})

@@ -502,6 +502,34 @@ step_sir <- function(state, timer, nodeid, count, n_nodes, inf_duration, absorbi
 #' @export
 step_sirs <- function(state, timer, nodeid, count, n_nodes, inf_duration, imm_duration) .Call(wrap__step_sirs, state, timer, nodeid, count, n_nodes, inf_duration, imm_duration)
 
+#' Generic timed transition `from_state -> to_state` into an UNTIMED destination.
+#'
+#' For each agent in `from_state`, decrements its u16 `timer`; on expiry the agent moves
+#' to `to_state` (timer left at 0). Returns the per-node count of transitions. Compose
+#' these (downstream-first) to build models beyond the named menagerie; apply the counts
+#' with `move_count`. Generalizes the M→S / R→S / I→{S,R} legs.
+#'
+#' @param state,timer,nodeid,count,n_nodes  As in [step_si()].
+#' @param from_state Integer state code an agent must occupy to be eligible.
+#' @param to_state   Integer (untimed) state code an agent moves to on expiry.
+#' @return An integer vector of per-node transition counts (length `n_nodes`).
+#' @export
+step_timer_expire <- function(state, timer, nodeid, count, n_nodes, from_state, to_state) .Call(wrap__step_timer_expire, state, timer, nodeid, count, n_nodes, from_state, to_state)
+
+#' Generic timed transition `from_state -> to_state` into a TIMED destination.
+#'
+#' Like [step_timer_expire()] but on expiry the agent's `timer` is reset to a fresh draw
+#' from `duration` (the destination state's own clock — e.g. E→I sets the infectious
+#' period, I→R sets a waning-immunity period). Returns per-node transition counts.
+#'
+#' @param state,timer,nodeid,count,n_nodes  As in [step_si()].
+#' @param from_state Integer state code an agent must occupy to be eligible.
+#' @param to_state   Integer state code an agent moves to on expiry.
+#' @param duration   A Distribution for the destination state's timer.
+#' @return An integer vector of per-node transition counts (length `n_nodes`).
+#' @export
+step_timer_expire_set <- function(state, timer, nodeid, count, n_nodes, from_state, to_state, duration) .Call(wrap__step_timer_expire_set, state, timer, nodeid, count, n_nodes, from_state, to_state, duration)
+
 #' Apply constant-population SIR vital dynamics for one tick.
 #'
 #' `rate` is a per-node daily death-HAZARD-rate grid (a values map; the caller
