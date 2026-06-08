@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
-# England & Wales measles model (work in progress). Measles needs a richer compartment
-# structure than the SIR/SEIR examples:
+# England & Wales measles model. Measles needs a richer compartment structure than the
+# SIR/SEIR examples:
 #
 #   M  maternal immunity  newborns temporarily protected by maternal antibodies; after a
 #                         waning period (~9 months) they become Susceptible.
@@ -12,42 +12,30 @@
 #   D  deceased           absorbing; removed from the living compartments.
 #
 # Disease progression is M -> S -> E -> I -> R, plus vital dynamics (a crude birth rate
-# feeds newborns into M) and natural (non-disease) mortality. THIS revision adds the
-# natural-mortality machinery: every agent is given a realistic age (from an age
-# distribution curve) and a date of death `dod` (from a Kaplan-Meier estimator built on
-# the SAME curve); a per-tick mortality() kernel retires agents when their `dod` arrives.
+# feeds newborns into M) and natural (non-disease) mortality (every agent has a realistic
+# age and a Kaplan-Meier date of death; a mortality() kernel retires them when it arrives).
+#
+# Built on the high-level runner run_model(), exercising the two features that let it go
+# beyond the closed-population menagerie:
+#   * `extra_states = "M"` — registers the maternal compartment. run_model tracks M in the
+#     census, carries it forward, totals it into N, and applies the step kernels' built-in
+#     M -> S waning each tick (so a newborn is protected until its maternal timer expires).
+#   * `capacity` — sized with calc_capacity() so the births kernel has reserved slots to
+#     grow the population into over the 20-year run.
+# The disease transitions (M->S, E->I, I->R, S->E) are the runner's; births-into-M and
+# natural mortality are added through a step_exit callback.
 #
 # Run from anywhere:  Rscript examples/engwal_measles.R
 
 library(razer)
 
-# ── run_measles_model: assemble parameters and run the dynamics ──────────────────────
-# Like run_sir_model() (examples/simple_sir.R). Parameters:
-#   scenario             data.frame, one row per patch (name, population), with optional
-#                        integer seed columns `I` / `R`.
-#   network              N x N spatial coupling matrix (1x1 zeros for a single patch).
-#   nticks               number of recorded daily states (dynamics run nticks-1 times).
-#   inf_duration         Distribution for the infectious period (I -> R timer).
-#   incubation_duration  Distribution for the latent/exposed period (E -> I timer).
-#   maternal_duration    Distribution for maternal-immunity waning (M -> S timer); needs
-#                        a uint16 timer (~270 days > a uint8's 255 range).
-#   r0                   basic reproduction number; beta = r0 / mean(inf_duration).
-#   cbr                  crude birth rate (births per 1,000 per year); sizes capacity and
-#                        (later) drives births into M.
-#   age_dist             AliasedDistribution over single-year age bins (initial ages).
-#   km                   KaplanMeierEstimator for sampling each agent's age at death.
-#   progress             draw a text progress bar over the per-tick loop.
-#
-# Per-tick structure (measles = SEIR + M, so step_sir with absorbing = R). Each kernel
-# returns per-node counts that the model applies to the census with move_count():
-#   carry_forward_states(list(M, S, E, I, R), t0, total = N)
-#   step_sir(absorbing = R) # M->S waning, E->I incubation, I->R recovery (one u16 pass)
-#   calc_foi(...)           # force of infection from the settled census I[t0] / N[t0]
-#   transmission(... E)     # S->E exposures, drawing the incubation timer
-#   births(...)             # CBR newborns into M (maternal timer + a KM date of death)
-#   mortality(...)          # retire agents whose dod has arrived (deaths by compartment)
-#
-# Returns (invisibly) a list with the `people` and `nodes` environments.
+# ── run_measles_model: assemble parameters and run via run_model() ────────────────────
+# `scenario` data.frame (name, population, optional I / R seed columns); `network` the
+# N x N coupling matrix (1x1 zeros for a single patch); `nticks` recorded daily states;
+# `inf_duration` / `incubation_duration` / `maternal_duration` the period Distributions;
+# `r0` the basic reproduction number; `cbr` the crude birth rate (per 1,000/year);
+# `age_dist` an AliasedDistribution over age bins; `km` a KaplanMeierEstimator. Returns
+# (invisibly) the `model` environment.
 run_measles_model <- function(scenario, network, nticks,
                               inf_duration, incubation_duration, maternal_duration,
                               r0, cbr, age_dist, km, progress = FALSE) {
@@ -60,170 +48,68 @@ run_measles_model <- function(scenario, network, nticks,
   if (!inherits(km, "KaplanMeierEstimator"))
     stop("`km` must be a KaplanMeierEstimator (from kaplan_meier_estimator())")
 
-  states  <- laser_states()              # c(S=0, E=1, I=2, R=3, M=4, D=-1)
   pops    <- scenario$population
-  n       <- sum(pops)                   # initial live-agent count (sum over patches)
+  n       <- sum(pops)
   n_nodes <- nrow(scenario)
 
-  # ── capacity for the full run ─────────────────────────────────────────────────────
-  # Births grow the population, so allocate room for every agent that will ever exist.
-  # calc_capacity() projects births-driven growth from the (constant) CBR over all
-  # nticks-1 daily steps; sum the per-node estimates for the total slots to allocate.
+  # Births grow the population, so size the agent arrays for everyone ever born over the
+  # run: calc_capacity projects births-driven growth from the (constant) CBR. run_model
+  # reserves these slots; the births kernel activates them.
   birthrates <- matrix(cbr, nrow = nticks - 1L, ncol = n_nodes)
   capacity   <- as.integer(sum(calc_capacity(birthrates, pops, safety_factor = 1)))
 
-  # Transmission coefficient: R0 = beta * mean infectious period, so beta = R0 / mean.
-  # (calc_foi reads the settled start-of-interval census I[t0], so each infectious agent
-  # contributes on exactly the D census columns it occupies — the full infectious period
-  # D counts and R0 = beta * D — see CLAUDE.md.)
-  beta <- r0 / mean(inf_duration$sample_n(100000L))
-
-  # ── people: per-agent property arrays, allocated to capacity ───────────────────────
-  # state (u8), nodeid (u16), a uint16 `timer` (maternal waning needs > 255 ticks), and
-  # the demographic clocks: `dob` (date of birth, a SIGNED i32 — negative for agents born
-  # before the simulation starts) and `dod` (date of death, an absolute u32 tick).
-  people <- new.env()
-  people$count    <- n
-  people$capacity <- capacity
-  people$state    <- allocate_scalar("u8",  capacity)
-  people$nodeid   <- allocate_scalar("u16", capacity)
-  people$timer    <- allocate_scalar("u16", capacity)
-  people$dob      <- allocate_scalar("i32", capacity)
-  people$dod      <- allocate_scalar("u32", capacity)
-
-  # nodeid is 0-based; repeat each node id by its population, padding reserved slots with 0.
-  ids <- seq_len(n_nodes) - 1L
-  people$nodeid$set(c(rep(ids, times = pops), rep(0L, capacity - n)))
-
-  # ── ages, dates of birth, and dates of death ───────────────────────────────────────
-  # Sample each initial agent's age (in days): a 0-based age-year bin from `age_dist`,
-  # then a uniform day within that year. Date of birth = -age (born `age` days ago). Age
-  # AT death comes from the Kaplan-Meier estimator (conditioned on the current age);
-  # `dod` is that minus the current age = the absolute tick at which the agent will die.
-  age_days     <- age_dist$sample_n(n) * 365L + as.integer(floor(stats::runif(n) * 365))
-  age_at_death <- km$predict_age_at_death(age_days, -1L)   # -1L: use the full life table
-  dob_vals     <- -age_days
-  dod_vals     <- age_at_death - age_days                  # >= 0 (death not in the past)
-  people$dob$set(c(dob_vals, rep(0L,  capacity - n)))
-  people$dod$set(c(dod_vals, rep(0L,  capacity - n)))
-
-  # ── seed the initial disease states: I seed, R immune fraction, the rest S ─────────
-  # Agents are laid out node-by-node; node k owns [offset[k], offset[k] + pops[k]). M and
-  # E start empty (newborns will fill M as births are added later).
-  I_seed  <- if ("I" %in% names(scenario)) as.integer(scenario$I) else integer(n_nodes)
-  R_seed  <- if ("R" %in% names(scenario)) as.integer(scenario$R) else integer(n_nodes)
-  offsets <- cumsum(c(0L, pops[-n_nodes]))
-  state0  <- rep(states[["S"]], capacity)
-  for (k in seq_len(n_nodes)) {
-    base <- offsets[k]; ni <- I_seed[k]; nr <- R_seed[k]
-    if (ni > 0L) state0[base + seq_len(ni)]      <- states[["I"]]
-    if (nr > 0L) state0[base + ni + seq_len(nr)] <- states[["R"]]
-  }
-  people$state$set(state0)
-
-  # Seed the infectious timer (u16) for the initial I agents from `inf_duration`, so
-  # step_sir counts them down to recovery rather than recovering them immediately
-  # (a timer of 0 would expire on the first step). Everyone else starts at 0 (M/E start
-  # empty; S and R are untimed).
-  timer0  <- rep(0L, capacity)
-  total_I <- sum(I_seed)
-  if (total_I > 0L) {
-    draws <- pmax(1L, pmin(65535L, as.integer(round(inf_duration$sample_n(total_I)))))
-    pos <- 0L
-    for (k in seq_len(n_nodes)) {
-      ni <- I_seed[k]
-      if (ni > 0L) { timer0[offsets[k] + seq_len(ni)] <- draws[pos + seq_len(ni)]; pos <- pos + ni }
-    }
-  }
-  people$timer$set(timer0)
-
-  # ── nodes: census (M/S/E/I/R + N) and the deaths flow ──────────────────────────────
-  nodes <- new.env()
-  nodes$count  <- n_nodes
-  nodes$M      <- allocate_vector("i32", nticks,      n_nodes)
-  nodes$S      <- allocate_vector("i32", nticks,      n_nodes)
-  nodes$E      <- allocate_vector("i32", nticks,      n_nodes)
-  nodes$I      <- allocate_vector("i32", nticks,      n_nodes)
-  nodes$R      <- allocate_vector("i32", nticks,      n_nodes)
-  nodes$N      <- allocate_vector("i32", nticks,      n_nodes)
-  # Per-interval FLOW reports and the FOI working buffer.
-  nodes$foi       <- allocate_vector("f64", nticks - 1L, n_nodes)
-  nodes$incidence <- allocate_vector("i32", nticks - 1L, n_nodes)   # S->E exposures
-  nodes$births    <- allocate_vector("i32", nticks - 1L, n_nodes)
-  nodes$deaths    <- allocate_vector("i32", nticks - 1L, n_nodes)
-  # Transmission driver grids (n_ticks x n_nodes f64), built by values_map: the beta
-  # coefficient, a (here flat) seasonal modifier, and the daily birth rate (CBR per
-  # 1,000 per year -> per person per day) feeding births.
-  nodes$beta        <- values_map(beta,             nticks, n_nodes)
-  nodes$seasonality <- values_map(1,                nticks, n_nodes)
-  nodes$birth_rate  <- values_map(cbr / 1000 / 365, nticks, n_nodes)
-
-  # Seed the census at tick 0 (first n_nodes entries); remaining columns start zero.
-  zeros <- rep(0L, (nticks - 1L) * n_nodes)
-  nodes$M$set(c(integer(n_nodes),         zeros))   # M_0 = 0
-  nodes$S$set(c(pops - I_seed - R_seed,   zeros))
-  nodes$E$set(c(integer(n_nodes),         zeros))   # E_0 = 0
-  nodes$I$set(c(I_seed,                   zeros))
-  nodes$R$set(c(R_seed,                   zeros))
-  nodes$N$set(c(pops,                     zeros))
-
-  # ── per-tick loop ───────────────────────────────────────────────────────────────
-  run <- function() {
-    pb <- if (progress) utils::txtProgressBar(min = 0L, max = nticks - 1L, style = 3) else NULL
-    on.exit(if (!is.null(pb)) close(pb), add = TRUE)
-    update_every <- max(1L, (nticks - 1L) %/% 100L)
-    for (tick in seq_len(nticks - 1L)) {
-      t0 <- tick - 1L
-      # Carry M/S/E/I/R forward and total them into N (the FOI denominator).
-      carry_forward_states(list(nodes$M, nodes$S, nodes$E, nodes$I, nodes$R), t0, total = nodes$N)
-      # Timed transitions in one pass (measles = SEIR + M, so step_sir absorbing = R):
-      # M->S (waning), E->I (incubation; draws an infectious timer), I->R (recovery).
-      # The kernel returns per-node counts; apply each to the census.
-      prog <- step_sir(people$state, people$timer, people$nodeid, people$count,
-                       nodes$count, inf_duration, states[["R"]])
-      move_count(nodes$M, nodes$S, prog$waned,   t0)   # M -> S
-      move_count(nodes$E, nodes$I, prog$onset,   t0)   # E -> I
-      move_count(nodes$I, nodes$R, prog$cleared, t0)   # I -> R
-      # Force of infection from the SETTLED start-of-interval census I[t0]/N[t0], placed
-      # IMMEDIATELY before transmission, then S->E exposures (drawing the incubation
-      # timer); incidence records new exposures. Reading the settled census gives each
-      # infectious agent its full D census columns, so R0 = beta * D.
-      calc_foi(nodes$I, nodes$N, nodes$beta, nodes$seasonality, network, nodes$foi, t0)
-      inf <- transmission(people$state, people$timer, people$nodeid, people$count,
-                          nodes$foi, t0, states[["E"]], incubation_duration)
-      move_count(nodes$S, nodes$E, inf, t0)
-      nodes$incidence$set_col(t0, inf)
-      # Births: CBR newborns into M (maternal timer + a Kaplan-Meier date of death);
-      # `births` returns the grown count and the per-node birth count.
-      b <- births(people$state, people$timer, people$nodeid, people$dob, people$dod,
-                  people$count, nodes$count, nodes$birth_rate, maternal_duration, km, t0)
-      people$count <- b$count
-      move_count(NULL, nodes$M, b$born, t0)            # newborns enter M
-      nodes$births$set_col(t0, b$born)
-      # Natural mortality: returns deaths per node by source compartment; decrement each.
-      d <- mortality(people$state, people$dod, people$nodeid, people$count, nodes$count, t0)
-      move_count(nodes$M, NULL, d$m, t0); move_count(nodes$S, NULL, d$s, t0)
-      move_count(nodes$E, NULL, d$e, t0); move_count(nodes$I, NULL, d$i, t0)
-      move_count(nodes$R, NULL, d$r, t0)
-      nodes$deaths$set_col(t0, d$m + d$s + d$e + d$i + d$r)
-      if (!is.null(pb) && (tick %% update_every == 0L || tick == nticks - 1L))
-        utils::setTxtProgressBar(pb, tick)
-    }
-  }
-  run()
+  # SEIR + a maternal M compartment. run_model owns the M->S / E->I / I->R disease step and
+  # the S->E transmission (drawing the incubation timer); M->S is applied because "M" is a
+  # registered extra state. Births-into-M and natural mortality are the step_exit callback.
+  m <- run_model(
+    scenario = scenario, model = "SEIR", nticks = nticks, r0 = r0,
+    infectious_period = inf_duration, incubation_period = incubation_duration,
+    network = network, capacity = capacity, extra_states = "M", seed = 1L, progress = progress,
+    init = function(model) {
+      cap <- model$people$capacity
+      model$people$dob <- allocate_scalar("i32", cap)   # date of birth (negative = before t0)
+      model$people$dod <- allocate_scalar("u32", cap)   # absolute tick of death
+      model$nodes$birth_rate <- values_map(cbr / 1000 / 365, nticks, n_nodes)
+      model$nodes$births     <- allocate_vector("i32", nticks - 1L, n_nodes)
+      model$nodes$deaths     <- allocate_vector("i32", nticks - 1L, n_nodes)
+      # Realistic initial ages from the age curve, and a KM age-at-death per agent
+      # (conditioned on the current age, so nobody dies in the past). dob = -age; dod is the
+      # absolute tick of death. Reserved slots [n, cap) stay 0 until a birth fills them.
+      age_days     <- age_dist$sample_n(n) * 365L + as.integer(floor(stats::runif(n) * 365))
+      age_at_death <- km$predict_age_at_death(age_days, -1L)
+      model$people$dob$set(c(-age_days, integer(cap - n)))
+      model$people$dod$set(c(as.integer(age_at_death - age_days), integer(cap - n)))
+    },
+    step_exit = function(model) {
+      t <- model$tick
+      # Births: CBR newborns into M (a maternal timer + a Kaplan-Meier date of death).
+      b <- births(model$people$state, model$people$timer, model$people$nodeid,
+                  model$people$dob, model$people$dod, model$people$count, n_nodes,
+                  model$nodes$birth_rate, maternal_duration, km, t)
+      model$people$count <- b$count
+      move_count(NULL, model$nodes$M, b$born, t)
+      model$nodes$births$set_col(t, b$born)
+      # Natural mortality: retire agents whose dod has arrived; decrement their compartments.
+      d <- mortality(model$people$state, model$people$dod, model$people$nodeid,
+                     model$people$count, n_nodes, t)
+      move_count(model$nodes$M, NULL, d$m, t); move_count(model$nodes$S, NULL, d$s, t)
+      move_count(model$nodes$E, NULL, d$e, t); move_count(model$nodes$I, NULL, d$i, t)
+      move_count(model$nodes$R, NULL, d$r, t)
+      model$nodes$deaths$set_col(t, d$m + d$s + d$e + d$i + d$r)
+    })
 
   # Report. Living population per tick = M+S+E+I+R; final is row `nticks`.
-  living <- function(t) sum(nodes$M$values()[t, ], nodes$S$values()[t, ], nodes$E$values()[t, ],
-                            nodes$I$values()[t, ], nodes$R$values()[t, ])
+  living <- function(t) sum(m$nodes$M$values()[t, ], m$nodes$S$values()[t, ], m$nodes$E$values()[t, ],
+                            m$nodes$I$values()[t, ], m$nodes$R$values()[t, ])
   cat(sprintf(paste0("run_measles_model: %d node(s), %s initial agents (capacity %s), %d ticks (%.0f yr); ",
                      "living %s -> %s; cases %s, births %s, natural deaths %s.\n"),
               n_nodes, format(n, big.mark = ","), format(capacity, big.mark = ","),
               nticks, nticks / 365,
               format(living(1L), big.mark = ","), format(living(nticks), big.mark = ","),
-              format(sum(nodes$incidence$values()), big.mark = ","),
-              format(sum(nodes$births$values()), big.mark = ","),
-              format(sum(nodes$deaths$values()), big.mark = ",")))
-  invisible(list(people = people, nodes = nodes))
+              format(sum(m$nodes$incidence$values()), big.mark = ","),
+              format(sum(m$nodes$births$values()), big.mark = ","),
+              format(sum(m$nodes$deaths$values()), big.mark = ",")))
+  invisible(m)
 }
 
 # ── setup ───────────────────────────────────────────────────────────────────────────
