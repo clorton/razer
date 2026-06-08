@@ -86,12 +86,54 @@ scenario$R <- pmin(as.integer(0.05 * scenario$population), scenario$population -
 
 inf_duration <- dist_gamma(2, 2)        # infectious period (mean shape*scale = 4 ticks)
 R0           <- 2                       # beta = R0 / mean(inf_duration)
-nticks       <- 10L                     # daily time steps
+nticks       <- 120L                    # daily time steps (a full epidemic to plot)
 # Seasonal transmission modifier: a per-tick sinusoid (values_map also accepts a scalar,
 # a per-node vector, or a full nticks x n_nodes matrix).
 seasonality  <- 1 + 0.3 * sin(2 * pi * (seq_len(nticks) - 1L) / nticks)
 cdr          <- 20                      # crude death rate (annual per 1,000) for vitals
 
 # ── run ───────────────────────────────────────────────────────────────────────
-timing <- system.time(run_sir_model(scenario, network, nticks, inf_duration, R0, seasonality, cdr))
+timing <- system.time(
+  result <- run_sir_model(scenario, network, nticks, inf_duration, R0, seasonality, cdr))
 cat(sprintf("run_sir_model completed in %.3f s\n", timing[["elapsed"]]))
+
+# ── plots ───────────────────────────────────────────────────────────────────────
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active device
+# (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
+out_dir   <- file.path(script_dir, "output")
+dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+
+days   <- 0:(nticks - 1L)
+S <- rowSums(result$nodes$S$values()); I <- rowSums(result$nodes$I$values()); R <- rowSums(result$nodes$R$values())
+# Per-patch attack rate = fraction of the patch ever infected over the run.
+attack <- colSums(result$nodes$incidence$values()) / scenario$population
+
+open_png(file.path(out_dir, "simple_sir.png"), width = 1200, height = 620, res = 120)
+op <- graphics::par(mfrow = c(1L, 2L), mar = c(4, 4.5, 2.8, 1))
+
+# Left: national S / I / R trajectory (summed over all 954 patches).
+matplot(days, cbind(S, I, R) / 1e6, type = "l", lty = 1, lwd = 2.5,
+        col = c("#2c7fb8", "#d7301f", "#238b45"), xlab = "day", ylab = "agents (millions)",
+        main = "National S / I / R (954 patches)")
+legend("right", legend = c("S", "I", "R"), col = c("#2c7fb8", "#d7301f", "#238b45"),
+       lwd = 2.5, bty = "n")
+
+# Right: a geographic map of the patches, positioned by lon/lat, point size ~ sqrt(population),
+# colour = attack rate. `asp = 1` keeps the map from distorting.
+pal <- grDevices::colorRampPalette(c("#ffffb2", "#fd8d3c", "#bd0026"))(64)
+rng <- range(attack)
+idx <- pmax(1L, pmin(64L, 1L + round(63 * (attack - rng[1]) / max(diff(rng), 1e-9))))
+plot(scenario$longitude, scenario$latitude, pch = 19, asp = 1,
+     cex = 0.3 + 1.8 * sqrt(scenario$population / max(scenario$population)),
+     col = pal[idx], xlab = "longitude", ylab = "latitude",
+     main = "Attack rate by patch (England & Wales; size ~ population)")
+lv <- pretty(rng, 4)
+legend("topleft", title = "attack rate", bty = "n", pch = 19, pt.cex = 1.4,
+       legend = sprintf("%.0f%%", 100 * lv),
+       col = pal[pmax(1L, pmin(64L, 1L + round(63 * (lv - rng[1]) / max(diff(rng), 1e-9))))])
+graphics::par(op)
+close_png()
+if (to_png) cat(sprintf("wrote spatial SIR plot to %s\n", file.path(out_dir, "simple_sir.png")))
