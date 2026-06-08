@@ -18,9 +18,9 @@ exactly the `D` census columns it occupies — the effective reproduction number
 
 ## `sir_attack_fraction.R`
 
-An agent-based SIR epidemic in a single well-mixed node. Per tick:
-`carry_forward_states` → `step_sir` (absorbing = R; I→R) → `calc_foi` → `transmission`
-(S→I) with a fixed infectious period (`dist_constant`).
+An agent-based SIR epidemic in a single well-mixed node, advanced with the high-level
+runner `run_model()` (which builds the population and runs `carry_forward_states` →
+`step_sir` → `calc_foi` → `transmission` for you) with a fixed infectious period.
 
 ```sh
 Rscript examples/sir_attack_fraction.R
@@ -38,9 +38,9 @@ thousandths for `R0 >= 1.5`.
 
 ## `seir_attack_fraction.R`
 
-An agent-based SEIR epidemic (`step_sir` with absorbing = R; no M compartment). Per tick:
-`carry_forward_states` → `step_sir` (E→I, I→R) → `calc_foi` → `transmission` (S→E) with
-fixed incubation and infectious periods.
+An agent-based SEIR epidemic, advanced with `run_model()` (model `"SEIR"`), with fixed
+incubation and infectious periods. The latent E stage only delays the epidemic; the final
+size is unchanged.
 
 ```sh
 Rscript examples/seir_attack_fraction.R
