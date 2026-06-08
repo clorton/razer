@@ -98,7 +98,7 @@ e.g. writing per-agent node assignments or seeding initial states from R.
 Read one column (\code{slot}) of a 2-D Column as an R vector snapshot.
 
 Returns the \code{slice_len} values in column \code{slot} (e.g. all nodes for one tick),
-widened to R \code{integer}/\code{double} like \code{\link[=values]{values()}}. For a scalar column the only
+widened to R \code{integer}/\code{double} like \code{values()}. For a scalar column the only
 valid \code{slot} is 0 (the whole vector).
 
 \subsection{Arguments}{

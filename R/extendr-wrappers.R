@@ -868,7 +868,7 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'Read one column (`slot`) of a 2-D Column as an R vector snapshot.
 #'
 #'Returns the `slice_len` values in column `slot` (e.g. all nodes for one tick),
-#'widened to R `integer`/`double` like [values()]. For a scalar column the only
+#'widened to R `integer`/`double` like `values()`. For a scalar column the only
 #'valid `slot` is 0 (the whole vector).
 #'
 #' \subsection{Arguments}{
@@ -1077,7 +1077,7 @@ AliasedDistribution$probs <- function() .Call(wrap__AliasedDistribution__probs, 
 #'\subsection{Method `predict_age_at_death`}{
 #'Predict an age at death (in DAYS) for each individual given their age in days.
 #'
-#'Samples the year of death as in [predict_year_of_death()], then a day within
+#'Samples the year of death as in `predict_year_of_death()`, then a day within
 #'that year: a uniform day of a later year, or — if death falls in the individual's
 #'current year — a uniform day at or after their current day-of-year (so the
 #'predicted age at death is never earlier than the current age). Ages in days must

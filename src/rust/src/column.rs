@@ -342,7 +342,7 @@ impl Column {
     /// Read one column (`slot`) of a 2-D Column as an R vector snapshot.
     ///
     /// Returns the `slice_len` values in column `slot` (e.g. all nodes for one tick),
-    /// widened to R `integer`/`double` like [values()]. For a scalar column the only
+    /// widened to R `integer`/`double` like `values()`. For a scalar column the only
     /// valid `slot` is 0 (the whole vector).
     ///
     /// @param slot 0-based column index, less than the number of columns.

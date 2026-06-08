@@ -170,7 +170,7 @@ impl KaplanMeierEstimator {
 
     /// Predict an age at death (in DAYS) for each individual given their age in days.
     ///
-    /// Samples the year of death as in [predict_year_of_death()], then a day within
+    /// Samples the year of death as in `predict_year_of_death()`, then a day within
     /// that year: a uniform day of a later year, or — if death falls in the individual's
     /// current year — a uniform day at or after their current day-of-year (so the
     /// predicted age at death is never earlier than the current age). Ages in days must
