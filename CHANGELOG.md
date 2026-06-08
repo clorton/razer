@@ -10,11 +10,16 @@ All notable changes to this project are documented here.
   - `capacity` (default = initial population) reserves agent-array slots a `step_*`
     callback can activate with `births` / `import_infections` — i.e. lets the population
     grow (size it with `calc_capacity()` / `calc_capacity_cdr()`).
-  - `extra_states` (e.g. `"M"`) registers compartments beyond the model's own S/E/I/R:
-    each is allocated a census Column, carried forward, totalled into `N`, and seeded at
-    tick 0 from agent states. For `"M"`, run_model applies the step kernels' built-in M→S
-    waning each tick (recording the `waning_m` flow) — closing the desync that discarding
-    `waned` would otherwise cause.
+  - `extra_states` registers agent states beyond the model's own S/E/I/R: each gets a
+    census Column that is carried forward, totalled into `N`, and seeded at tick 0 from
+    agent states. A known [laser_states()] name (`"M"`) keeps its code; a NEW name (e.g.
+    `"V"` for vaccinated) is assigned a free code, becoming a genuine new agent state, with
+    the codes exposed in `model$states`. The disease kernels branch only on S/E/I/R/M, so
+    an agent in a new state is left untouched (not infected, not transitioned) — its
+    transitions are user-driven via callbacks (move `S`→`V` to vaccinate; for waning, set a
+    timer and run `step_timer_expire(V, S)` in `step_update`), needing no kernel change.
+    For `"M"`, run_model additionally applies the kernels' built-in M→S waning each tick
+    (the `waning_m` flow), closing the desync that discarding `waned` would cause.
   These unblock expressing constant-population vitals, importation, growth, and a maternal
   `M` compartment through `run_model()` + callbacks (see the converted `simple_sir.R`,
   `endemic_sir*.R`, `long_run_squash.R`).

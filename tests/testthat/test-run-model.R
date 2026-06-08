@@ -227,3 +227,66 @@ test_that("run_model tracks an extra M compartment and applies its M->S waning",
   expect_error(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6,
                          extra_states = "I"), "compartments")   # can't repeat a model state
 })
+
+test_that("run_model supports a user-defined vaccinated state V (no waning)", {
+  # Given an SIR model with a NEW state "V" registered via extra_states, and a step_exit
+  #       callback that moves 1,000 susceptibles to V at tick 5 (no timer)
+  # When run
+  # Then V is assigned a fresh state code (exposed in model$states), V is tracked/carried,
+  #      the 1,000 vaccinated are permanent (no waning) and never infected (the disease
+  #      kernels leave state V untouched), and S+I+R+V is conserved. Failure would mean a
+  #      new state isn't really inert/protected, or the census desyncs.
+  scen <- data.frame(population = 10000L, I = 50L)
+  m <- run_model(scen, "SIR", nticks = 30L, r0 = 2.5, infectious_period = 6, seed = 1L,
+                 extra_states = "V",
+                 step_exit = function(model) {
+                   if (model$tick != 5L) return(invisible())
+                   V <- model$states[["V"]]; S <- model$states[["S"]]
+                   s <- model$people$state$values()
+                   take <- head(which(s == S), 1000L)        # single node: all active
+                   s[take] <- V; model$people$state$set(s)
+                   move_count(model$nodes$S, model$nodes$V, length(take), model$tick)  # S->V at slice t+1
+                 })
+  expect_true(!is.null(m$states[["V"]]) && m$states[["V"]] == 5L)   # new code assigned (5)
+  expect_false(is.null(m$nodes$V))                                  # V census tracked
+  Vtraj <- rowSums(m$nodes$V$values())
+  expect_equal(Vtraj[7L], 1000L)                                   # 1,000 vaccinated (slice 6 -> row 7)
+  expect_true(all(Vtraj[7:30] == 1000L))                           # permanent (no waning), never infected
+  living <- rowSums(m$nodes$S$values()) + rowSums(m$nodes$I$values()) +
+            rowSums(m$nodes$R$values()) + rowSums(m$nodes$V$values())
+  expect_true(all(living == 10000L))                               # conserved
+})
+
+test_that("a vaccinated state V can wane back to S via step_timer_expire in step_update", {
+  # Given a population vaccinated into V with a finite immunity timer, and a step_update
+  #       callback running the generic step_timer_expire(V -> S) kernel each tick
+  # When run with no disease (r0 = 0) to isolate the V dynamics
+  # Then V fills at vaccination then drains back to S as timers expire — waning needs no new
+  #      kernel and no step-kernel change, just the existing step_timer_expire. Failure would
+  #      mean a user-defined state can't be given timed transitions.
+  scen <- data.frame(population = 10000L, I = 0L)
+  m <- run_model(scen, "SIR", nticks = 40L, r0 = 0, infectious_period = 6, seed = 1L,
+                 extra_states = "V",
+                 step_exit = function(model) {           # vaccinate 4,000 at tick 2, timer 8
+                   if (model$tick != 2L) return(invisible())
+                   V <- model$states[["V"]]; S <- model$states[["S"]]
+                   s  <- model$people$state$values(); tm <- model$people$timer$values()
+                   take <- head(which(s == S), 4000L)
+                   s[take] <- V; tm[take] <- 8L
+                   model$people$state$set(s); model$people$timer$set(tm)
+                   move_count(model$nodes$S, model$nodes$V, length(take), model$tick)
+                 },
+                 step_update = function(model) {         # V -> S waning (generic kernel)
+                   V <- model$states[["V"]]; S <- model$states[["S"]]
+                   waned <- step_timer_expire(model$people$state, model$people$timer,
+                              model$people$nodeid, model$people$count, model$nodes$count, V, S)
+                   move_count(model$nodes$V, model$nodes$S, waned, model$tick)
+                 })
+  Vtraj <- rowSums(m$nodes$V$values())
+  expect_equal(max(Vtraj), 4000L)                        # V filled to the vaccinated count
+  expect_equal(Vtraj[nrow(m$nodes$V$values())], 0L)      # all waned back to S by the end
+  expect_true(any(Vtraj == 0L) && which.max(Vtraj) < 40L)# rose then fell
+  living <- rowSums(m$nodes$S$values()) + rowSums(m$nodes$I$values()) +
+            rowSums(m$nodes$R$values()) + rowSums(m$nodes$V$values())
+  expect_true(all(living == 10000L))                     # conserved through vaccinate + wane
+})

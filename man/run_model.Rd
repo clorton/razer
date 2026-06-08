@@ -59,13 +59,16 @@ default). Reserve extra slots — e.g. \code{calc_capacity()} / \code{calc_capac
 callback can grow the population with \code{births} or \code{import_infections} (which activate
 reserved slots). With the default \code{capacity}, the population is closed (no growth).}
 
-\item{extra_states}{Optional character vector of compartment names from \code{\link[=laser_states]{laser_states()}}
-beyond the model's own (e.g. \code{"M"} for maternal immunity). Each is allocated a census
-Column, carried forward, totalled into \code{N}, and seeded at tick 0 from the agents'
-states. For \code{"M"}, run_model also applies the step kernels' built-in M→S waning each
-tick (recording it in the \code{waning_m} flow); other extra states are inert until a
-callback moves agents into/out of them. Getting agents \emph{into} an extra compartment
-(e.g. \code{births} into \code{M}) is done in a callback.}
+\item{extra_states}{Optional character vector of extra agent-state names beyond the
+model's own S/E/I/R. A name already in \code{\link[=laser_states]{laser_states()}} (e.g. \code{"M"}) keeps that code; a
+NEW name (e.g. \code{"V"} for vaccinated) is assigned the next free code, becoming a genuine
+new agent state. Each gets a census Column that is carried forward, totalled into \code{N},
+and seeded at tick 0 from the agents' states; the assigned codes are exposed in
+\code{model$states}. The disease kernels branch only on S/E/I/R/M, so an agent in a NEW
+state is left untouched (not infected, not transitioned) — its transitions are yours to
+drive from callbacks (move \code{S}→\code{V} to vaccinate; for waning, set a timer and run
+\code{step_timer_expire(V, S)} in \code{step_update}). For \code{"M"} only, run_model additionally
+applies the step kernels' built-in M→S waning each tick (recording the \code{waning_m} flow).}
 
 \item{init}{Optional \verb{function(model)} called once after the model is built and before
 the loop. Use it to add per-agent property \link{Column}s, add a compartment census Column
@@ -99,6 +102,7 @@ state) — each an \code{n_nodes}-wide, time-major Column.
 \item \verb{$network} — the coupling weights as a 2-D f64 \link{Column} (\verb{n_nodes x n_nodes},
 column-major), built once from the \code{network} matrix and read by \code{calc_foi} each tick.
 \item \verb{$carry} — the list of census Columns carried forward each tick.
+\item \verb{$states} — the state-name→code map (\code{\link[=laser_states]{laser_states()}} plus any \code{extra_states}).
 \item \verb{$tick} — during the loop, the current 0-based interval index (for the callbacks).
 }
 }

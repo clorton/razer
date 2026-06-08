@@ -72,13 +72,16 @@
 #'   default). Reserve extra slots — e.g. `calc_capacity()` / `calc_capacity_cdr()` — so a
 #'   callback can grow the population with `births` or `import_infections` (which activate
 #'   reserved slots). With the default `capacity`, the population is closed (no growth).
-#' @param extra_states Optional character vector of compartment names from [laser_states()]
-#'   beyond the model's own (e.g. `"M"` for maternal immunity). Each is allocated a census
-#'   Column, carried forward, totalled into `N`, and seeded at tick 0 from the agents'
-#'   states. For `"M"`, run_model also applies the step kernels' built-in M→S waning each
-#'   tick (recording it in the `waning_m` flow); other extra states are inert until a
-#'   callback moves agents into/out of them. Getting agents *into* an extra compartment
-#'   (e.g. `births` into `M`) is done in a callback.
+#' @param extra_states Optional character vector of extra agent-state names beyond the
+#'   model's own S/E/I/R. A name already in [laser_states()] (e.g. `"M"`) keeps that code; a
+#'   NEW name (e.g. `"V"` for vaccinated) is assigned the next free code, becoming a genuine
+#'   new agent state. Each gets a census Column that is carried forward, totalled into `N`,
+#'   and seeded at tick 0 from the agents' states; the assigned codes are exposed in
+#'   `model$states`. The disease kernels branch only on S/E/I/R/M, so an agent in a NEW
+#'   state is left untouched (not infected, not transitioned) — its transitions are yours to
+#'   drive from callbacks (move `S`→`V` to vaccinate; for waning, set a timer and run
+#'   `step_timer_expire(V, S)` in `step_update`). For `"M"` only, run_model additionally
+#'   applies the step kernels' built-in M→S waning each tick (recording the `waning_m` flow).
 #' @param init Optional `function(model)` called once after the model is built and before
 #'   the loop. Use it to add per-agent property [Column]s, add a compartment census Column
 #'   (append it to `model$carry` to have it carried forward), set agent states/timers, etc.
@@ -105,6 +108,7 @@
 #'   * `$network` — the coupling weights as a 2-D f64 [Column] (`n_nodes x n_nodes`,
 #'     column-major), built once from the `network` matrix and read by `calc_foi` each tick.
 #'   * `$carry` — the list of census Columns carried forward each tick.
+#'   * `$states` — the state-name→code map ([laser_states()] plus any `extra_states`).
 #'   * `$tick` — during the loop, the current 0-based interval index (for the callbacks).
 #' @examples
 #' \dontrun{
@@ -161,11 +165,20 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   base_comp <- c("S", "I", if (has_E) "E", if (has_R) "R")
   extra_states <- if (is.null(extra_states)) character(0) else as.character(extra_states)
   if (length(extra_states)) {
-    if (!all(extra_states %in% names(states)))
-      stop("`extra_states` must be state names from laser_states() (e.g. \"M\")")
     if (any(extra_states %in% c(base_comp, "D")))
       stop("`extra_states` must not repeat the model's own compartments or include D")
-    if (anyDuplicated(extra_states)) stop("`extra_states` must be unique")
+    if (anyDuplicated(extra_states)) stop("`extra_states` names must be unique")
+    # Give each extra state a u8 code: a known laser_states() name (e.g. "M") keeps its
+    # code; a NEW name (e.g. "V" for vaccinated) gets the next free code, becoming a genuine
+    # new agent STATE. The disease kernels branch only on S/E/I/R/M, so they leave an agent
+    # in a new state UNTOUCHED — not infected, not transitioned, its timer not decremented.
+    # Its transitions are yours to drive from callbacks: move S->V to vaccinate; for waning,
+    # set a timer on vaccination and run step_timer_expire(V, S) in a step_update callback.
+    for (s in extra_states) if (!(s %in% names(states))) {
+      free <- setdiff(0:254, as.integer(states))
+      if (!length(free)) stop("no free state code available for a new `extra_states` entry")
+      states[[s]] <- free[[1L]]
+    }
   }
   has_M <- "M" %in% extra_states
 
@@ -271,6 +284,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   m$nodes   <- nodes
   m$network <- network
   m$carry   <- carry
+  m$states  <- states   # laser_states() plus any extra_states codes — for callbacks
   if (!is.null(init)) init(m)
   # Re-read in case the callback rebound them (it normally mutates in place).
   people <- m$people; nodes <- m$nodes; network <- m$network
