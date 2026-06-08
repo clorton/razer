@@ -93,6 +93,20 @@ callbacks (`init` / `step_enter` / `step_update` / `step_exit`) and its `capacit
   (S blue, E orange, I red, R green) and styled by model (solid / dashed / dotted /
   long-dash); the waning models (SIRS, SEIRS) show recurrent epidemic waves while SIR/SEIR
   settle after one. Produces an overlay plot and a per-compartment 2×2 panel.
+- **`sia_campaigns.R`** — periodic vaccination campaigns (Supplemental Immunization
+  Activities) via a user-defined `"V"` state (`run_model(extra_states = "V")`). A
+  configurable schedule (annual) runs a `step_exit` callback that, in the targeted nodes,
+  probabilistically moves susceptibles `S → V` at a given coverage; `V` is permanent (no
+  `step_update`). Three independent patches with two targeted and one control show the
+  node-targeting: the campaigned nodes are protected, the control burns through.
+- **`sia_campaigns_waning.R`** — the same campaigns, but vaccine-derived immunity wanes: the
+  campaign sets a per-agent waning timer and a `step_update` callback runs
+  `step_timer_expire(V → S)` each tick, so `V` sawtooths (jumps at each campaign, decays
+  between) instead of staircasing — composed entirely from the existing kernel.
+- **`quarantine.R`** — case isolation via a user-defined `"Q"` state. A `step_exit` callback
+  tests the infectious and moves detected cases `I → Q` (isolated, so they no longer
+  transmit); a `step_update` callback releases them `Q → R` after a fixed isolation period
+  with `step_timer_expire`. Baseline vs. quarantine shows the curve flattened and delayed.
 - **`long_run_squash.R`** — a 100-year demographic run (1,000,000 initial agents, CBR 30,
   CDR 15) that stays within a bounded agent array by reclaiming dead slots with `squash()`
   once a year. The array is sized with `calc_capacity_cdr()` (the peak-living bound, ~9.1M
