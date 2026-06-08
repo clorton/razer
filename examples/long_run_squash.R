@@ -3,24 +3,20 @@
 # A century-long demographic run that stays within a bounded agent array by reclaiming the
 # slots of the dead with squash(). This is the use case calc_capacity_cdr() exists for.
 #
-# Setup: one node, 1,000,000 initial agents, run for 100 years (daily steps) under a crude
-# BIRTH rate of 30 / 1,000 / year and a crude DEATH rate of 15 / 1,000 / year (so the
-# population grows at ~15 / 1,000 / year net). With no reclaim you would have to allocate a
-# slot for every agent EVER born — tens of millions over a century (what calc_capacity()
-# estimates). Instead we:
+# Setup: one node, 1,000,000 initial agents, 100 years (daily steps), crude BIRTH rate
+# 30 / 1,000 / year and crude DEATH rate 15 / 1,000 / year (so the population grows ~15 /
+# 1,000 / year net). With no reclaim you would allocate a slot for every agent EVER born —
+# tens of millions over a century (what calc_capacity() estimates). Instead we size the
+# array with calc_capacity_cdr() (the PEAK-LIVING bound) and squash() once a year to free
+# the dead slots, so the active count stays near the living count, well under capacity.
 #
-#   * size the array with calc_capacity_cdr(CBR, CDR), which bounds the PEAK LIVING
-#     population (net births minus an underestimated death rate) rather than cumulative
-#     births, and
-#   * call squash() once a year to compact the living agents to the front of every per-agent
-#     Column and free the dead slots, so the active count stays near the living count and
-#     well under the allocated capacity.
-#
-# Births enter the maternal-immunity compartment M (the births() kernel draws a maternal
-# timer and a Kaplan-Meier date of death per newborn); step_si wanes M -> S. Mortality is
-# age-independent ("crude"): every agent's lifespan is exponential with the CDR hazard, via
-# a Kaplan-Meier life table built from an exponential survival curve, so the realized death
-# rate is ~CDR regardless of age structure.
+# Built on run_model(): there is no disease here, so we run the trivial model "SI" with
+# r0 = 0 (no transmission). The vital dynamics are added through run_model's callbacks:
+#   * `capacity` reserves the (calc_capacity_cdr) headroom births need to grow into;
+#   * `extra_states = "M"` registers the maternal-immunity compartment newborns enter
+#     (run_model applies the step kernel's M->S waning each tick);
+#   * `init` gives each agent a date of birth / Kaplan-Meier date of death;
+#   * `step_exit` runs births (into M) and mortality each tick, and squash() once a year.
 #
 # Run from anywhere:  Rscript examples/long_run_squash.R   (takes a few minutes)
 # Output PNGs are written next to this script in examples/output/.
@@ -28,7 +24,6 @@
 library(razer)
 
 set.seed(20260606L)
-states <- laser_states()                 # c(S = 0, E = 1, I = 2, R = 3, M = 4, D = -1)
 
 # ── parameters ────────────────────────────────────────────────────────────────────
 N0        <- 1000000L                     # initial living population
@@ -40,8 +35,6 @@ maternal_duration <- dist_normal(270, 20) # M -> S waning (~9 months)
 squash_every <- 365L                      # reclaim dead slots once a year
 
 # ── capacity: peak-living bound (with squash) vs cumulative-births bound (without) ──
-# Both rate grids are constant over the run. calc_capacity_cdr is what we ALLOCATE;
-# calc_capacity is shown only to quantify how many slots squashing saves.
 br_grid   <- matrix(cbr, nrow = nticks - 1L, ncol = 1L)
 dr_grid   <- matrix(cdr, nrow = nticks - 1L, ncol = 1L)
 capacity  <- as.integer(calc_capacity_cdr(br_grid, dr_grid, N0, safety_factor = 1))
@@ -52,91 +45,70 @@ cat(sprintf("capacity (no-reclaim calc_capacity)       = %s slots  (%.1fx more)\
 
 # ── exponential life table for crude (age-independent) mortality at the CDR ─────────
 # Constant hazard h = -log(1 - CDR/1000) per year gives an exponential lifespan, so the
-# per-capita death rate is ~CDR at every age. Build the cumulative-deaths curve a KM
-# estimator samples ages at death from (used for both initial agents and newborns).
+# per-capita death rate is ~CDR at every age. The KM estimator samples ages at death from
+# the cumulative-deaths curve (used for both initial agents and newborns).
 max_age   <- 200L
 h_year    <- -log(1 - cdr / 1000)
 surv      <- exp(-h_year * (0:max_age))           # l(a) = exp(-h a)
 cohort    <- 1e7
-cumulative_deaths <- round((1 - surv) * cohort)   # life table: deaths by age (memoryless)
+cumulative_deaths <- round((1 - surv) * cohort)
 km        <- kaplan_meier_estimator(cumulative_deaths)
 
-# ── people: per-agent arrays allocated to the squash-aware capacity ─────────────────
-people <- new.env()
-people$count    <- N0
-people$capacity <- capacity
-people$state    <- allocate_scalar("u8",  capacity)
-people$nodeid   <- allocate_scalar("u16", capacity)
-people$timer    <- allocate_scalar("u16", capacity)
-people$dob      <- allocate_scalar("i32", capacity)   # date of birth (negative = born before t0)
-people$dod      <- allocate_scalar("u32", capacity)   # absolute tick of death
+# ── per-tick series recorded by the step_exit callback (env so the closure can write) ─
+# `track$live[i]` / `track$active[i]` hold the living population and the active agent count
+# (people$count) at census slice i-1; `births` / `deaths` are per-interval flows.
+track <- new.env()
+track$live   <- numeric(nticks); track$live[1]   <- N0
+track$active <- numeric(nticks); track$active[1] <- N0
+track$births <- numeric(nticks - 1L)
+track$deaths <- numeric(nticks - 1L)
 
-# Initial agents: ages from the exponential stationary structure (younger more common),
-# everyone starts Susceptible; reserved slots (state 0 = S, nodeid 0) are inert until a
-# birth activates them. dob = -age; dod = current tick (0) + a memoryless remaining lifespan
-# drawn (conditioned on the current age) from the KM life table.
-# Cap initial ages to 90 years: the exponential tail can exceed the life table's range,
-# and centenarians are vanishingly rare anyway.
-age_days     <- pmin(as.integer(floor(stats::rexp(N0, rate = h_year / 365))), 90L * 365L)
-age_at_death <- km$predict_age_at_death(age_days, -1L)   # -1L: full life table
-people$state$set(rep(states[["S"]], capacity))
-people$nodeid$set(rep(0L, capacity))
-people$dob$set(c(-age_days, rep(0L, capacity - N0)))
-people$dod$set(c(as.integer(age_at_death - age_days), rep(0L, capacity - N0)))
-
-# ── nodes: a single-node census (M and S; no disease) + birth/death flows ───────────
-n_nodes <- 1L
-nodes <- new.env()
-nodes$M <- allocate_vector("i32", nticks, n_nodes)
-nodes$S <- allocate_vector("i32", nticks, n_nodes)
-nodes$N <- allocate_vector("i32", nticks, n_nodes)
-zeros <- rep(0L, (nticks - 1L) * n_nodes)
-nodes$M$set(c(0L,  zeros))
-nodes$S$set(c(N0,  zeros))
-nodes$N$set(c(N0,  zeros))
-nodes$birth_rate <- values_map(cbr / 1000 / 365, nticks, n_nodes)   # per person per day
-
-# Per-tick series we record for the plots.
-live_pop  <- numeric(nticks)        # living agents (M + S census)  -- one per recorded tick
-active    <- numeric(nticks)        # people$count (live + not-yet-squashed dead slots)
-births_d  <- numeric(nticks - 1L)
-deaths_d  <- numeric(nticks - 1L)
-live_pop[1] <- N0; active[1] <- N0
-placeholder <- dist_constant(7)     # step_si needs an inf-duration arg; unused (no E here)
-
-# ── the 100-year loop ───────────────────────────────────────────────────────────────
-pb <- utils::txtProgressBar(min = 0L, max = nticks - 1L, style = 3)
-every <- max(1L, (nticks - 1L) %/% 100L)
-for (tick in seq_len(nticks - 1L)) {
-  t <- tick - 1L
-  carry_forward_states(list(nodes$M, nodes$S), t, total = nodes$N)
-  # M -> S waning (step_si also does E -> I, but there is no E here; onset is 0).
-  prog <- step_si(people$state, people$timer, people$nodeid, people$count, n_nodes, placeholder)
-  move_count(nodes$M, nodes$S, prog$waned, t)
-  # Births: CBR newborns into M, each with a maternal timer and a KM date of death.
-  b <- births(people$state, people$timer, people$nodeid, people$dob, people$dod,
-              people$count, n_nodes, nodes$birth_rate, maternal_duration, km, t)
-  people$count <- b$count
-  move_count(NULL, nodes$M, b$born, t)
-  births_d[tick] <- sum(b$born)
-  # Crude mortality: retire agents whose dod has arrived; decrement their compartments.
-  d <- mortality(people$state, people$dod, people$nodeid, people$count, n_nodes, t)
-  move_count(nodes$M, NULL, d$m, t); move_count(nodes$S, NULL, d$s, t)
-  deaths_d[tick] <- sum(d$m + d$s)
-  # Once a year, reclaim the slots of the dead so the active count tracks the LIVING count
-  # instead of growing toward the cumulative-births total. squash() compacts every
-  # per-agent Column by the same alive mask and updates people$count; the census is
-  # aggregate and untouched.
-  if (tick %% squash_every == 0L) people$count <- squash(people)
-  live_pop[tick + 1L] <- sum(nodes$M$values()[tick + 1L, ], nodes$S$values()[tick + 1L, ])
-  active[tick + 1L]   <- people$count
-  if (tick %% every == 0L || tick == nticks - 1L) utils::setTxtProgressBar(pb, tick)
-}
-close(pb)
+# ── run the 100-year demographic model through run_model() ──────────────────────────
+timing <- system.time(
+  model <- run_model(
+    scenario = data.frame(population = N0), model = "SI", nticks = nticks, r0 = 0,
+    infectious_period = dist_constant(7),     # unused: r0 = 0 means no transmission
+    capacity = capacity, extra_states = "M", seed = 1L, progress = TRUE,
+    init = function(m) {
+      cap <- m$people$capacity
+      m$people$dob <- allocate_scalar("i32", cap)        # date of birth (negative = before t0)
+      m$people$dod <- allocate_scalar("u32", cap)        # absolute tick of death
+      m$nodes$birth_rate <- values_map(cbr / 1000 / 365, nticks, m$nodes$count)
+      # Initial ages from the exponential stationary structure (capped at 90 years, beyond
+      # the life table's reach); dod = now + a memoryless remaining lifespan from the table.
+      age_days     <- pmin(as.integer(floor(stats::rexp(N0, rate = h_year / 365))), 90L * 365L)
+      age_at_death <- km$predict_age_at_death(age_days, -1L)
+      m$people$dob$set(c(-age_days, integer(cap - N0)))
+      m$people$dod$set(c(as.integer(age_at_death - age_days), integer(cap - N0)))
+    },
+    step_exit = function(m) {
+      t <- m$tick; bi <- t + 1L; idx <- t + 2L
+      # Births: CBR newborns into M (maternal timer + a KM date of death). run_model wanes
+      # M -> S each tick (the "M" extra state), so we only ADD newborns here.
+      b <- births(m$people$state, m$people$timer, m$people$nodeid, m$people$dob, m$people$dod,
+                  m$people$count, m$nodes$count, m$nodes$birth_rate, maternal_duration, km, t)
+      m$people$count <- b$count
+      move_count(NULL, m$nodes$M, b$born, t)
+      track$births[bi] <- sum(b$born)
+      # Crude mortality: retire agents whose dod has arrived; decrement their compartments
+      # (only S, M, and the unused I are populated here).
+      d <- mortality(m$people$state, m$people$dod, m$people$nodeid, m$people$count, m$nodes$count, t)
+      move_count(m$nodes$M, NULL, d$m, t)
+      move_count(m$nodes$S, NULL, d$s, t)
+      move_count(m$nodes$I, NULL, d$i, t)
+      track$deaths[bi] <- sum(d$m + d$s + d$i)
+      # Once a year, reclaim the slots of the dead so the active count tracks the LIVING
+      # count instead of growing toward the cumulative-births total.
+      if (bi %% squash_every == 0L) m$people$count <- squash(m$people)
+      track$live[idx]   <- sum(m$nodes$M$values()[idx, ], m$nodes$S$values()[idx, ])
+      track$active[idx] <- m$people$count
+    }))
+cat(sprintf("\nrun took %.1f s\n", timing[["elapsed"]]))
 
 # ── report ────────────────────────────────────────────────────────────────────────
+live_pop <- track$live; active <- track$active; births_d <- track$births; deaths_d <- track$deaths
 person_years <- sum(live_pop) / 365
-cat(sprintf("\nliving population: %s -> %s over %d years (net growth %.2fx)\n",
+cat(sprintf("living population: %s -> %s over %d years (net growth %.2fx)\n",
             format(N0, big.mark = ","), format(round(live_pop[nticks]), big.mark = ","),
             years, live_pop[nticks] / N0))
 cat(sprintf("total births = %s, total deaths = %s\n",
