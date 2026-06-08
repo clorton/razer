@@ -79,6 +79,13 @@ predicts zero — the expected near-critical behavior.
   applies a one-time pulse vaccination mid-epidemic (S→R), and records a custom
   under-five-by-node report each tick with `bincount_where()`. Plots baseline vs.
   intervention.
+- **`compare_models.R`** — runs `SIR`, `SIRS`, `SEIR`, and `SEIRS` through `run_model()` on
+  the same population (1,000,000), duration (365 days), and transmission parameters
+  (R0 = 2.5, infectious & incubation periods `gamma(140, 0.05)` ≈ 7 days), so only the
+  compartment structure and waning differ. Trajectories are coloured by compartment
+  (S blue, E orange, I red, R green) and styled by model (solid / dashed / dotted /
+  long-dash); the waning models (SIRS, SEIRS) show recurrent epidemic waves while SIR/SEIR
+  settle after one. Produces an overlay plot and a per-compartment 2×2 panel.
 - **`long_run_squash.R`** — a 100-year demographic run (1,000,000 initial agents, CBR 30,
   CDR 15) that stays within a bounded agent array by reclaiming dead slots with `squash()`
   once a year. The array is sized with `calc_capacity_cdr()` (the peak-living bound, ~9.1M
