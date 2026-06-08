@@ -90,7 +90,6 @@ impl Distribution {
     /// use the internal sampler with an explicit, reusable RNG for performance.
     ///
     /// @return A single numeric (double) draw from the distribution.
-    /// @export
     fn sample_one(&self) -> f64 {
         self.sample(&mut crate::rng::single_rng())
     }
@@ -103,7 +102,6 @@ impl Distribution {
     ///
     /// @param n Number of samples to draw; must be non-negative.
     /// @return A numeric (double) vector of length `n`.
-    /// @export
     fn sample_n(&self, n: i32) -> Vec<f64> {
         assert!(n >= 0, "n must be non-negative, got {n}");
         let mut rng = crate::rng::single_rng();

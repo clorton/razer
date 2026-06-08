@@ -254,7 +254,7 @@ fn step_sirs(
 /// For each agent in `from_state`, decrements its u16 `timer`; on expiry the agent moves
 /// to `to_state` (timer left at 0). Returns the per-node count of transitions. Compose
 /// these (downstream-first) to build models beyond the named menagerie; apply the counts
-/// with `move_count`. Generalizes the M→S / R→S / I→{S,R} legs.
+/// with `move_count`. Generalizes the M→S / R→S / I→S or I→R legs.
 ///
 /// @param state,timer,nodeid,count,n_nodes  As in [step_si()].
 /// @param from_state Integer state code an agent must occupy to be eligible.

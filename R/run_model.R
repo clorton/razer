@@ -88,7 +88,7 @@
 #'   * `$people` — the agent arrays (`state`, `nodeid`, `timer`, plus `count`/`capacity`).
 #'   * `$nodes` — per-tick census Columns (`S`, and `E`/`I`/`R` as applicable), `N`, the
 #'     `foi`, and the per-interval flows: `incidence` (new infections, all models),
-#'     `onset` (E→I, `SE*` models), `recovery` (I→{S,R}, models with an I-exit), and
+#'     `onset` (E→I, `SE*` models), `recovery` (I to S or R, models with an I-exit), and
 #'     `waning` (R→S, `SIRS`/`SEIRS`) — each an `n_nodes`-wide, time-major Column.
 #'   * `$network` — the coupling weights as a 2-D f64 [Column] (`n_nodes x n_nodes`,
 #'     column-major), built once from the `network` matrix and read by `calc_foi` each tick.

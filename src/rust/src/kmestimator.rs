@@ -149,7 +149,6 @@ impl KaplanMeierEstimator {
     /// @examples
     /// km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
     /// km$predict_year_of_death(c(40L, 50L, 60L), -1L)
-    /// @export
     fn predict_year_of_death(&self, ages_years: Vec<i32>, max_year: i32) -> Vec<i32> {
         let max_year = self.resolve_max_year(max_year);
         let total_deaths = self.cd[max_year + 1];
@@ -183,7 +182,6 @@ impl KaplanMeierEstimator {
     /// @examples
     /// km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
     /// km$predict_age_at_death(c(40L, 50L, 60L) * 365L, -1L)
-    /// @export
     fn predict_age_at_death(&self, ages_days: Vec<i32>, max_year: i32) -> Vec<i32> {
         let max_year = self.resolve_max_year(max_year);
         let total_deaths = self.cd[max_year + 1];
@@ -205,7 +203,6 @@ impl KaplanMeierEstimator {
 
     /// The cumulative-deaths-by-year table (without the internal leading zero).
     /// @return A numeric vector of length equal to the number of years.
-    /// @export
     fn cumulative_deaths(&self) -> Vec<f64> {
         self.cd[1..].iter().map(|&x| x as f64).collect()
     }

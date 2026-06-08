@@ -27,18 +27,12 @@ Number of elements in the array.
 \subsection{return}{
 An integer length.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{dtype}}{
 The element data type as a string (e.g. \code{"u8"}, \code{"f32"}).
 \subsection{return}{
 A length-1 character vector.
-}
-\subsection{export}{
-
 }
 }
 
@@ -58,9 +52,6 @@ slice-major, R matrices are column-major) — inexpensive, inspection-only.
 \subsection{return}{
 A numeric vector (or matrix) — integer or double — of \code{length()} elements.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{fill}}{
@@ -73,9 +64,6 @@ becomes \code{2}); out-of-range values wrap per Rust's \code{as} cast.
 \describe{
 \item{\code{value}}{A single numeric value to broadcast across the array.}
 }}
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{set}}{
@@ -89,9 +77,6 @@ e.g. writing per-agent node assignments or seeding initial states from R.
 \describe{
 \item{\code{values}}{A numeric vector of length \code{length()}.}
 }}
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{col}}{
@@ -108,9 +93,6 @@ valid \code{slot} is 0 (the whole vector).
 \subsection{return}{
 A numeric vector of length \code{slice_len}.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{set_col}}{
@@ -125,9 +107,6 @@ slice — a derived population total) without rewriting the whole buffer.
 \item{\code{slot}}{  0-based column index, less than the number of columns.}
 \item{\code{values}}{A numeric vector of length \code{slice_len}.}
 }}
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{squash}}{
@@ -145,9 +124,6 @@ does exactly this across a people environment. Only valid for a 1-D (scalar) Col
 }}
 \subsection{return}{
 The number of kept elements (an integer); elements past it are left as-is.
-}
-\subsection{export}{
-
 }
 }
 }

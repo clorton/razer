@@ -562,7 +562,7 @@ step_sirs <- function(state, timer, nodeid, count, n_nodes, inf_duration, imm_du
 #' For each agent in `from_state`, decrements its u16 `timer`; on expiry the agent moves
 #' to `to_state` (timer left at 0). Returns the per-node count of transitions. Compose
 #' these (downstream-first) to build models beyond the named menagerie; apply the counts
-#' with `move_count`. Generalizes the M→S / R→S / I→{S,R} legs.
+#' with `move_count`. Generalizes the M→S / R→S / I→S or I→R legs.
 #'
 #' @param state,timer,nodeid,count,n_nodes  As in [step_si()].
 #' @param from_state Integer state code an agent must occupy to be eligible.
@@ -741,9 +741,6 @@ births <- function(state, timer, nodeid, dob, dod, count, n_nodes, birth_rate, m
 #' \subsection{return}{
 #'A single numeric (double) draw from the distribution.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `sample_n`}{
@@ -759,9 +756,6 @@ births <- function(state, timer, nodeid, dob, dod, count, n_nodes, birth_rate, m
 #'}}
 #' \subsection{return}{
 #'A numeric (double) vector of length `n`.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'
@@ -797,18 +791,12 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #' \subsection{return}{
 #'An integer length.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `dtype`}{
 #'The element data type as a string (e.g. `"u8"`, `"f32"`).
 #' \subsection{return}{
 #'A length-1 character vector.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'
@@ -828,9 +816,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #' \subsection{return}{
 #'A numeric vector (or matrix) — integer or double — of `length()` elements.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `fill`}{
@@ -843,9 +828,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'\describe{
 #'\item{`value`}{A single numeric value to broadcast across the array.}
 #'}}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `set`}{
@@ -859,9 +841,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'\describe{
 #'\item{`values`}{A numeric vector of length `length()`.}
 #'}}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `col`}{
@@ -878,9 +857,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #' \subsection{return}{
 #'A numeric vector of length `slice_len`.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `set_col`}{
@@ -895,9 +871,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'\item{`slot`}{  0-based column index, less than the number of columns.}
 #'\item{`values`}{A numeric vector of length `slice_len`.}
 #'}}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `squash`}{
@@ -915,9 +888,6 @@ Distribution$sample_n <- function(n) .Call(wrap__Distribution__sample_n, self, n
 #'}}
 #' \subsection{return}{
 #'The number of kept elements (an integer); elements past it are left as-is.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'
@@ -962,9 +932,6 @@ Column$squash <- function(keep) .Call(wrap__Column__squash, self, keep)
 #' \subsection{return}{
 #'A single integer bin index in `0..n_bins()`.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `sample_n`}{
@@ -980,18 +947,12 @@ Column$squash <- function(keep) .Call(wrap__Column__squash, self, keep)
 #' \subsection{return}{
 #'An integer vector of length `n` of bin indices in `0..n_bins()`.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `n_bins`}{
 #'The number of bins.
 #' \subsection{return}{
 #'An integer.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'
@@ -1000,9 +961,6 @@ Column$squash <- function(keep) .Call(wrap__Column__squash, self, keep)
 #' \subsection{return}{
 #'A numeric scalar (the sum may exceed R's integer range).
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `alias`}{
@@ -1010,18 +968,12 @@ Column$squash <- function(keep) .Call(wrap__Column__squash, self, keep)
 #' \subsection{return}{
 #'An integer vector of length `n_bins()`.
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `probs`}{
 #'The per-bin own-mass thresholds (out of `total()`). For inspection.
 #' \subsection{return}{
 #'A numeric vector of length `n_bins()`.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'
@@ -1069,9 +1021,6 @@ AliasedDistribution$probs <- function() .Call(wrap__AliasedDistribution__probs, 
 #' \subsection{return}{
 #'An integer vector of predicted years of death (same length as input).
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `predict_age_at_death`}{
@@ -1091,18 +1040,12 @@ AliasedDistribution$probs <- function() .Call(wrap__AliasedDistribution__probs, 
 #' \subsection{return}{
 #'An integer vector of predicted ages at death in days (same length).
 #'}
-#' \subsection{export}{
-#'
-#'}
 #'}
 #'
 #'\subsection{Method `cumulative_deaths`}{
 #'The cumulative-deaths-by-year table (without the internal leading zero).
 #' \subsection{return}{
 #'A numeric vector of length equal to the number of years.
-#'}
-#' \subsection{export}{
-#'
 #'}
 #'}
 #'

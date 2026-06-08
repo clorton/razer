@@ -24,9 +24,6 @@ Draw a single bin index (0-based) using a thread-local RNG.
 \subsection{return}{
 A single integer bin index in \verb{0..n_bins()}.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{sample_n}}{
@@ -42,18 +39,12 @@ generating a national-scale population in one call is cheap.
 \subsection{return}{
 An integer vector of length \code{n} of bin indices in \verb{0..n_bins()}.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{n_bins}}{
 The number of bins.
 \subsection{return}{
 An integer.
-}
-\subsection{export}{
-
 }
 }
 
@@ -62,9 +53,6 @@ The total weight (sum of the original counts).
 \subsection{return}{
 A numeric scalar (the sum may exceed R's integer range).
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{alias}}{
@@ -72,18 +60,12 @@ The alias table (0-based partner bin per bin, or -1 for none). For inspection.
 \subsection{return}{
 An integer vector of length \code{n_bins()}.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{probs}}{
 The per-bin own-mass thresholds (out of \code{total()}). For inspection.
 \subsection{return}{
 A numeric vector of length \code{n_bins()}.
-}
-\subsection{export}{
-
 }
 }
 }

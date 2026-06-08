@@ -31,9 +31,6 @@ survival to that age (Kaplan–Meier). Ages must be in \verb{0..=max_year}.
 \subsection{return}{
 An integer vector of predicted years of death (same length as input).
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{predict_age_at_death}}{
@@ -53,18 +50,12 @@ be \verb{< (max_year + 1) * 365}.
 \subsection{return}{
 An integer vector of predicted ages at death in days (same length).
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{cumulative_deaths}}{
 The cumulative-deaths-by-year table (without the internal leading zero).
 \subsection{return}{
 A numeric vector of length equal to the number of years.
-}
-\subsection{export}{
-
 }
 }
 }

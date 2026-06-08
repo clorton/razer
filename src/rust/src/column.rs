@@ -245,14 +245,12 @@ impl Column {
 impl Column {
     /// Number of elements in the array.
     /// @return An integer length.
-    /// @export
     fn length(&self) -> i32 {
         self.len() as i32
     }
 
     /// The element data type as a string (e.g. `"u8"`, `"f32"`).
     /// @return A length-1 character vector.
-    /// @export
     fn dtype(&self) -> String {
         self.dtype_enum().name().to_string()
     }
@@ -270,7 +268,6 @@ impl Column {
     /// slice-major, R matrices are column-major) — inexpensive, inspection-only.
     ///
     /// @return A numeric vector (or matrix) — integer or double — of `length()` elements.
-    /// @export
     fn values(&self) -> Robj {
         let (ns, sl) = (self.n_slices, self.slice_len);
         // Scalar / single-slice: copy in natural order, return a plain vector.
@@ -291,7 +288,6 @@ impl Column {
     /// becomes `2`); out-of-range values wrap per Rust's `as` cast.
     ///
     /// @param value A single numeric value to broadcast across the array.
-    /// @export
     fn fill(&mut self, value: f64) {
         match &mut self.data {
             Storage::I8(v)  => v.iter_mut().for_each(|e| *e = value as i8),
@@ -312,7 +308,6 @@ impl Column {
     /// e.g. writing per-agent node assignments or seeding initial states from R.
     ///
     /// @param values A numeric vector of length `length()`.
-    /// @export
     fn set(&mut self, values: Robj) {
         // Accept either an R integer or double vector; read both as f64 then cast.
         let vals: Vec<f64> = if let Some(s) = values.as_real_slice() {
@@ -347,7 +342,6 @@ impl Column {
     ///
     /// @param slot 0-based column index, less than the number of columns.
     /// @return A numeric vector of length `slice_len`.
-    /// @export
     fn col(&self, slot: i32) -> Robj {
         assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
         let slot = slot as usize;
@@ -364,7 +358,6 @@ impl Column {
     ///
     /// @param slot   0-based column index, less than the number of columns.
     /// @param values A numeric vector of length `slice_len`.
-    /// @export
     fn set_col(&mut self, slot: i32, values: Robj) {
         assert!(slot >= 0, "`slot` must be non-negative, got {slot}");
         let slot = slot as usize;
@@ -405,7 +398,6 @@ impl Column {
     /// @param keep A logical vector whose length is at most the column length (typically
     ///   the active agent count).
     /// @return The number of kept elements (an integer); elements past it are left as-is.
-    /// @export
     fn squash(&mut self, keep: Robj) -> i32 {
         assert_eq!(self.n_slices, 1, "squash is only valid for a 1-D (scalar) Column");
         let k = keep.as_logical_slice().expect("`keep` must be a logical vector");

@@ -36,9 +36,6 @@ use the internal sampler with an explicit, reusable RNG for performance.
 \subsection{return}{
 A single numeric (double) draw from the distribution.
 }
-\subsection{export}{
-
-}
 }
 
 \subsection{Method \code{sample_n}}{
@@ -54,9 +51,6 @@ makes it practical to validate the sampler against large empirical samples
 }}
 \subsection{return}{
 A numeric (double) vector of length \code{n}.
-}
-\subsection{export}{
-
 }
 }
 }

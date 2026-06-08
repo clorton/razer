@@ -11,3 +11,7 @@
 ^examples$
 ^CHANGELOG\.md$
 ^tmp$
+^worldwide$
+^\.claude$
+^razer_.*\.tar\.gz$
+^.*\.Rcheck$

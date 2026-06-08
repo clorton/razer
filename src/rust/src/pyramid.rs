@@ -65,7 +65,6 @@ impl AliasedDistribution {
     /// Draw a single bin index (0-based) using a thread-local RNG.
     ///
     /// @return A single integer bin index in `0..n_bins()`.
-    /// @export
     fn sample_one(&self) -> i32 {
         self.sample_index(&mut rng::single_rng())
     }
@@ -77,7 +76,6 @@ impl AliasedDistribution {
     ///
     /// @param n Number of samples to draw; must be non-negative.
     /// @return An integer vector of length `n` of bin indices in `0..n_bins()`.
-    /// @export
     fn sample_n(&self, n: i32) -> Vec<i32> {
         assert!(n >= 0, "n must be non-negative, got {n}");
         let n = n as usize;
@@ -94,28 +92,24 @@ impl AliasedDistribution {
 
     /// The number of bins.
     /// @return An integer.
-    /// @export
     fn n_bins(&self) -> i32 {
         self.alias.len() as i32
     }
 
     /// The total weight (sum of the original counts).
     /// @return A numeric scalar (the sum may exceed R's integer range).
-    /// @export
     fn total(&self) -> f64 {
         self.total as f64
     }
 
     /// The alias table (0-based partner bin per bin, or -1 for none). For inspection.
     /// @return An integer vector of length `n_bins()`.
-    /// @export
     fn alias(&self) -> Vec<i32> {
         self.alias.clone()
     }
 
     /// The per-bin own-mass thresholds (out of `total()`). For inspection.
     /// @return A numeric vector of length `n_bins()`.
-    /// @export
     fn probs(&self) -> Vec<f64> {
         self.probs.iter().map(|&p| p as f64).collect()
     }

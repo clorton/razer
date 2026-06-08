@@ -78,7 +78,7 @@ Invisibly, the \code{model} environment, with:
 \item \verb{$people} — the agent arrays (\code{state}, \code{nodeid}, \code{timer}, plus \code{count}/\code{capacity}).
 \item \verb{$nodes} — per-tick census Columns (\code{S}, and \code{E}/\code{I}/\code{R} as applicable), \code{N}, the
 \code{foi}, and the per-interval flows: \code{incidence} (new infections, all models),
-\code{onset} (E→I, \verb{SE*} models), \code{recovery} (I→{S,R}, models with an I-exit), and
+\code{onset} (E→I, \verb{SE*} models), \code{recovery} (I to S or R, models with an I-exit), and
 \code{waning} (R→S, \code{SIRS}/\code{SEIRS}) — each an \code{n_nodes}-wide, time-major Column.
 \item \verb{$network} — the coupling weights as a 2-D f64 \link{Column} (\verb{n_nodes x n_nodes},
 column-major), built once from the \code{network} matrix and read by \code{calc_foi} each tick.

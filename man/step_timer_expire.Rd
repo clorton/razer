@@ -20,5 +20,5 @@ An integer vector of per-node transition counts (length \code{n_nodes}).
 For each agent in \code{from_state}, decrements its u16 \code{timer}; on expiry the agent moves
 to \code{to_state} (timer left at 0). Returns the per-node count of transitions. Compose
 these (downstream-first) to build models beyond the named menagerie; apply the counts
-with \code{move_count}. Generalizes the M→S / R→S / I→{S,R} legs.
+with \code{move_count}. Generalizes the M→S / R→S / I→S or I→R legs.
 }
