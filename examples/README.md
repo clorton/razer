@@ -62,16 +62,23 @@ predicts zero — the expected near-critical behavior.
 
 ## Other examples
 
-- **`simple_sir.R`** — a spatial SIR over the England & Wales measles patches: builds a
-  distance matrix, a radiation-model coupling network, seeds infections, and runs the
-  Column SIR loop with constant-population vital dynamics.
-- **`endemic_sir.R`** — a two-patch endemic SIR sustained by vital turnover plus periodic
-  importations; the susceptible fraction settles at `1/R0`.
-- **`endemic_sir_seasonal.R`** — the endemic SIR with a gentle (±10%) annual sinusoid on
-  transmission, producing phase-locked annual epidemic waves.
-- **`engwal_measles.R`** — a full single-patch M-S-E-I-R measles model with maternal
-  immunity, a Kaplan–Meier date of death per agent, natural mortality, births into M, and
-  a CBR-sized agent capacity, run for 20 years.
+All examples build their model through **`run_model()`**; the ones with vital dynamics,
+importation, growth, or extra compartments add that behaviour through `run_model`'s
+callbacks (`init` / `step_enter` / `step_update` / `step_exit`) and its `capacity` /
+`extra_states` arguments, rather than a hand-wired per-tick loop.
+
+- **`simple_sir.R`** — a spatial SIR over the England & Wales measles patches (radiation-
+  model coupling network), run via `run_model("SIR", network=...)` with constant-population
+  vital dynamics in a `step_exit` callback (`constant_pop_vitals_sir`).
+- **`endemic_sir.R`** — a two-patch endemic SIR via `run_model()` with constant-pop vital
+  turnover plus periodic importations (`step_exit` callback; `capacity` reserves slots for
+  the imports); the susceptible fraction settles at `1/R0`.
+- **`endemic_sir_seasonal.R`** — the endemic SIR with a gentle (±10%) annual sinusoid passed
+  to `run_model`'s `seasonality`, producing phase-locked annual epidemic waves.
+- **`engwal_measles.R`** — a full single-patch M-S-E-I-R measles model via
+  `run_model("SEIR", extra_states = "M", capacity = ...)`: run_model tracks the maternal `M`
+  compartment and applies its M→S waning, while births-into-M and Kaplan–Meier natural
+  mortality run in a `step_exit` callback. Twenty years; recurrent epidemic waves.
 - **`aged_population.R`** — builds a realistic age-structured population from a pyramid
   (alias sampler) and assigns each agent a Kaplan–Meier age at death.
 - **`model_callbacks.R`** — extends `run_model()` through its `init` / `step_enter` /
