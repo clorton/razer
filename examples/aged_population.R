@@ -90,10 +90,15 @@ cat(sprintf("  implied life expectancy at birth e0 = %.1f yr; prediction took %.
             e0, timing[["elapsed"]]))
 
 # ── 4. plot the population age structure and the age-at-death distribution ──────────
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 plot_path <- file.path(out_dir, "aged_population.png")
-grDevices::png(plot_path, width = 1100, height = 850, res = 120)
+open_png(plot_path, width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 
 # Top: the generated age distribution (the pyramid we sampled into being).
@@ -112,5 +117,5 @@ graphics::abline(v = e0, col = "grey30", lty = 2)            # life expectancy a
 graphics::legend("topleft", legend = sprintf("e0 = %.1f yr", e0), bty = "n", lty = 2)
 
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote age / age-at-death plot to %s\n", plot_path))
+close_png()
+if (to_png) cat(sprintf("wrote age / age-at-death plot to %s\n", plot_path))

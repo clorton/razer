@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Examples / docs
+- **Examples now play well in RStudio.** Every example script is device-aware — under
+  `Rscript` it writes its PNG to `examples/output/` as before, but `source()`d in an
+  interactive RStudio session it draws to the Plots pane instead (a small
+  `to_png`/`open_png`/`close_png` helper). Added `examples/notebooks/getting_started.Rmd`,
+  an R Notebook (R's Jupyter analog) walking through `run_model()`, a model comparison, and
+  a callback-based intervention with inline plots; and an "Running in RStudio" section in
+  the examples README.
+- **Richer example visuals:** `simple_sir.R` (previously plotless) now plots the national
+  S/I/R trajectory and a geographic England & Wales attack-rate map; `quarantine.R` gained a
+  2×2 figure (infectious baseline-vs-quarantine, cumulative cases averted, the Q
+  compartment, and per-test detections).
+- **`quarantine.R` enhancements:** the testing programme now runs on a configurable schedule
+  (`test_period`, default fortnightly) and is **leaky** — each infectious agent is detected
+  with probability `sensitivity` (default 0.80; 20% false negatives, no false positives).
+
 ### Added
 - **`run_model()` gains `capacity` and `extra_states`** so the callbacks can express
   vital-dynamics and extra-compartment models, not just the closed-population menagerie:

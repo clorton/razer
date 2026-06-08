@@ -67,6 +67,11 @@ km_attack_fraction <- function(R0) {
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -80,7 +85,7 @@ cat(sprintf("run_seir_traj: %s agents x %d ticks took %.3f s (%.1f ns/agent-tick
             format(N, big.mark = ","), nticks_traj, traj_time[["elapsed"]],
             1e9 * traj_time[["elapsed"]] / (as.numeric(N) * nticks_traj)))
 
-png(file.path(out_dir, "seir_trajectories.png"), width = 1000, height = 650, res = 110)
+open_png(file.path(out_dir, "seir_trajectories.png"), width = 1000, height = 650, res = 110)
 ticks <- 0:(nrow(traj) - 1L)
 matplot(ticks, traj, type = "l", lwd = 2.5, lty = 1,
         col = c("#2c7fb8", "#e6a000", "#d7301f", "#238b45"),
@@ -89,7 +94,7 @@ matplot(ticks, traj, type = "l", lwd = 2.5, lty = 1,
                        format(N, big.mark = ","), R0_traj))
 legend("right", legend = c("S", "E", "I", "R"), bty = "n", lwd = 2.5,
        col = c("#2c7fb8", "#e6a000", "#d7301f", "#238b45"))
-dev.off()
+close_png()
 
 # ── 2. attack-fraction sweep vs Kermack–McKendrick ───────────────────────────────
 R0_grid <- seq(0.5, 4.0, by = 0.25)
@@ -103,7 +108,7 @@ cat(sprintf("attack-fraction sweep: %d run_model runs (N = %s, %d ticks each) to
             sweep_time[["elapsed"]]))
 km_af <- vapply(R0_grid, km_attack_fraction, numeric(1))
 
-png(file.path(out_dir, "seir_attack_fraction.png"), width = 1000, height = 650, res = 110)
+open_png(file.path(out_dir, "seir_attack_fraction.png"), width = 1000, height = 650, res = 110)
 plot(R0_grid, km_af, type = "l", lwd = 2.5, col = "black",
      ylim = c(0, 1), xlab = expression(R[0]), ylab = "attack fraction",
      main = "Attack fraction: razer SEIR vs Kermack–McKendrick")
@@ -112,7 +117,7 @@ abline(v = 1, lty = 3, col = "grey50")
 legend("bottomright", bty = "n",
        legend = c("Kermack-McKendrick  A = 1 - exp(-R0 A)", "razer run_model() simulation"),
        lwd = c(2.5, NA), pch = c(NA, 19), col = c("black", "#d7301f"))
-dev.off()
+close_png()
 
 # ── comparison table ─────────────────────────────────────────────────────────────
 cmp <- data.frame(
@@ -125,4 +130,4 @@ cat("\nAttack fraction: simulated SEIR vs Kermack-McKendrick\n")
 print(cmp, row.names = FALSE)
 cat(sprintf("\nMax absolute error for R0 >= 1.5: %.4f\n",
             max(cmp$abs_error[cmp$R0 >= 1.5])))
-cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))
+if (to_png) cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))

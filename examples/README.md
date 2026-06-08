@@ -5,6 +5,23 @@ Runnable example scripts for the `razer` package. Install the package first
 example with `Rscript`. Only base-R graphics are used (no extra dependencies). Plots
 are written to `examples/output/`.
 
+## Running in RStudio
+
+The `.R` scripts are **device-aware**: run via `Rscript` they write their figures to
+`examples/output/` (as above); `source()`d in an interactive RStudio session they instead
+draw to the **Plots** pane (no file written). That switch is the small `to_png <-
+!interactive()` / `open_png()` / `close_png()` helper near the top of each script — so the
+same file works both ways. (You can also step through a script chunk-by-chunk: RStudio
+treats `# ---- label ----` / `# ==== … ====` comment lines as foldable code sections, run
+with *Ctrl/Cmd+Alt+T*.)
+
+For the **Jupyter-notebook experience** — prose, code, and inline plots in one document —
+use an **R Notebook / R Markdown** (`.Rmd`) or **Quarto** (`.qmd`) file, R's analog of a
+`.ipynb`. `notebooks/getting_started.Rmd` is a runnable example: open it in RStudio and
+click *Run* on a chunk (*Ctrl/Cmd+Shift+Enter*) to see output appear beneath it, or
+*Preview*/*Knit* to render the whole notebook to HTML. (Rendering needs the `rmarkdown`
+package and pandoc, both bundled with RStudio.)
+
 All examples are built on the **Column kernels** (`allocate_scalar` / `allocate_vector`
 buffers advanced by `calc_foi`, the `transmission` / `transmission_si` kernels, the
 `step_si` / `step_sir` / `step_sirs` step kernels, `carry_forward_states` + `move_count`,

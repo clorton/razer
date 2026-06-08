@@ -118,6 +118,11 @@ run_measles_model <- function(scenario, network, nticks,
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -160,7 +165,7 @@ age_dist <- aliased_distribution(age_counts)
 km       <- kaplan_meier_estimator(cumulative_deaths)
 
 # Plot the age distribution curve and its life table for review.
-grDevices::png(file.path(out_dir, "engwal_measles_age_curve.png"),
+open_png(file.path(out_dir, "engwal_measles_age_curve.png"),
                width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 plot(age_years, age_counts / sum(age_counts), type = "h", lwd = 3, col = "steelblue",
@@ -170,8 +175,8 @@ plot(age_years, cumulative_deaths / cohort, type = "l", lwd = 2, col = "firebric
      xlab = "age (years)", ylab = "cumulative fraction dead",
      main = "Implied life table (Kaplan-Meier source: cumulative deaths by age)")
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote age-distribution / life-table plot to %s\n",
+close_png()
+if (to_png) cat(sprintf("wrote age-distribution / life-table plot to %s\n",
             file.path(out_dir, "engwal_measles_age_curve.png")))
 
 # Initial conditions: immune fraction 1 - 1/R0 (herd-immunity threshold), small I seed.
@@ -194,7 +199,7 @@ S <- rowSums(result$nodes$S$values()); R <- rowSums(result$nodes$R$values())
 M <- rowSums(result$nodes$M$values()); I <- rowSums(result$nodes$I$values())
 incidence_daily <- rowSums(result$nodes$incidence$values())
 
-grDevices::png(file.path(out_dir, "engwal_measles_dynamics.png"),
+open_png(file.path(out_dir, "engwal_measles_dynamics.png"),
                width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 
@@ -214,6 +219,6 @@ plot(years[-1], incidence_daily, type = "l", col = "firebrick",
      main = "Daily incidence (S -> E exposures)")
 graphics::abline(v = 0:20, col = "grey90")
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote measles dynamics plot to %s\n",
+close_png()
+if (to_png) cat(sprintf("wrote measles dynamics plot to %s\n",
             file.path(out_dir, "engwal_measles_dynamics.png")))

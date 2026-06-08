@@ -123,13 +123,18 @@ cat(sprintf("peak active slots = %s of %s capacity (%.0f%% utilization); peak li
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 yrs <- (seq_len(nticks) - 1L) / 365
 
 # ── plot 1: living population vs the two capacity bounds ─────────────────────────────
-grDevices::png(file.path(out_dir, "long_run_squash_population.png"), width = 1050, height = 680, res = 110)
+open_png(file.path(out_dir, "long_run_squash_population.png"), width = 1050, height = 680, res = 110)
 plot(yrs, live_pop / 1e6, type = "l", lwd = 2.5, col = "#238b45",
      ylim = c(0, cap_naive / 1e6 * 1.05), xlab = "year", ylab = "agents (millions)",
      main = "100-year run: living population vs. agent-array capacity bounds")
@@ -139,10 +144,10 @@ legend("topleft", bty = "n", lwd = c(2.5, 2, 2), lty = c(1, 2, 3),
        col = c("#238b45", "#d7301f", "grey40"),
        legend = c("living population", "calc_capacity_cdr (allocated, with squash)",
                   "calc_capacity (needed without reclaim)"))
-grDevices::dev.off()
+close_png()
 
 # ── plot 2: active slots (squash sawtooth) vs living population vs capacity ──────────
-grDevices::png(file.path(out_dir, "long_run_squash_utilization.png"), width = 1050, height = 680, res = 110)
+open_png(file.path(out_dir, "long_run_squash_utilization.png"), width = 1050, height = 680, res = 110)
 matplot(yrs, cbind(active = active / 1e6, living = live_pop / 1e6), type = "l", lty = 1, lwd = 2,
         col = c("#2c7fb8", "#238b45"), ylim = c(0, capacity / 1e6 * 1.05),
         xlab = "year", ylab = "agents (millions)",
@@ -152,15 +157,15 @@ legend("topleft", bty = "n", lwd = c(2, 2, 2), lty = c(1, 1, 2),
        col = c("#2c7fb8", "#238b45", "#d7301f"),
        legend = c("active slots (people$count; resets each year at squash)",
                   "living population", "allocated capacity"))
-grDevices::dev.off()
+close_png()
 
 # ── plot 3: daily births and deaths ─────────────────────────────────────────────────
-grDevices::png(file.path(out_dir, "long_run_squash_vitals.png"), width = 1050, height = 680, res = 110)
+open_png(file.path(out_dir, "long_run_squash_vitals.png"), width = 1050, height = 680, res = 110)
 matplot(yrs[-1], cbind(births = births_d, deaths = deaths_d), type = "l", lty = 1, lwd = 1.5,
         col = c("#2c7fb8", "#d7301f"), xlab = "year", ylab = "events / day",
         main = sprintf("Daily births (CBR %d) and deaths (CDR %d) over the growing population", cbr, cdr))
 legend("topleft", legend = c("births", "deaths"), bty = "n", lwd = 1.5,
        col = c("#2c7fb8", "#d7301f"))
-grDevices::dev.off()
+close_png()
 
-cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))
+if (to_png) cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))

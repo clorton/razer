@@ -73,6 +73,11 @@ for (k in seq_len(n_nodes))
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -81,7 +86,7 @@ node_col   <- c("#1b9e77", "#7570b3", "#d95f02")     # nodes 0, 1, 2
 Vm <- m$nodes$V$values() / 1e3                       # thousands
 Im <- m$nodes$I$values() / 1e3
 
-grDevices::png(file.path(out_dir, "sia_campaigns.png"), width = 1100, height = 850, res = 120)
+open_png(file.path(out_dir, "sia_campaigns.png"), width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 
 # Top: vaccinated (V) per node — the two targeted nodes step up at each annual campaign,
@@ -101,5 +106,5 @@ graphics::abline(v = campaign_ticks / 365, col = "grey85", lty = 3)
 legend("topright", legend = c("node 0", "node 1", "node 2 (control)"),
        col = node_col, lwd = 2, bty = "n")
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote SIA plot to %s\n", file.path(out_dir, "sia_campaigns.png")))
+close_png()
+if (to_png) cat(sprintf("wrote SIA plot to %s\n", file.path(out_dir, "sia_campaigns.png")))

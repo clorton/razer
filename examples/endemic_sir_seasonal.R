@@ -102,6 +102,11 @@ cat(sprintf("run_endemic_sir (seasonal) completed in %.3f s\n", timing[["elapsed
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -109,7 +114,7 @@ I_total <- rowSums(result$nodes$I$values())
 years   <- (seq_len(nticks) - 1L) / 365
 
 plot_path <- file.path(out_dir, "endemic_sir_seasonal.png")
-grDevices::png(plot_path, width = 1100, height = 850, res = 120)
+open_png(plot_path, width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 plot(years, seasonality, type = "l", col = "darkorange", lwd = 2,
      xlab = "time (years)", ylab = "beta multiplier",
@@ -120,8 +125,8 @@ plot(years, I_total, type = "l", col = "firebrick", lwd = 2,
      main = "Infectious prevalence (summed over patches): annual epidemic waves")
 graphics::abline(v = 0:10, col = "grey85")
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote seasonal trajectory plot to %s\n", plot_path))
+close_png()
+if (to_png) cat(sprintf("wrote seasonal trajectory plot to %s\n", plot_path))
 
 # Per-year peak and trough of total prevalence: the run should oscillate annually without
 # the trough collapsing to zero. `tapply(x, g, f)` applies `f` to `x` split by group `g`.

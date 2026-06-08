@@ -120,13 +120,18 @@ years   <- (seq_len(nticks) - 1L) / 365
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # S and R are ~10^5 while I is ~10^1, so a shared linear axis would flatten I — stack two
 # panels and give I its own.
 plot_path <- file.path(out_dir, "endemic_sir_SIR.png")
-grDevices::png(plot_path, width = 1100, height = 850, res = 120)
+open_png(plot_path, width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 plot(years, S_total, type = "l", col = "steelblue", lwd = 2,
      ylim = range(0, S_total, R_total),
@@ -142,5 +147,5 @@ plot(years, I_total, type = "l", col = "firebrick", lwd = 2,
      main = "Endemic SIR: infectious prevalence")
 legend("topright", legend = "I", bty = "n", col = "firebrick", lwd = 2)
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote S/I/R trajectory plot to %s\n", plot_path))
+close_png()
+if (to_png) cat(sprintf("wrote S/I/R trajectory plot to %s\n", plot_path))

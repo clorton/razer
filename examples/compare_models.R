@@ -62,11 +62,16 @@ ticks <- 0:(nticks - 1L)
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # ── plot 1: all trajectories overlaid (colour = compartment, line type = model) ─────
-grDevices::png(file.path(out_dir, "compare_models.png"), width = 1150, height = 760, res = 120)
+open_png(file.path(out_dir, "compare_models.png"), width = 1150, height = 760, res = 120)
 graphics::par(mar = c(4.5, 4.5, 3, 1))
 plot(NA, xlim = c(0, nticks - 1L), ylim = c(0, N / 1e6),
      xlab = "day", ylab = "agents (millions)",
@@ -80,11 +85,11 @@ legend("top", title = "compartment", legend = names(col_comp), col = col_comp,
        lwd = 2, lty = 1, bty = "n", horiz = TRUE)
 legend("right", title = "model", legend = names(lty_model), col = "grey30",
        lwd = 2, lty = lty_model, bty = "n")
-grDevices::dev.off()
+close_png()
 
 # ── plot 2: one panel per compartment (the four models compared within each) ────────
 # Clearer than the overlay when curves cross; same colour/line-type scheme.
-grDevices::png(file.path(out_dir, "compare_models_panels.png"), width = 1150, height = 900, res = 120)
+open_png(file.path(out_dir, "compare_models_panels.png"), width = 1150, height = 900, res = 120)
 op <- graphics::par(mfrow = c(2L, 2L), mar = c(4, 4.2, 2.5, 1))
 for (comp in c("S", "E", "I", "R")) {
   have <- models[vapply(models, function(m) !is.null(traj[[m]][[comp]]), logical(1))]
@@ -98,7 +103,7 @@ for (comp in c("S", "E", "I", "R")) {
   legend("topright", have, col = "grey30", lwd = 2, lty = lty_model[have], bty = "n")
 }
 graphics::par(op)
-grDevices::dev.off()
+close_png()
 
 # ── summary ─────────────────────────────────────────────────────────────────────────
 cat("model    peak I (day)     final S      final R\n")
@@ -109,4 +114,4 @@ for (model in models) {
               format(round(tail(S, 1)), big.mark = ",", width = 9),
               if (is.null(R)) "       --" else format(round(tail(R, 1)), big.mark = ",", width = 9)))
 }
-cat(sprintf("\nPlots written to: %s\n", normalizePath(out_dir)))
+if (to_png) cat(sprintf("\nPlots written to: %s\n", normalizePath(out_dir)))

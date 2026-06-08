@@ -98,6 +98,11 @@ pulsed <- do.call(run_model, c(common, list(seed = 1L, init = init_ages,
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -105,37 +110,37 @@ ticks <- seq_len(nticks)
 
 # ── plot 1: infectious curve, baseline vs pulse ───────────────────────────────────
 Ib <- rowSums(base$nodes$I$values()); Ip <- rowSums(pulsed$nodes$I$values())
-png(file.path(out_dir, "model_callbacks_intervention.png"), width = 1000, height = 650, res = 110)
+open_png(file.path(out_dir, "model_callbacks_intervention.png"), width = 1000, height = 650, res = 110)
 matplot(ticks, cbind(baseline = Ib, pulse = Ip), type = "l", lwd = 2.5, lty = 1,
         col = c("#d7301f", "#2c7fb8"), xlab = "day", ylab = "infectious agents",
         main = "SEIR infectious curve: baseline vs a tick-60 pulse vaccination (40% of S)")
 abline(v = 60, lty = 3, col = "grey50")
 legend("topright", legend = c("baseline", "pulse @ day 60"), bty = "n", lwd = 2.5,
        col = c("#d7301f", "#2c7fb8"))
-dev.off()
+close_png()
 
 # ── plot 2: the custom callback-collected report (under-five population over time) ─
 u5 <- rowSums(base$nodes$under5_I$values())
-png(file.path(out_dir, "model_callbacks_under5.png"), width = 1000, height = 650, res = 110)
+open_png(file.path(out_dir, "model_callbacks_under5.png"), width = 1000, height = 650, res = 110)
 plot(ticks[-length(ticks)], u5, type = "l", lwd = 2.5, col = "#238b45",
      xlab = "day", ylab = "agents under 5 years",
      main = "Under-fives per day, recorded in a step_exit callback via bincount_where()")
-dev.off()
+close_png()
 
 # ── plot 3: full baseline S/E/I/R trajectories ────────────────────────────────────
 traj <- cbind(S = rowSums(base$nodes$S$values()), E = rowSums(base$nodes$E$values()),
               I = Ib, R = rowSums(base$nodes$R$values()))
-png(file.path(out_dir, "model_callbacks_seir.png"), width = 1000, height = 650, res = 110)
+open_png(file.path(out_dir, "model_callbacks_seir.png"), width = 1000, height = 650, res = 110)
 matplot(ticks, traj, type = "l", lwd = 2.5, lty = 1,
         col = c("#2c7fb8", "#fdae61", "#d7301f", "#238b45"),
         xlab = "day", ylab = "agents", main = "Baseline SEIR trajectories")
 legend("right", legend = c("S", "E", "I", "R"), bty = "n", lwd = 2.5,
        col = c("#2c7fb8", "#fdae61", "#d7301f", "#238b45"))
-dev.off()
+close_png()
 
 cat(sprintf("baseline:  peak I = %s on day %d;  final R = %s\n",
             format(max(Ib), big.mark = ","), which.max(Ib) - 1L,
             format(tail(traj[, "R"], 1), big.mark = ",")))
 cat(sprintf("pulse:     peak I = %s on day %d\n",
             format(max(Ip), big.mark = ","), which.max(Ip) - 1L))
-cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))
+if (to_png) cat(sprintf("Plots written to: %s\n", normalizePath(out_dir)))

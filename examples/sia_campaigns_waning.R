@@ -87,6 +87,11 @@ cat(sprintf("  total V->S waning events over the run: %s; final vaccinated (V) p
 args       <- commandArgs(trailingOnly = FALSE)
 file_arg   <- grep("^--file=", args, value = TRUE)
 script_dir <- if (length(file_arg)) dirname(sub("^--file=", "", file_arg)) else "."
+# Device-aware: write a PNG when run non-interactively (Rscript); draw to the active
+# device (e.g. RStudio's Plots pane) when sourced interactively.
+to_png    <- !interactive()
+open_png  <- function(path, ...) if (to_png) grDevices::png(path, ...)
+close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -95,7 +100,7 @@ node_col   <- c("#1b9e77", "#7570b3", "#d95f02")
 Vm <- m$nodes$V$values() / 1e3
 Sm <- m$nodes$S$values() / 1e3
 
-grDevices::png(file.path(out_dir, "sia_campaigns_waning.png"), width = 1100, height = 850, res = 120)
+open_png(file.path(out_dir, "sia_campaigns_waning.png"), width = 1100, height = 850, res = 120)
 op <- graphics::par(mfrow = c(2L, 1L), mar = c(4, 4.5, 2.5, 1))
 
 # Top: vaccinated (V) per node — a SAWTOOTH (campaign jumps, then waning decay) in the two
@@ -116,5 +121,5 @@ graphics::abline(v = campaign_ticks / 365, col = "grey85", lty = 3)
 legend("right", legend = c("node 0", "node 1", "node 2 (control)"),
        col = node_col, lwd = 2, bty = "n")
 graphics::par(op)
-grDevices::dev.off()
-cat(sprintf("wrote SIA-with-waning plot to %s\n", file.path(out_dir, "sia_campaigns_waning.png")))
+close_png()
+if (to_png) cat(sprintf("wrote SIA-with-waning plot to %s\n", file.path(out_dir, "sia_campaigns_waning.png")))
