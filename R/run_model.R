@@ -68,6 +68,17 @@
 #' @param seed Optional integer seed; if supplied, [set_seed()] is called for a
 #'   reproducible run.
 #' @param progress If `TRUE`, draw a text progress bar.
+#' @param capacity Optional agent-array capacity (>= the total initial population, the
+#'   default). Reserve extra slots — e.g. `calc_capacity()` / `calc_capacity_cdr()` — so a
+#'   callback can grow the population with `births` or `import_infections` (which activate
+#'   reserved slots). With the default `capacity`, the population is closed (no growth).
+#' @param extra_states Optional character vector of compartment names from [laser_states()]
+#'   beyond the model's own (e.g. `"M"` for maternal immunity). Each is allocated a census
+#'   Column, carried forward, totalled into `N`, and seeded at tick 0 from the agents'
+#'   states. For `"M"`, run_model also applies the step kernels' built-in M→S waning each
+#'   tick (recording it in the `waning_m` flow); other extra states are inert until a
+#'   callback moves agents into/out of them. Getting agents *into* an extra compartment
+#'   (e.g. `births` into `M`) is done in a callback.
 #' @param init Optional `function(model)` called once after the model is built and before
 #'   the loop. Use it to add per-agent property [Column]s, add a compartment census Column
 #'   (append it to `model$carry` to have it carried forward), set agent states/timers, etc.
@@ -86,10 +97,11 @@
 #'   transmission). Receives the `model` environment (with `model$tick` set).
 #' @return Invisibly, the `model` environment, with:
 #'   * `$people` — the agent arrays (`state`, `nodeid`, `timer`, plus `count`/`capacity`).
-#'   * `$nodes` — per-tick census Columns (`S`, and `E`/`I`/`R` as applicable), `N`, the
-#'     `foi`, and the per-interval flows: `incidence` (new infections, all models),
-#'     `onset` (E→I, `SE*` models), `recovery` (I to S or R, models with an I-exit), and
-#'     `waning` (R→S, `SIRS`/`SEIRS`) — each an `n_nodes`-wide, time-major Column.
+#'   * `$nodes` — per-tick census Columns (`S`, `E`/`I`/`R` as applicable, any `extra_states`
+#'     such as `M`), `N`, the `foi`, and the per-interval flows: `incidence` (new infections,
+#'     all models), `onset` (E→I, `SE*` models), `recovery` (I to S or R, models with an
+#'     I-exit), `waning` (R→S, `SIRS`/`SEIRS`), and `waning_m` (M→S, when `M` is an extra
+#'     state) — each an `n_nodes`-wide, time-major Column.
 #'   * `$network` — the coupling weights as a 2-D f64 [Column] (`n_nodes x n_nodes`,
 #'     column-major), built once from the `network` matrix and read by `calc_foi` each tick.
 #'   * `$carry` — the list of census Columns carried forward each tick.
@@ -105,6 +117,7 @@
 run_model <- function(scenario, model, nticks, r0, infectious_period,
                       incubation_period = NULL, immunity_period = NULL,
                       network = NULL, seasonality = 1, seed = NULL, progress = FALSE,
+                      capacity = NULL, extra_states = NULL,
                       init = NULL, step_enter = NULL, step_update = NULL, step_exit = NULL) {
   model <- toupper(model)
   valid <- c("SI", "SEI", "SIS", "SEIS", "SIR", "SEIR", "SIRS", "SEIRS")
@@ -128,11 +141,33 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   n       <- sum(pops)
   n_nodes <- nrow(scenario)
 
+  # Agent-array capacity: defaults to the closed-population size `n`. Pass a larger value
+  # (e.g. from calc_capacity / calc_capacity_cdr) to reserve slots that a callback can
+  # activate with `births` / `import_infections` — i.e. to let the population GROW.
+  cap <- if (is.null(capacity)) n else .whole_nonneg(capacity, "capacity")
+  if (length(cap) != 1L) stop("`capacity` must be a single number")
+  if (cap < n) stop(sprintf("`capacity` (%d) must be >= total initial population (%d)", cap, n))
+
   has_E   <- grepl("E", model)
   has_R   <- grepl("R", model)
   waning  <- model %in% c("SIRS", "SEIRS")             # I->R sets an immunity timer, R->S
   has_step_clearance <- !model %in% c("SI", "SEI")     # I leaves I (recovery/clearance)
   absorbing <- if (model %in% c("SIS", "SEIS")) states[["S"]] else states[["R"]]
+
+  # Extra compartments beyond the model's own S/E/I/R (e.g. a maternal-immunity "M"). Each
+  # is tracked in the node census, carried forward, and totalled into N. For "M" the step
+  # kernels already compute the M->S waning leg, so run_model applies it (and records the
+  # `waning_m` flow); other extra states are inert until a callback moves agents in/out.
+  base_comp <- c("S", "I", if (has_E) "E", if (has_R) "R")
+  extra_states <- if (is.null(extra_states)) character(0) else as.character(extra_states)
+  if (length(extra_states)) {
+    if (!all(extra_states %in% names(states)))
+      stop("`extra_states` must be state names from laser_states() (e.g. \"M\")")
+    if (any(extra_states %in% c(base_comp, "D")))
+      stop("`extra_states` must not repeat the model's own compartments or include D")
+    if (anyDuplicated(extra_states)) stop("`extra_states` must be unique")
+  }
+  has_M <- "M" %in% extra_states
 
   # Warn about inputs the chosen model does not use — usually a typo'd model name or a
   # wrong expectation (e.g. an `E` column or `incubation_period` passed to SIR).
@@ -165,11 +200,13 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   # ── people: state (u8), node id (u16), timer (u16) ─────────────────────────────────
   people <- new.env()
   people$count    <- n
-  people$capacity <- n                                  # closed population: no growth
-  people$state    <- allocate_scalar("u8",  n)
-  people$nodeid   <- allocate_scalar("u16", n)
-  people$timer    <- allocate_scalar("u16", n)
-  people$nodeid$set(rep(seq_len(n_nodes) - 1L, times = pops))
+  people$capacity <- cap                                # cap > n leaves reserved growth slots
+  people$state    <- allocate_scalar("u8",  cap)
+  people$nodeid   <- allocate_scalar("u16", cap)
+  people$timer    <- allocate_scalar("u16", cap)
+  # Active agents get their node id; reserved slots [n, cap) pad with node 0 (state S, see
+  # below) until a birth/import activates them.
+  people$nodeid$set(c(rep(seq_len(n_nodes) - 1L, times = pops), integer(cap - n)))
 
   # ── flexible per-state seeding (item 3) ────────────────────────────────────────────
   # Seed any of the model's E / I / R compartments that the scenario supplies a column
@@ -186,8 +223,8 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
     stop("seeded E + I + R exceeds a node's population in at least one node")
 
   offsets <- cumsum(c(0L, pops[-n_nodes]))             # 0-based start of each node's block
-  state0  <- rep(states[["S"]], n)
-  timer0  <- integer(n)
+  state0  <- rep(states[["S"]], cap)                   # reserved slots default to S / timer 0
+  timer0  <- integer(cap)
   for (k in seq_len(n_nodes)) {
     used <- 0L
     for (st in seed_states) {
@@ -212,18 +249,21 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nodes$I <- allocate_vector("i32", nticks, n_nodes)
   if (has_E) nodes$E <- allocate_vector("i32", nticks, n_nodes)
   if (has_R) nodes$R <- allocate_vector("i32", nticks, n_nodes)
+  for (s in extra_states) nodes[[s]] <- allocate_vector("i32", nticks, n_nodes)  # e.g. M
   nodes$N <- allocate_vector("i32", nticks, n_nodes)
   nodes$foi <- allocate_vector("f64", nticks - 1L, n_nodes)
   nodes$incidence <- allocate_vector("i32", nticks - 1L, n_nodes)              # new infections (all)
   if (has_E)              nodes$onset    <- allocate_vector("i32", nticks - 1L, n_nodes)  # E->I
   if (has_step_clearance) nodes$recovery <- allocate_vector("i32", nticks - 1L, n_nodes)  # I-exit
   if (waning)             nodes$waning   <- allocate_vector("i32", nticks - 1L, n_nodes)  # R->S
+  if (has_M)              nodes$waning_m <- allocate_vector("i32", nticks - 1L, n_nodes)  # M->S
   nodes$beta        <- values_map(beta,        nticks, n_nodes)
   nodes$seasonality <- values_map(seasonality, nticks, n_nodes)
 
   # The census compartments carried forward each tick (and totalled into N). A user can
   # append a compartment Column here in `init` to have it carried too.
-  carry <- c(list(nodes$S, nodes$I), if (has_E) list(nodes$E), if (has_R) list(nodes$R))
+  carry <- c(list(nodes$S, nodes$I), if (has_E) list(nodes$E), if (has_R) list(nodes$R),
+             lapply(extra_states, function(s) nodes[[s]]))
 
   # ── bundle into the model environment + run the init callback ──────────────────────
   m <- new.env()
@@ -243,7 +283,9 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nodes$I$set_col(0L, bincount_where(nid, n_nodes, st, "eq", states[["I"]], cnt))
   if (has_E) nodes$E$set_col(0L, bincount_where(nid, n_nodes, st, "eq", states[["E"]], cnt))
   if (has_R) nodes$R$set_col(0L, bincount_where(nid, n_nodes, st, "eq", states[["R"]], cnt))
-  nodes$N$set_col(0L, bincount_where(nid, n_nodes, st, "ne", 255, cnt))        # alive
+  for (s in extra_states)
+    nodes[[s]]$set_col(0L, bincount_where(nid, n_nodes, st, "eq", states[[s]], cnt))
+  nodes$N$set_col(0L, bincount_where(nid, n_nodes, st, "ne", 255, cnt))        # alive (state != D)
 
   # ── per-tick closures ───────────────────────────────────────────────────────────
   progress_step <- function(t) {
@@ -261,6 +303,9 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
       to <- if (identical(absorbing, states[["S"]])) nodes$S else nodes$R
       move_count(nodes$I, to, r$cleared, t); nodes$recovery$set_col(t, r$cleared)            # I->{S,R}
     }
+    # All step kernels lead with the maternal M->S leg; apply it when an M compartment is
+    # registered (run_model otherwise discards `waned`, since the menagerie has no M).
+    if (has_M) { move_count(nodes$M, nodes$S, r$waned, t); nodes$waning_m$set_col(t, r$waned) }
   }
   transmit <- function(t) {
     if (model == "SI") {

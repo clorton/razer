@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Added
+- **`run_model()` gains `capacity` and `extra_states`** so the callbacks can express
+  vital-dynamics and extra-compartment models, not just the closed-population menagerie:
+  - `capacity` (default = initial population) reserves agent-array slots a `step_*`
+    callback can activate with `births` / `import_infections` — i.e. lets the population
+    grow (size it with `calc_capacity()` / `calc_capacity_cdr()`).
+  - `extra_states` (e.g. `"M"`) registers compartments beyond the model's own S/E/I/R:
+    each is allocated a census Column, carried forward, totalled into `N`, and seeded at
+    tick 0 from agent states. For `"M"`, run_model applies the step kernels' built-in M→S
+    waning each tick (recording the `waning_m` flow) — closing the desync that discarding
+    `waned` would otherwise cause.
+  These unblock expressing constant-population vitals, importation, growth, and a maternal
+  `M` compartment through `run_model()` + callbacks (see the converted `simple_sir.R`,
+  `endemic_sir*.R`, `long_run_squash.R`).
+
 ### Fixed (red-team follow-up)
 - **`run_model` input validation & honesty.** Rejects a non-finite/negative `r0`; rejects
   `NA`/`Inf`/fractional/negative `population` and `E`/`I`/`R` seed columns with clear

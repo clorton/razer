@@ -183,3 +183,47 @@ test_that("run_model warns about inputs the chosen model does not use", {
                            nticks = 5L, r0 = 2, infectious_period = 6, incubation_period = 4),
                  "incubation_period")
 })
+
+test_that("run_model reserves agent-array capacity for population growth", {
+  # Given a capacity larger than the initial population
+  # When run_model builds the model
+  # Then the people arrays are allocated to capacity with count == n (reserved slots a
+  #      callback can later activate); capacity < n is rejected. Failure would mean the
+  #      closed-population allocation can't grow.
+  m <- run_model(data.frame(population = 1000L, I = 10L), "SIR", nticks = 5L, r0 = 2,
+                 infectious_period = 6, capacity = 4000L)
+  expect_equal(m$people$capacity, 4000L)
+  expect_equal(m$people$count, 1000L)
+  expect_equal(m$people$state$length(), 4000L)          # arrays sized to capacity
+  expect_error(run_model(data.frame(population = 1000L), "SIR", nticks = 5L, r0 = 2,
+                         infectious_period = 6, capacity = 500L), "capacity")
+})
+
+test_that("run_model tracks an extra M compartment and applies its M->S waning", {
+  # Given an SIR model with M registered and 100 agents seeded into M (maternal timer 5)
+  # When run for 20 ticks (closed population)
+  # Then nodes$M and the waning_m flow exist, M is seeded at tick 0, the maternally immune
+  #      wane to S (waning_m > 0), and the living total S+I+R+M is conserved AND equals N
+  #      (no vital dynamics, so M->S is purely internal). Failure would mean the extra
+  #      compartment isn't carried/applied — the desync the menagerie step kernels' `waned`
+  #      leg would otherwise cause.
+  st <- laser_states()
+  scen <- data.frame(population = 1000L, I = 10L)
+  m <- run_model(scen, "SIR", nticks = 20L, r0 = 2, infectious_period = 6, seed = 1L,
+                 extra_states = "M",
+                 init = function(model) {
+                   s <- model$people$state$values(); s[901:1000] <- st[["M"]]; model$people$state$set(s)
+                   tm <- model$people$timer$values(); tm[901:1000] <- 5L; model$people$timer$set(tm)
+                 })
+  expect_false(is.null(m$nodes$M)); expect_false(is.null(m$nodes$waning_m))
+  expect_equal(m$nodes$M$values()[1L, 1L], 100L)         # 100 seeded into M at tick 0
+  expect_equal(m$nodes$S$values()[1L, 1L], 1000L - 10L - 100L)
+  expect_gt(sum(m$nodes$waning_m$values()), 0)           # maternal waning M->S occurred
+  living <- rowSums(m$nodes$S$values()) + rowSums(m$nodes$I$values()) +
+            rowSums(m$nodes$R$values()) + rowSums(m$nodes$M$values())
+  expect_true(all(living == 1000L))                      # conserved (closed pop)
+  expect_true(all(living == rowSums(m$nodes$N$values())))# N agrees (no within-tick vitals)
+
+  expect_error(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6,
+                         extra_states = "I"), "compartments")   # can't repeat a model state
+})

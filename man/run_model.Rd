@@ -16,6 +16,8 @@ run_model(
   seasonality = 1,
   seed = NULL,
   progress = FALSE,
+  capacity = NULL,
+  extra_states = NULL,
   init = NULL,
   step_enter = NULL,
   step_update = NULL,
@@ -52,6 +54,19 @@ reproducible run.}
 
 \item{progress}{If \code{TRUE}, draw a text progress bar.}
 
+\item{capacity}{Optional agent-array capacity (>= the total initial population, the
+default). Reserve extra slots — e.g. \code{calc_capacity()} / \code{calc_capacity_cdr()} — so a
+callback can grow the population with \code{births} or \code{import_infections} (which activate
+reserved slots). With the default \code{capacity}, the population is closed (no growth).}
+
+\item{extra_states}{Optional character vector of compartment names from \code{\link[=laser_states]{laser_states()}}
+beyond the model's own (e.g. \code{"M"} for maternal immunity). Each is allocated a census
+Column, carried forward, totalled into \code{N}, and seeded at tick 0 from the agents'
+states. For \code{"M"}, run_model also applies the step kernels' built-in M→S waning each
+tick (recording it in the \code{waning_m} flow); other extra states are inert until a
+callback moves agents into/out of them. Getting agents \emph{into} an extra compartment
+(e.g. \code{births} into \code{M}) is done in a callback.}
+
 \item{init}{Optional \verb{function(model)} called once after the model is built and before
 the loop. Use it to add per-agent property \link{Column}s, add a compartment census Column
 (append it to \code{model$carry} to have it carried forward), set agent states/timers, etc.
@@ -76,10 +91,11 @@ transmission). Receives the \code{model} environment (with \code{model$tick} set
 Invisibly, the \code{model} environment, with:
 \itemize{
 \item \verb{$people} — the agent arrays (\code{state}, \code{nodeid}, \code{timer}, plus \code{count}/\code{capacity}).
-\item \verb{$nodes} — per-tick census Columns (\code{S}, and \code{E}/\code{I}/\code{R} as applicable), \code{N}, the
-\code{foi}, and the per-interval flows: \code{incidence} (new infections, all models),
-\code{onset} (E→I, \verb{SE*} models), \code{recovery} (I to S or R, models with an I-exit), and
-\code{waning} (R→S, \code{SIRS}/\code{SEIRS}) — each an \code{n_nodes}-wide, time-major Column.
+\item \verb{$nodes} — per-tick census Columns (\code{S}, \code{E}/\code{I}/\code{R} as applicable, any \code{extra_states}
+such as \code{M}), \code{N}, the \code{foi}, and the per-interval flows: \code{incidence} (new infections,
+all models), \code{onset} (E→I, \verb{SE*} models), \code{recovery} (I to S or R, models with an
+I-exit), \code{waning} (R→S, \code{SIRS}/\code{SEIRS}), and \code{waning_m} (M→S, when \code{M} is an extra
+state) — each an \code{n_nodes}-wide, time-major Column.
 \item \verb{$network} — the coupling weights as a 2-D f64 \link{Column} (\verb{n_nodes x n_nodes},
 column-major), built once from the \code{network} matrix and read by \code{calc_foi} each tick.
 \item \verb{$carry} — the list of census Columns carried forward each tick.
