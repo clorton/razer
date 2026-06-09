@@ -290,3 +290,37 @@ test_that("a vaccinated state V can wane back to S via step_timer_expire in step
             rowSums(m$nodes$R$values()) + rowSums(m$nodes$V$values())
   expect_true(all(living == 10000L))                     # conserved through vaccinate + wane
 })
+
+test_that("run_model isolates uncoupled nodes and conserves each node's population", {
+  # Given a TWO-node SIR where only node 0 is seeded, and an all-zero coupling network
+  # When run for 60 ticks
+  # Then node 1 never gets infected (no coupling), node 0 has an epidemic, and EACH node's
+  #      S+I+R equals its own population at every tick. This is the first multi-node test of
+  #      the spatial path (per-node block seeding via `offsets`, the per-node census, and the
+  #      uncoupled calc_foi); failure would mean cross-node leakage or a per-node desync.
+  scen <- data.frame(population = c(5000L, 5000L), I = c(50L, 0L))
+  m <- run_model(scen, "SIR", nticks = 60L, r0 = 2.5, infectious_period = 8, seed = 1L)
+  S <- m$nodes$S$values(); I <- m$nodes$I$values(); R <- m$nodes$R$values()
+  expect_equal(ncol(S), 2L)
+  expect_true(all(S + I + R == 5000L))                   # each node conserves its own pop
+  expect_equal(I[1L, ], c(50L, 0L))                      # only node 0 seeded
+  expect_true(all(m$nodes$incidence$values()[, 2L] == 0L))   # node 1 never infected (no coupling)
+  expect_lt(S[nrow(S), 1L], S[1L, 1L])                   # node 0 had an epidemic
+  expect_equal(S[, 2L], rep(5000L, 60L))                 # node 1 fully susceptible throughout
+})
+
+test_that("run_model spreads infection between nodes through the coupling network", {
+  # Given the same two-node scenario (only node 0 seeded) but a network that exports a
+  #       fraction of node 0's force of infection to node 1
+  # When run
+  # Then node 1 — seeded with ZERO infectious — nonetheless acquires infections via coupling,
+  #      and the population is still conserved per node. Failure would mean calc_foi's network
+  #      redistribution (or the 2-D network Column wiring) is broken.
+  scen <- data.frame(population = c(5000L, 5000L), I = c(50L, 0L))
+  W <- matrix(0, 2, 2); W[1L, 2L] <- 0.25                # node 0 exports 25% of its FOI to node 1
+  m <- run_model(scen, "SIR", nticks = 120L, r0 = 3, infectious_period = 8, network = W, seed = 1L)
+  S <- m$nodes$S$values(); I <- m$nodes$I$values(); R <- m$nodes$R$values()
+  expect_true(all(S + I + R == 5000L))                   # per-node conservation holds with coupling
+  expect_gt(sum(m$nodes$incidence$values()[, 2L]), 0)    # node 1 infected only via the network
+  expect_lt(S[nrow(S), 2L], 5000L)                       # node 1's susceptibles were drawn down
+})

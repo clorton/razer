@@ -50,3 +50,29 @@ test_that("squash validates the keep length and the column shape", {
   twod <- allocate_vector("i32", 2L, 3L)
   expect_error(twod$squash(c(TRUE, FALSE)), "1-D")
 })
+
+test_that("squash compacts an over-allocated (capacity > count) population correctly", {
+  # Given a capacity-10 population with only 5 active agents, two of which (slots 2, 4) are
+  #       dead, and reserved slots 6-10 holding sentinel values
+  # When squash runs with the default (alive) mask — which is derived from only the first
+  #       `count` (= 5) agents
+  # Then the 3 living actives compact to the front of every column, count drops to 3, the
+  #      CAPACITY is unchanged (arrays not reallocated), and the reserved tail is irrelevant
+  #      to the result. This is exactly the long-run path (run_model + births + periodic
+  #      squash); failure would mean Column$squash mishandles a keep-mask shorter than the
+  #      allocated column, corrupting a growing-population run.
+  people <- new.env(); people$count <- 5L; people$capacity <- 10L
+  s <- rep(S, 10L); s[c(2L, 4L)] <- D_U8                 # actives 2 & 4 dead; tail 6-10 = S
+  people$state  <- allocate_scalar("u8",  10L); people$state$set(s)
+  people$timer  <- allocate_scalar("u16", 10L); people$timer$set(1:10)
+  people$nodeid <- allocate_scalar("u16", 10L); people$nodeid$set(0:9)
+
+  n <- squash(people)
+
+  expect_equal(n, 3L); expect_equal(people$count, 3L)
+  expect_equal(people$capacity, 10L)                     # capacity unchanged
+  expect_equal(people$state$length(), 10L)               # arrays not reallocated
+  expect_equal(people$state$values()[1:3],  rep(S, 3L))  # the 3 living actives (slots 1,3,5)
+  expect_equal(people$timer$values()[1:3],  c(1L, 3L, 5L))   # aligned across columns
+  expect_equal(people$nodeid$values()[1:3], c(0L, 2L, 4L))
+})

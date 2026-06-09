@@ -72,6 +72,27 @@ test_that("bincount_where rejects an unknown comparison op", {
   expect_error(bincount_where(nodeid, 1L, state, "approx", E, count = 3L), "op")
 })
 
+test_that("bincount_where implements all six comparison ops correctly", {
+  # Given a single group with properties 1..6 and a threshold of 3
+  # When each of the six ops (eq/ne/lt/le/gt/ge) is applied
+  # Then each count matches R's own comparison oracle. This pins the Rust op-parser against
+  #      a swap (e.g. le/lt or ge/gt) — only "eq"/"gt" were previously exercised, yet
+  #      run_model relies on "ne" and the API advertises all six. Failure means an op is
+  #      mis-mapped and would silently mis-count.
+  vals <- 1:6
+  prop  <- allocate_scalar("i32", 6L); prop$set(vals)
+  group <- allocate_scalar("u16", 6L); group$set(rep(0L, 6L))
+  thr <- 3
+  for (op in c("eq", "ne", "lt", "le", "gt", "ge")) {
+    oracle <- switch(op,
+      eq = sum(vals == thr), ne = sum(vals != thr),
+      lt = sum(vals <  thr), le = sum(vals <= thr),
+      gt = sum(vals >  thr), ge = sum(vals >= thr))
+    expect_equal(bincount_where(group, 1L, prop, op, thr, count = 6L), as.integer(oracle),
+                 info = paste("op", op))
+  }
+})
+
 test_that("bincount_where requires an explicit count (no capacity default)", {
   # Given a call that omits count
   # When bincount_where / bincount_where_wt is invoked
