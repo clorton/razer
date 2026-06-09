@@ -64,7 +64,7 @@ inf_period <- dist_gamma(2, 4)               # mean 8 ticks
 inf_period$sample_n(5L)
 ```
 
-Full models compose the per-tick kernels in a loop; see [`examples/`](examples/).
+Full models are assembled by `run_model()` (below) — or composed by hand from the per-tick kernels. See the [worked articles](https://clorton.github.io/razer/articles/) and [`examples/`](examples/).
 
 ## Architecture
 
@@ -86,25 +86,26 @@ with `calc_foi` placed **immediately before `transmission`** (no step kernel bet
 
 Each step kernel is a single pass branching on each agent's entry state, so a just-entered timed state is never decremented again the same tick. See `CLAUDE.md` for the full rationale and the per-model table.
 
-For the closed-population menagerie you usually don't wire this by hand: **`run_model(scenario, model, nticks, r0, …)`** builds the population, runs the correct per-tick loop and applies all census deltas, and returns a **`model` environment** (bundling `$people`, `$nodes`, `$network`, `$carry`) with per-node census and the `incidence` / `onset` / `recovery` / `waning` flows — e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0 = 2.5, infectious_period = 8, incubation_period = 5, seed = 1)`. It seeds any of the model's `E`/`I`/`R` states the scenario supplies, and takes optional `init` plus the per-tick callbacks `step_enter` (start) / `step_update` (between the step kernel and `calc_foi`) / `step_exit` (end) for extension (see `examples/model_callbacks.R`). The hand-wired examples below show what it does under the hood (and how to go beyond the menagerie with vital dynamics, importation, and maternal immunity).
+For the closed-population menagerie you usually don't wire this by hand: **`run_model(scenario, model, nticks, r0, …)`** builds the population, runs the correct per-tick loop and applies all census deltas, and returns a **`model` environment** (bundling `$people`, `$nodes`, `$network`, `$carry`) with per-node census and the `incidence` / `onset` / `recovery` / `waning` flows — e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0 = 2.5, infectious_period = 8, incubation_period = 5, seed = 1)`. It seeds any of the model's `E`/`I`/`R` states the scenario supplies, and takes optional `init` plus the per-tick callbacks `step_enter` (start) / `step_update` (between the step kernel and `calc_foi`) / `step_exit` (end) for extension (see `examples/model_callbacks.R`). The examples and articles show `run_model()` in action and how to go beyond the menagerie with vital dynamics, importation, and maternal immunity.
 
-## Worked examples
+## Examples and articles
 
-The [`examples/`](examples/) directory has runnable scripts (`Rscript examples/<name>.R`); plots are written to `examples/output/`.
+Every model ships as both a **runnable script** in [`examples/`](examples/)
+(`Rscript examples/<name>.R`; plots written to `examples/output/`) and a paired,
+annotated **teaching article** on the [package website](https://clorton.github.io/razer/articles/).
+Each article walks through the epidemiology, the razer code that builds the model, and
+how to customize or extend it:
 
-Two validate the simulated **attack fraction** against the **Kermack–McKendrick** final-size relation `A = 1 − exp(−R0·A)`, matching theory to within a few thousandths across the supercritical range — both with `R0 = beta · D`:
+- **[Getting started](https://clorton.github.io/razer/articles/getting_started.html)** — the `run_model()` workflow, a model comparison, and a callback-based intervention.
+- **[Epidemic final size](https://clorton.github.io/razer/articles/attack_fraction.html)** — validating the simulated attack fraction against the Kermack–McKendrick relation `A = 1 − exp(−R0·A)` (matched to within a few thousandths across the supercritical range, with `R0 = beta · D`).
+- **[Endemic dynamics](https://clorton.github.io/razer/articles/endemic_dynamics.html)** — the `S*/N = 1/R0` equilibrium, importation, and seasonal forcing.
+- **[Spatial metapopulations](https://clorton.github.io/razer/articles/spatial_metapopulation.html)** — migration networks and a spatial attack-rate map of England & Wales.
+- **[Demographics](https://clorton.github.io/razer/articles/demographics.html)** — realistic age pyramids and Kaplan–Meier dates of death.
+- **[Vital dynamics & measles](https://clorton.github.io/razer/articles/vital_dynamics_measles.html)** — births, natural mortality, and a maternal-immunity `M` state in a full M-S-E-I-R model.
+- **[Interventions](https://clorton.github.io/razer/articles/interventions.html)** — custom states and callbacks: vaccination campaigns (± waning) and quarantine.
+- **[Long runs & memory](https://clorton.github.io/razer/articles/long_runs_and_memory.html)** — capacity sizing and reclaiming dead slots with `squash()` over a century.
 
-**[`sir_attack_fraction.R`](examples/sir_attack_fraction.R) — SIR**
-
-![SIR S/I/R trajectories](man/figures/sir_trajectories.png)
-![SIR attack fraction vs Kermack–McKendrick](man/figures/sir_attack_fraction.png)
-
-**[`seir_attack_fraction.R`](examples/seir_attack_fraction.R) — SEIR**
-
-![SEIR S/E/I/R trajectories](man/figures/seir_trajectories.png)
-![SEIR attack fraction vs Kermack–McKendrick](man/figures/seir_attack_fraction.png)
-
-The rest build progressively richer models: `simple_sir.R` (spatial SIR over the England & Wales measles patches), `endemic_sir.R` / `endemic_sir_seasonal.R` (endemic and seasonally-forced SIR with vital dynamics and importations), `aged_population.R` (age structure + dates of death), and `engwal_measles.R` (a full M-S-E-I-R measles model with maternal immunity, births, and natural mortality). See [`examples/README.md`](examples/README.md).
+See [`examples/README.md`](examples/README.md) for the full script list and tips on running them in RStudio.
 
 ## Development
 

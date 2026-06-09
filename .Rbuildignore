@@ -9,6 +9,7 @@
 ^\.github$
 ^CLAUDE\.md$
 ^examples$
+^vignettes/articles$
 ^NEWS\.md$
 ^tmp$
 ^worldwide$
