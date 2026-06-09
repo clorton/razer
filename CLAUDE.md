@@ -1,5 +1,9 @@
 # razer — project notes for Claude
 
+> See **`AGENTS.md`** for the short, operational agent manual (build/test loop, repo map,
+> the kernel-ABI hard rules, and the finishing checklist). This file holds the detailed
+> modeling, commenting, build, and git conventions it references.
+
 ## Modeling convention: the Column kernels and per-tick ordering
 
 Models are composed from the **Column-based** per-tick kernels over `Column` buffers
