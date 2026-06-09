@@ -84,3 +84,14 @@ test_that("calc_capacity rejects invalid input", {
   expect_error(calc_capacity(br, c(1, 1), safety_factor = 7), "\\[0, 6\\]")  # bad SF
   expect_error(calc_capacity(c(1, 2, 3), 1), "2-D")                # not a 2-D grid
 })
+
+test_that("calc_capacity rejects NA / non-finite inputs with a clear message", {
+  # Given NA or Inf in the birth-rate grid or the initial population
+  # When calc_capacity is called
+  # Then it errors with a clear 'finite' message rather than the cryptic base-R
+  #      "missing value where TRUE/FALSE needed" that an unguarded comparison would raise.
+  br <- matrix(30, 100L, 1L); br_na <- br; br_na[1L] <- NA
+  expect_error(calc_capacity(br_na, 1e5), "finite")
+  expect_error(calc_capacity(matrix(Inf, 5L, 1L), 100), "finite")
+  expect_error(calc_capacity(br, NA), "finite")
+})

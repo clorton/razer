@@ -324,3 +324,53 @@ test_that("run_model spreads infection between nodes through the coupling networ
   expect_gt(sum(m$nodes$incidence$values()[, 2L]), 0)    # node 1 infected only via the network
   expect_lt(S[nrow(S), 2L], 5000L)                       # node 1's susceptibles were drawn down
 })
+
+test_that("run_model grows an open population via the births kernel within reserved capacity", {
+  # Given a capacity sized by calc_capacity() above the initial population, an init callback
+  #       adding dob/dod Columns + a birth-rate grid, and a step_exit callback that runs the
+  #       `births` kernel each tick (newborns into the maternal state M). No disease (r0 = 0)
+  #       and no mortality(), so the population only grows.
+  # When run for ~4 months at a high CBR
+  # Then the active agent count and the census N grow above the initial population yet stay
+  #       within the reserved capacity, N starts at the initial population, and the living
+  #       census (S + I + M) equals N at every tick. This is the end-to-end vital-dynamics
+  #       integration (run_model + capacity + births + move_count); failure would mean the
+  #       reserved-slot activation or the growing-census bookkeeping is broken.
+  pop <- 5000L; cbr <- 80; nticks <- 120L
+  br  <- matrix(cbr, nticks - 1L, 1L)
+  cap <- as.integer(calc_capacity(br, pop, safety_factor = 1))
+  expect_gt(cap, pop)                                     # capacity reserves growth room
+  mat_dur <- dist_normal(150, 20)                        # maternal timer ~ longer than the run
+  km <- kaplan_meier_estimator(round((1 - exp(-(0:120) / 80)) * 1e6))  # long-lived life table
+
+  m <- run_model(data.frame(population = pop), "SI", nticks = nticks, r0 = 0,
+                 infectious_period = dist_constant(7), capacity = cap,
+                 extra_states = "M", seed = 1L,
+                 init = function(model) {
+                   c0 <- model$people$capacity
+                   model$people$dob <- allocate_scalar("i32", c0)
+                   model$people$dod <- allocate_scalar("u32", c0)
+                   model$nodes$birth_rate <- values_map(cbr / 1000 / 365, nticks, 1L)
+                 },
+                 step_exit = function(model) {
+                   t <- model$tick
+                   b <- births(model$people$state, model$people$timer, model$people$nodeid,
+                               model$people$dob, model$people$dod, model$people$count, 1L,
+                               model$nodes$birth_rate, mat_dur, km, t)
+                   model$people$count <- b$count
+                   move_count(NULL, model$nodes$M, b$born, t)
+                 })
+
+  N <- rowSums(m$nodes$N$values())
+  expect_equal(N[1L], pop)                               # census starts at the initial pop
+  expect_gt(m$people$count, pop)                         # population grew (births activated slots)
+  expect_lte(m$people$count, cap)                        # stayed within reserved capacity
+  expect_gt(N[nticks], N[1L])                            # the node census grew too
+  expect_gt(sum(m$nodes$M$values()), 0)                  # newborns landed in M
+  living <- rowSums(m$nodes$S$values()) + rowSums(m$nodes$I$values()) + rowSums(m$nodes$M$values())
+  # N is totalled at the START of each interval (carry_forward), BEFORE step_exit's births
+  # land in column t+1 — so for an open population N lags the living census by exactly one
+  # tick: N[j+1] == living[j] (the documented step_exit census-lag). The census is otherwise
+  # fully consistent (every newborn is accounted for, just reflected in N one tick later).
+  expect_equal(N[-1L], living[-nticks])
+})

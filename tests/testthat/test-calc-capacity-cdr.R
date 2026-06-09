@@ -84,3 +84,34 @@ test_that("calc_capacity_cdr validates its inputs", {
   expect_error(calc_capacity_cdr(matrix(200, 100, 2), dr, c(1, 1), 1), "0, 100")
   expect_error(calc_capacity_cdr(br, dr, c(1, 1), safety_factor = 7), "0, 6")
 })
+
+test_that("calc_capacity_cdr is floored at the initial population (net-shrinking case)", {
+  # Given a net-SHRINKING projection (births << deaths), so exp(sum_b - credit*sum_d) < 1
+  # When calc_capacity_cdr estimates the capacity
+  # Then it is floored at the initial population: the peak SIMULTANEOUS living count is at
+  #      least the starting population (the peak is at t = 0 when the population only
+  #      shrinks). Failure would return a capacity too small to even hold the initial agents
+  #      (and run_model(capacity = ...) would then reject it).
+  nsteps <- 50L * 365L
+  br <- matrix(2,  nsteps, 1L)        # tiny births
+  dr <- matrix(40, nsteps, 1L)        # heavy deaths -> net shrink
+  expect_equal(calc_capacity_cdr(br, dr, initial_pop = 1e5, safety_factor = 0), 1e5)
+  # Two nodes: a shrinking node is floored while a growing node still grows above its pop.
+  br2 <- matrix(c(rep(2, nsteps), rep(40, nsteps)), ncol = 2L)
+  dr2 <- matrix(c(rep(40, nsteps), rep(2, nsteps)), ncol = 2L)
+  caps <- calc_capacity_cdr(br2, dr2, c(1e5, 1e5), safety_factor = 0)
+  expect_equal(caps[1L], 1e5)         # node 1 shrinks -> floored at initial pop
+  expect_gt(caps[2L], 1e5)            # node 2 grows -> above initial pop
+})
+
+test_that("calc_capacity_cdr rejects NA / non-finite rates and population", {
+  # Given NA / Inf in a rate grid or the initial population
+  # When calc_capacity_cdr is called
+  # Then it errors with a clear 'finite' message instead of a cryptic base-R comparison error.
+  br <- matrix(30, 100L, 1L); dr <- matrix(15, 100L, 1L)
+  br_na <- br; br_na[1L] <- NA
+  expect_error(calc_capacity_cdr(br_na, dr, 1e5), "finite")
+  dr_inf <- dr; dr_inf[1L] <- Inf
+  expect_error(calc_capacity_cdr(br, dr_inf, 1e5), "finite")
+  expect_error(calc_capacity_cdr(br, dr, NA), "finite")
+})

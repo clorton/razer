@@ -72,7 +72,9 @@ final-size relation `A = 1 − exp(−R0·A)` (SIR and SEIR attack fractions mat
 - **Sizing the agent array** — `calc_capacity` bounds the cumulative number ever born (use
   when slots are never reclaimed); `calc_capacity_cdr` bounds the **peak living** population
   for runs that reclaim dead slots with `squash`, so a century-long open run needs far fewer
-  slots than one per agent ever born.
+  slots than one per agent ever born. `calc_capacity_cdr` is floored at the initial
+  population (a net-shrinking projection can't report below the starting count), and both
+  functions now reject `NA` / non-finite rates and populations with a clear message.
 
 ## Spatial coupling
 

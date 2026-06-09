@@ -40,6 +40,8 @@ calc_capacity <- function(birthrates, initial_pop, safety_factor = 1) {
   if (inherits(birthrates, "Column")) birthrates <- birthrates$values()
   if (is.null(dim(birthrates)) || length(dim(birthrates)) != 2L)
     stop("`birthrates` must be a 2-D (nsteps x nnodes) matrix or a 2-D Column")
+  if (!is.numeric(birthrates) || anyNA(birthrates) || any(!is.finite(birthrates)))
+    stop("`birthrates` must be finite numeric (no NA / Inf)")
 
   initial_pop <- as.numeric(initial_pop)
   nnodes      <- ncol(birthrates)
@@ -48,6 +50,8 @@ calc_capacity <- function(birthrates, initial_pop, safety_factor = 1) {
   if (length(initial_pop) != nnodes)
     stop(sprintf("number of nodes in `birthrates` (%d) and `initial_pop` length (%d) must match",
                  nnodes, length(initial_pop)))
+  if (anyNA(initial_pop) || any(!is.finite(initial_pop)))
+    stop("`initial_pop` must be finite (no NA / Inf)")
   if (any(initial_pop < 0))
     stop("`initial_pop` values must be non-negative")
   if (any(birthrates < 0) || any(birthrates > 100))
@@ -86,6 +90,8 @@ calc_capacity <- function(birthrates, initial_pop, safety_factor = 1) {
   if (inherits(x, "Column")) x <- x$values()
   if (is.null(dim(x)) || length(dim(x)) != 2L)
     stop(sprintf("`%s` must be a 2-D (nsteps x nnodes) matrix or a 2-D Column", what))
+  if (!is.numeric(x) || anyNA(x) || any(!is.finite(x)))
+    stop(sprintf("`%s` must be finite numeric (no NA / Inf)", what))
   if (any(x < 0) || any(x > 100))
     stop(sprintf("all `%s` must be in [0, 100] (events per 1,000 per year)", what))
   x
@@ -116,9 +122,12 @@ calc_capacity <- function(birthrates, initial_pop, safety_factor = 1) {
 #' @param safety_factor Non-negative headroom multiplier in `[0, 6]` (default `1`),
 #'   controlling how much the death rate is underestimated. `0` credits deaths fully.
 #' @return A numeric vector of length `nnodes` of estimated capacities (whole-valued
-#'   doubles). A `warning` is issued if any estimate exceeds `.Machine$integer.max`.
+#'   doubles), each at least the node's `initial_pop` (a net-shrinking projection cannot
+#'   report below the starting population, whose peak living count occurs at `t = 0`). A
+#'   `warning` is issued if any estimate exceeds `.Machine$integer.max`.
 #' @section Errors:
-#' Stops if either rate grid is not 2-D, if their shapes or node counts disagree with each
+#' Stops if either rate grid is not 2-D or holds NA / non-finite values, if their shapes or
+#' node counts disagree with each
 #' other or with `length(initial_pop)`, if any population is negative, if any rate is
 #' outside `[0, 100]`, or if `safety_factor` is outside `[0, 6]`.
 #' @examples
@@ -140,6 +149,8 @@ calc_capacity_cdr <- function(birthrates, deathrates, initial_pop, safety_factor
   if (length(initial_pop) != nnodes)
     stop(sprintf("number of nodes (%d) and `initial_pop` length (%d) must match",
                  nnodes, length(initial_pop)))
+  if (anyNA(initial_pop) || any(!is.finite(initial_pop)))
+    stop("`initial_pop` must be finite (no NA / Inf)")
   if (any(initial_pop < 0))
     stop("`initial_pop` values must be non-negative")
   if (!(length(safety_factor) == 1L && safety_factor >= 0 && safety_factor <= 6))
@@ -153,7 +164,11 @@ calc_capacity_cdr <- function(birthrates, deathrates, initial_pop, safety_factor
   death_credit <- 1 / (1 + safety_factor)
   growth <- exp(colSums(lambda_b) - death_credit * colSums(lambda_d))
 
-  estimates <- round(initial_pop * growth)
+  # Floor at the initial population: the peak SIMULTANEOUS living count is at least the
+  # starting population (for a net-shrinking projection, `growth < 1`, the peak is at t = 0),
+  # so the bound must never fall below `initial_pop` — otherwise it would not even hold the
+  # agents present at the start.
+  estimates <- pmax(round(initial_pop * growth), ceiling(initial_pop))
   over <- estimates > .Machine$integer.max
   if (any(over))
     warning(sprintf(

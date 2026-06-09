@@ -20,7 +20,9 @@ controlling how much the death rate is underestimated. \code{0} credits deaths f
 }
 \value{
 A numeric vector of length \code{nnodes} of estimated capacities (whole-valued
-doubles). A \code{warning} is issued if any estimate exceeds \code{.Machine$integer.max}.
+doubles), each at least the node's \code{initial_pop} (a net-shrinking projection cannot
+report below the starting population, whose peak living count occurs at \code{t = 0}). A
+\code{warning} is issued if any estimate exceeds \code{.Machine$integer.max}.
 }
 \description{
 The mortality-aware companion to \code{\link[=calc_capacity]{calc_capacity()}}. When dead agents' slots are
@@ -40,7 +42,8 @@ births term enters — that would defeat the point of reclaiming slots.)
 }
 \section{Errors}{
 
-Stops if either rate grid is not 2-D, if their shapes or node counts disagree with each
+Stops if either rate grid is not 2-D or holds NA / non-finite values, if their shapes or
+node counts disagree with each
 other or with \code{length(initial_pop)}, if any population is negative, if any rate is
 outside \verb{[0, 100]}, or if \code{safety_factor} is outside \verb{[0, 6]}.
 }
