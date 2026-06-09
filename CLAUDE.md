@@ -87,7 +87,8 @@ Python** but **not** in Rust or R. Comment for that reader.
   / `Result` / `?`, the turbofish (`::<T>`), `unsafe` blocks and their SAFETY
   contracts, and what attribute macros like `#[extendr]` generate. Don't explain
   general programming; explain what differs from the languages above.
-  `src/rust/src/sir.rs` is the reference exemplar for the level and style.
+  `src/rust/src/steps.rs` (and `transmission.rs`) is the reference exemplar for the
+  level and style.
 - **Always comment R code (`.R`) for this audience.** Explain R idioms that trip
   up non-R programmers — `<-` assignment, S3 dispatch (`generic.class`,
   `` `$<-` `` replacement methods), `.Call` into compiled code, environments and

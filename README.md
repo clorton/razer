@@ -107,6 +107,8 @@ how to customize or extend it:
 
 See [`examples/README.md`](https://github.com/clorton/razer/blob/main/examples/README.md) for the full script list and tips on running them in RStudio.
 
+**Customizing and extending:** the [Using and extending Razer](https://clorton.github.io/razer/articles/extending_razer.html) guide (written for both human modelers and coding assistants) covers customizing purely in R via callbacks, the line between what's doable in R and what calls for a new Rust kernel, how to set up for Rust development, and a copy-paste recipe for prompting an LLM to write a correct kernel.
+
 ## Development
 
 ### Repository layout

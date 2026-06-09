@@ -124,6 +124,10 @@ final-size relation `A = 1 − exp(−R0·A)` (SIR and SEIR attack fractions mat
   *Getting started*, *Epidemic final size*, *Endemic dynamics*, *Spatial metapopulations*,
   *Demographics*, *Vital dynamics & measles*, *Interventions* (vaccination ± waning,
   quarantine), and *Long runs & memory*.
+- A **"Using and extending Razer"** guide (for human modelers and coding assistants) covering
+  basic use, customizing purely in R via callbacks, the R-vs-Rust boundary, Rust-development
+  setup, the kernel ABI/conventions, and a copy-paste recipe for prompting an LLM to write a
+  correct Rust kernel.
 - Example scripts are **device-aware** (write to `examples/output/` under `Rscript`, draw to
   the Plots pane when `source()`d in RStudio); see `examples/README.md`.
 

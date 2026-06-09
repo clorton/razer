@@ -119,3 +119,9 @@ articles:
   contents:
   - articles/interventions
   - articles/long_runs_and_memory
+- title: Customizing & extending
+  desc: >
+    The reference for going beyond run_model(): R callbacks and the kernel toolbox, the
+    R-vs-Rust boundary, setting up Rust, and an LLM-prompting recipe for new kernels.
+  contents:
+  - articles/extending_razer
