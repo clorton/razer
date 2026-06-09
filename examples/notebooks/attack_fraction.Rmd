@@ -1,6 +1,9 @@
 ---
-title: "Epidemic final size: R₀, the attack fraction, and Kermack–McKendrick"
+title: 'Epidemic final size: R₀, the attack fraction, and Kermack–McKendrick'
 output:
+  html_document:
+    toc: true
+    df_print: paged
   html_notebook:
     toc: true
     toc_float: true
