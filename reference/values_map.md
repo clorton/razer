@@ -54,11 +54,11 @@ g <- values_map(0.5, 10L, 3L)        # constant 0.5 everywhere
 dim(g$values())                       # 10 3
 #> [1] 10  3
 values_map(c(1, 2, 3), 10L, 3L)       # per-node (length n_nodes)
-#> <pointer: 0x556cb6705680>
+#> <pointer: 0x56192a773ac0>
 #> attr(,"class")
 #> [1] "Column"
 values_map(seq_len(10L), 10L, 3L)     # per-tick (length n_ticks)
-#> <pointer: 0x556cb6617790>
+#> <pointer: 0x56192a754d00>
 #> attr(,"class")
 #> [1] "Column"
 ```

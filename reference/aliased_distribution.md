@@ -29,5 +29,5 @@ d <- aliased_distribution(c(10, 30, 60))   # bin 2 drawn ~60% of the time
 table(d$sample_n(10000L))                  # 0-based bin indices
 #> 
 #>    0    1    2 
-#> 1015 3080 5905 
+#> 1013 2956 6031 
 ```
