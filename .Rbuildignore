@@ -8,6 +8,7 @@
 ^docs$
 ^\.github$
 ^CLAUDE\.md$
+^writeup\.md$
 ^examples$
 ^vignettes/articles$
 ^NEWS\.md$
