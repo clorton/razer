@@ -30,5 +30,5 @@ A `Distribution` object.
 ``` r
 d <- dist_normal(7, 4)   # mean 7, variance 4 (sd 2)
 d$sample_one()
-#> [1] 7.063438
+#> [1] 3.720307
 ```

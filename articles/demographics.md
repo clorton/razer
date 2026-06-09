@@ -1,6 +1,7 @@
 # Realistic populations: age pyramids and dates of death
 
-> Companion to `examples/aged_population.R`.
+> Companion to
+> [`examples/aged_population.R`](https://github.com/clorton/razer/blob/main/examples/aged_population.R).
 
 ## Why bother with demographics?
 
@@ -129,12 +130,15 @@ cat(sprintf("under-5s at t=0: %s of %s agents\n",
 - **Use it in a model.** Pass these `dob`/`dod` Columns into a
   [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
   `init` callback and run the `births`/`mortality` kernels in
-  `step_exit` — see `examples/engwal_measles.R` and the vital-dynamics
-  notebook.
+  `step_exit` — see
+  [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R)
+  and the [vital dynamics
+  notebook](https://clorton.github.io/razer/articles/vital_dynamics_measles.md).
 - **Sizing the array.** A growing population needs head-room:
   [`calc_capacity()`](https://clorton.github.io/razer/reference/calc_capacity.md)
   bounds the cumulative births,
   [`calc_capacity_cdr()`](https://clorton.github.io/razer/reference/calc_capacity_cdr.md)
   the peak-living size for a
   [`squash()`](https://clorton.github.io/razer/reference/squash.md)-reclaimed
-  run (see the long-runs notebook).
+  run (see the [long runs
+  notebook](https://clorton.github.io/razer/articles/long_runs_and_memory.md)).

@@ -97,8 +97,8 @@ well-mixed SEIR epidemic.</p>
 <h2 id="compare-state-structures">2. Compare state structures<a class="anchor" aria-label="anchor" href="#compare-state-structures"></a>
 </h2>
 <p>Run four models on the <em>same</em> population and parameters;
-colour by state, line type by model (this is
-<code>examples/compare_models.R</code>, condensed).</p>
+colour by state, line type by model (this is <a href="https://github.com/clorton/razer/blob/main/examples/compare_models.R" class="external-link"><code>examples/compare_models.R</code></a>,
+condensed).</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">N</span> <span class="op">&lt;-</span> <span class="fl">1e6L</span>; <span class="va">nticks</span> <span class="op">&lt;-</span> <span class="fl">365L</span>; <span class="va">D</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/dist_gamma.html">dist_gamma</a></span><span class="op">(</span><span class="fl">140</span>, <span class="fl">0.05</span><span class="op">)</span>   <span class="co"># mean 7-day periods</span></span>
 <span><span class="va">runs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"SIR"</span>, <span class="st">"SIRS"</span>, <span class="st">"SEIR"</span>, <span class="st">"SEIRS"</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">mod</span><span class="op">)</span> <span class="op">{</span></span>
@@ -132,10 +132,11 @@ colour by state, line type by model (this is
 argument for user-defined states. Here a one-off vaccination moves 40%
 of the still-susceptible population to a new <code>"V"</code> state on
 day 10 — early, <em>before</em> the wave takes off — so it has something
-to prevent (see <code>examples/sia_campaigns.R</code> and
-<code>examples/quarantine.R</code> for scheduled / leaky versions). We
-compare the <em>same</em> SIR model with and without that pulse, so the
-difference is the intervention alone.</p>
+to prevent (see <a href="https://github.com/clorton/razer/blob/main/examples/sia_campaigns.R" class="external-link"><code>examples/sia_campaigns.R</code></a>
+and <a href="https://github.com/clorton/razer/blob/main/examples/quarantine.R" class="external-link"><code>examples/quarantine.R</code></a>
+for scheduled / leaky versions). We compare the <em>same</em> SIR model
+with and without that pulse, so the difference is the intervention
+alone.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sir_args</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">scenario</span>, <span class="st">"SIR"</span>, nticks <span class="op">=</span> <span class="fl">200L</span>, r0 <span class="op">=</span> <span class="fl">2.5</span>, infectious_period <span class="op">=</span> <span class="fl">8</span>, seed <span class="op">=</span> <span class="fl">1L</span><span class="op">)</span></span>
 <span><span class="va">base</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">run_model</span>, <span class="va">sir_args</span><span class="op">)</span>                       <span class="co"># no intervention</span></span>

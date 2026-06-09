@@ -1,7 +1,12 @@
 # Vital dynamics and maternal immunity: a measles model
 
-> Companion to `examples/engwal_measles.R`. Builds on the demographics
-> and endemic notebooks.
+> Companion to
+> [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R).
+> Builds on the
+> [demographics](https://clorton.github.io/razer/articles/demographics.md)
+> and [endemic
+> dynamics](https://clorton.github.io/razer/articles/endemic_dynamics.md)
+> notebooks.
 
 ## Measles: why a richer model
 
@@ -35,8 +40,8 @@ knobs:
   reserves slots for the population to grow into over the 20-year run;
   the `births` kernel activates them.
 - an **`init` callback** gives each agent an age (from a pyramid-like
-  curve) and a Kaplan–Meier date of death (see the demographics
-  notebook).
+  curve) and a Kaplan–Meier date of death (see the [demographics
+  notebook](https://clorton.github.io/razer/articles/demographics.md)).
 - a **`step_exit` callback** runs `births` (newborns into M, with a
   maternal timer + a KM date of death) and `mortality` (retire agents
   whose `dod` has arrived) each tick.
@@ -129,8 +134,9 @@ the birth-fed susceptible pool repeatedly crosses threshold.
 ## Customize and extend
 
 - **Vaccination.** Layer an SIA campaign on top — register `c("M", "V")`
-  and add a campaign callback (see the interventions notebook); watch
-  the inter-epidemic period lengthen as coverage rises.
+  and add a campaign callback (see the [interventions
+  notebook](https://clorton.github.io/razer/articles/interventions.md));
+  watch the inter-epidemic period lengthen as coverage rises.
 - **Transmissibility / demography.** Change `r0`, `cbr`, or the
   maternal/latent/infectious distributions; higher birth rates shorten
   the inter-epidemic period (faster susceptible replenishment).

@@ -61,8 +61,8 @@
     
     
 <blockquote>
-<p>Companion to <code>examples/engwal_measles.R</code>. Builds on the
-demographics and endemic notebooks.</p>
+<p>Companion to <a href="https://github.com/clorton/razer/blob/main/examples/engwal_measles.R" class="external-link"><code>examples/engwal_measles.R</code></a>.
+Builds on the <a href="demographics.html">demographics</a> and <a href="endemic_dynamics.html">endemic dynamics</a> notebooks.</p>
 </blockquote>
 <div class="section level2">
 <h2 id="measles-why-a-richer-model">Measles: why a richer model<a class="anchor" aria-label="anchor" href="#measles-why-a-richer-model"></a>
@@ -105,7 +105,7 @@ into over the 20-year run; the <code>births</code> kernel activates
 them.</li>
 <li>an <strong><code>init</code> callback</strong> gives each agent an
 age (from a pyramid-like curve) and a Kaplan–Meier date of death (see
-the demographics notebook).</li>
+the <a href="demographics.html">demographics notebook</a>).</li>
 <li>a <strong><code>step_exit</code> callback</strong> runs
 <code>births</code> (newborns into M, with a maternal timer + a KM date
 of death) and <code>mortality</code> (retire agents whose
@@ -194,8 +194,8 @@ susceptible pool repeatedly crosses threshold.</p>
 <li>
 <strong>Vaccination.</strong> Layer an SIA campaign on top —
 register <code>c("M", "V")</code> and add a campaign callback (see the
-interventions notebook); watch the inter-epidemic period lengthen as
-coverage rises.</li>
+<a href="interventions.html">interventions notebook</a>); watch the
+inter-epidemic period lengthen as coverage rises.</li>
 <li>
 <strong>Transmissibility / demography.</strong> Change
 <code>r0</code>, <code>cbr</code>, or the maternal/latent/infectious

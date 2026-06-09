@@ -1,6 +1,7 @@
 # Spatial epidemics: metapopulations and migration networks
 
-> Companion to `examples/simple_sir.R`.
+> Companion to
+> [`examples/simple_sir.R`](https://github.com/clorton/razer/blob/main/examples/simple_sir.R).
 
 ## Why space?
 

@@ -91,7 +91,7 @@ Full models are assembled by
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 (below) — or composed by hand from the per-tick kernels. See the [worked
 articles](https://clorton.github.io/razer/articles/) and
-[`examples/`](https://clorton.github.io/razer/examples/).
+[`examples/`](https://github.com/clorton/razer/tree/main/examples).
 
 ## Architecture
 
@@ -175,8 +175,9 @@ e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0
 It seeds any of the model’s `E`/`I`/`R` states the scenario supplies,
 and takes optional `init` plus the per-tick callbacks `step_enter`
 (start) / `step_update` (between the step kernel and `calc_foi`) /
-`step_exit` (end) for extension (see `examples/model_callbacks.R`). The
-examples and articles show
+`step_exit` (end) for extension (see
+[`examples/model_callbacks.R`](https://github.com/clorton/razer/blob/main/examples/model_callbacks.R)).
+The examples and articles show
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 in action and how to go beyond the menagerie with vital dynamics,
 importation, and maternal immunity.
@@ -184,7 +185,7 @@ importation, and maternal immunity.
 ## Examples and articles
 
 Every model ships as both a **runnable script** in
-[`examples/`](https://clorton.github.io/razer/examples/)
+[`examples/`](https://github.com/clorton/razer/tree/main/examples)
 (`Rscript examples/<name>.R`; plots written to `examples/output/`) and a
 paired, annotated **teaching article** on the [package
 website](https://clorton.github.io/razer/articles/). Each article walks
@@ -223,7 +224,7 @@ to customize or extend it:
   a century.
 
 See
-[`examples/README.md`](https://clorton.github.io/razer/examples/README.md)
+[`examples/README.md`](https://github.com/clorton/razer/blob/main/examples/README.md)
 for the full script list and tips on running them in RStudio.
 
 ## Development

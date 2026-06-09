@@ -61,17 +61,17 @@
     
     
 <blockquote>
-<p>Companion to <code>examples/endemic_sir.R</code> and
-<code>examples/endemic_sir_seasonal.R</code>.</p>
+<p>Companion to <a href="https://github.com/clorton/razer/blob/main/examples/endemic_sir.R" class="external-link"><code>examples/endemic_sir.R</code></a>
+and <a href="https://github.com/clorton/razer/blob/main/examples/endemic_sir_seasonal.R" class="external-link"><code>examples/endemic_sir_seasonal.R</code></a>.</p>
 </blockquote>
 <div class="section level2">
 <h2 id="from-a-single-epidemic-to-a-persistent-one">From a single epidemic to a persistent one<a class="anchor" aria-label="anchor" href="#from-a-single-epidemic-to-a-persistent-one"></a>
 </h2>
-<p>The final-size notebook showed a <em>closed</em> SIR burning through
-its susceptibles once and stopping. Real endemic diseases persist
-because the susceptible pool is continually <strong>replenished</strong>
-— by births, by loss of immunity, by migration. Add demographic turnover
-(birth/death rate
+<p>The <a href="attack_fraction.html">final-size notebook</a> showed a
+<em>closed</em> SIR burning through its susceptibles once and stopping.
+Real endemic diseases persist because the susceptible pool is
+continually <strong>replenished</strong> — by births, by loss of
+immunity, by migration. Add demographic turnover (birth/death rate
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>μ</mi><annotation encoding="application/x-tex">\mu</annotation></semantics></math>)
 to SIR and the system has a non-trivial <strong>endemic
 equilibrium</strong>:</p>
@@ -241,8 +241,8 @@ drive.</li>
 <li>
 <strong>Growing populations.</strong> For true births (population
 growth, newborns into a maternal <code>M</code> state) rather than
-constant-population turnover, see <code>examples/engwal_measles.R</code>
-and the interventions notebook —
+constant-population turnover, see <a href="https://github.com/clorton/razer/blob/main/examples/engwal_measles.R" class="external-link"><code>examples/engwal_measles.R</code></a>
+and the <a href="interventions.html">interventions notebook</a> —
 <code>run_model(extra_states = "M", capacity = …)</code> plus the
 <code>births</code> / <code>mortality</code> kernels.</li>
 <li>

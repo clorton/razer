@@ -1,7 +1,8 @@
 # Long runs and memory: capacity and squash()
 
-> Companion to `examples/long_run_squash.R`. (The run chunk simulates a
-> century — give it ~30 seconds.)
+> Companion to
+> [`examples/long_run_squash.R`](https://github.com/clorton/razer/blob/main/examples/long_run_squash.R).
+> (The run chunk simulates a century — give it ~30 seconds.)
 
 ## The problem: agents accumulate
 

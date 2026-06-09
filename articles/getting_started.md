@@ -42,7 +42,8 @@ legend("right", c("S", "E", "I", "R"), col = c("#2c7fb8", "#ff7f00", "#e31a1c", 
 ## 2. Compare state structures
 
 Run four models on the *same* population and parameters; colour by
-state, line type by model (this is `examples/compare_models.R`,
+state, line type by model (this is
+[`examples/compare_models.R`](https://github.com/clorton/razer/blob/main/examples/compare_models.R),
 condensed).
 
 ``` r
@@ -79,10 +80,12 @@ takes `init` / `step_enter` / `step_update` / `step_exit` callbacks and
 an `extra_states` argument for user-defined states. Here a one-off
 vaccination moves 40% of the still-susceptible population to a new `"V"`
 state on day 10 — early, *before* the wave takes off — so it has
-something to prevent (see `examples/sia_campaigns.R` and
-`examples/quarantine.R` for scheduled / leaky versions). We compare the
-*same* SIR model with and without that pulse, so the difference is the
-intervention alone.
+something to prevent (see
+[`examples/sia_campaigns.R`](https://github.com/clorton/razer/blob/main/examples/sia_campaigns.R)
+and
+[`examples/quarantine.R`](https://github.com/clorton/razer/blob/main/examples/quarantine.R)
+for scheduled / leaky versions). We compare the *same* SIR model with
+and without that pulse, so the difference is the intervention alone.
 
 ``` r
 

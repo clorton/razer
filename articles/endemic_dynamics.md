@@ -1,16 +1,19 @@
 # Endemic dynamics: vital turnover, importation, and seasonality
 
-> Companion to `examples/endemic_sir.R` and
-> `examples/endemic_sir_seasonal.R`.
+> Companion to
+> [`examples/endemic_sir.R`](https://github.com/clorton/razer/blob/main/examples/endemic_sir.R)
+> and
+> [`examples/endemic_sir_seasonal.R`](https://github.com/clorton/razer/blob/main/examples/endemic_sir_seasonal.R).
 
 ## From a single epidemic to a persistent one
 
-The final-size notebook showed a *closed* SIR burning through its
-susceptibles once and stopping. Real endemic diseases persist because
-the susceptible pool is continually **replenished** — by births, by loss
-of immunity, by migration. Add demographic turnover (birth/death rate
-$`\mu`$) to SIR and the system has a non-trivial **endemic
-equilibrium**:
+The [final-size
+notebook](https://clorton.github.io/razer/articles/attack_fraction.md)
+showed a *closed* SIR burning through its susceptibles once and
+stopping. Real endemic diseases persist because the susceptible pool is
+continually **replenished** — by births, by loss of immunity, by
+migration. Add demographic turnover (birth/death rate $`\mu`$) to SIR
+and the system has a non-trivial **endemic equilibrium**:
 
 ``` math
 \frac{S^*}{N} = \frac{1}{R_0}, \qquad \frac{I^*}{N} = \frac{\mu}{\beta}\,(R_0 - 1).
@@ -159,7 +162,10 @@ abline(v = 0:10, col = "grey92")
   resonate with the annual drive.
 - **Growing populations.** For true births (population growth, newborns
   into a maternal `M` state) rather than constant-population turnover,
-  see `examples/engwal_measles.R` and the interventions notebook —
+  see
+  [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R)
+  and the [interventions
+  notebook](https://clorton.github.io/razer/articles/interventions.md) —
   `run_model(extra_states = "M", capacity = …)` plus the `births` /
   `mortality` kernels.
 - **Space.** Add patches to `scenario` and entries to `network` to study

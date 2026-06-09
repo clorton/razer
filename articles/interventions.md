@@ -1,8 +1,11 @@
 # Interventions: custom states, vaccination campaigns, and quarantine
 
-> Companion to `examples/sia_campaigns.R`,
-> `examples/sia_campaigns_waning.R`, and `examples/quarantine.R`. This
-> notebook is about **extending** razer.
+> Companion to
+> [`examples/sia_campaigns.R`](https://github.com/clorton/razer/blob/main/examples/sia_campaigns.R),
+> [`examples/sia_campaigns_waning.R`](https://github.com/clorton/razer/blob/main/examples/sia_campaigns_waning.R),
+> and
+> [`examples/quarantine.R`](https://github.com/clorton/razer/blob/main/examples/quarantine.R).
+> This notebook is about **extending** razer.
 
 ## The extension toolkit
 
