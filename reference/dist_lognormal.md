@@ -31,5 +31,5 @@ A `Distribution` object.
 ``` r
 d <- dist_lognormal(0, 0.5)   # median 1
 d$sample_one()
-#> [1] 0.6881413
+#> [1] 0.4902896
 ```

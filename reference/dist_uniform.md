@@ -28,5 +28,5 @@ A `Distribution` object.
 ``` r
 d <- dist_uniform(3, 8)   # values in [3, 8), mean 5.5
 d$sample_one()
-#> [1] 7.406844
+#> [1] 4.855064
 ```
