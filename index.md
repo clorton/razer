@@ -1,14 +1,14 @@
 # razer
 
-**R**ust-backed **A**gent modeling with **Z**ero-copy struct-of-arrays
-for **E**radication **R**esearch
+**R**ust-backed **A**gent modeling with **Z**ero-copy typed arrays for
+**E**radication **R**esearch
 
 `razer` is an R interface to the [LASER](https://github.com/laser-base)
 (Light Agent Spatial modeling for ERadication) toolkit. It provides
-high-performance, Rust-backed data structures for large-scale spatial
-agent-based disease models. The name is a deliberate pun: “raze” means
-to eradicate completely, “razor” echoes LASER, and the trailing R
-anchors it to R.
+high-performance, Rust-backed data structures and composable kernels for
+large-scale spatial agent-based disease models. The name is a deliberate
+pun: “raze” means to eradicate completely, “razor” echoes LASER, and the
+trailing R anchors it to R.
 
 ## Background: the Python LASER project
 
@@ -16,15 +16,18 @@ anchors it to R.
 at the Institute for Disease Modeling for building fast, composable
 agent-based disease models at national and global scale. Its core design
 insight is the **struct-of-arrays (SoA)** memory layout: instead of one
-object per agent, each agent *property* is a flat array of length
-`capacity`, and all active agents are a contiguous slice of that array.
-This layout is cache-friendly for the vectorised, Numba-JIT-compiled
-kernels that drive LASER’s performance.
+object per agent, each agent *property* is a flat array, and all active
+agents are a contiguous slice of that array — cache-friendly for the
+vectorized, Numba-JIT-compiled kernels that drive LASER’s performance.
 
-`razer` ports this memory model to R, implementing the backing arrays in
-Rust (via the [extendr](https://extendr.github.io/) framework) and
-exposing a `LaserFrame` object that mirrors `laser.core.LaserFrame` from
-the Python package.
+`razer` ports this memory model to R. Each agent property is a
+Rust-owned, dtype-tagged array — a `Column` — that R holds only as an
+opaque external-pointer handle (via the
+[extendr](https://extendr.github.io/) framework). The per-tick
+simulation kernels borrow these arrays directly and mutate them in place
+with no copies, splitting the per-agent work across CPU cores with
+[Rayon](https://github.com/rayon-rs/rayon). Data crosses back into R
+only on explicit inspection (`$values()`).
 
 ## Requirements
 
@@ -39,8 +42,7 @@ Install Rust if you don’t already have it:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-R package dependencies (installed automatically by `install.packages` or
-`devtools::install()`):
+R package dependencies:
 
 ``` r
 
@@ -64,169 +66,150 @@ incremental and much faster.
 
 library(razer)
 
-# Create a frame: 1 000 agents, all active from the start
-pop <- LaserFrame$new(1000L, -1L)
+# Disease-state codes shared by all kernels: c(S = 0, E = 1, I = 2, R = 3, M = 4, D = -1)
+states <- laser_states()
 
-# Register properties (one value per agent)
-pop$add_scalar_property("age",   "integer", 0L)
-pop$add_scalar_property("alive", "logical", TRUE)
+# A typed, Rust-owned agent-property array: one million u8 disease states.
+state  <- allocate_scalar("u8",  1e6)        # per-agent state (1 byte each)
+nodeid <- allocate_scalar("u16", 1e6)        # 0-based patch id per agent
+timer  <- allocate_scalar("u8",  1e6)        # state-timer countdown
+state$set(rep(states[["S"]], 1e6))           # write the whole buffer
+state$values()[1:5]                          # copy a snapshot back to R
 
-# $ shorthand: read and write scalar properties directly
-pop$age   <- sample(0:80, 1000L, replace = TRUE)
-pop$alive <- sample(c(TRUE, FALSE), 1000L, replace = TRUE, prob = c(0.99, 0.01))
+# A per-node, per-tick report buffer (n_ticks x n_nodes), stored time-major so each
+# tick's per-node row is contiguous. The census is maintained INCREMENTALLY: each tick
+# carries column t forward to t+1, then kernels apply only their deltas.
+S <- allocate_vector("i32", 365L, 10L)       # 365 ticks x 10 nodes
+S$set_col(0L, rep(1e5, 10L))                 # tick 0, per-node susceptibles
 
-# Activate 50 more agents (capacity must allow it)
-large_pop <- LaserFrame$new(2000L, 1000L)
-large_pop$add_scalar_property("age", "integer", 0L)
-range <- large_pop$add(50L)                   # returns c(1001L, 1050L)
-large_pop$age[range[1]:range[2]] <- sample(20:40, 50L, replace = TRUE)
-
-# Vector property: capacity × nticks, column-major
-#   $S returns the full (count × ncols) matrix; $get_col("S", tick) is faster
-#   for single-tick access (one contiguous copy, no column gathering)
-nticks <- 365L
-pop$add_vector_property("S", nticks, "integer", 0L)
-pop$set_col("S", 1L, rep(950L, pop$count))    # initial susceptibles
-
-# Compact: remove dead agents
-pop$squash(pop$alive)                         # in-place; count updated
-
-# Sort agents by age (Rayon-parallel across all scalar properties)
-pop$sort_by(order(pop$age))
-
-# Describe the frame layout
-cat(pop$describe())
+# Draw state-timer durations from a parameterized distribution.
+inf_period <- dist_gamma(2, 4)               # mean 8 ticks
+inf_period$sample_n(5L)
 ```
 
-## `LaserFrame` API reference
+Full models compose the per-tick kernels in a loop; see
+[`examples/`](https://clorton.github.io/razer/examples/).
 
-`LaserFrame` uses the extendr environment-based dispatch: create an
-instance with `LaserFrame$new(...)`, then call methods with `$`.
+## Architecture
 
-### Construction
+- **`Column`** — a Rust-owned, dtype-tagged array
+  (`i8`/`u8`/`i16`/`u16`/`i32`/`u32`/`f32`/`f64`), allocated as a 1-D
+  per-agent array (`allocate_scalar`) or a 2-D time × node report buffer
+  (`allocate_vector`). `$set()`/`$values()`/`$col()`/`$set_col()` move
+  data to and from R; the kernels operate on the buffer in place. The
+  narrow integer widths (e.g. `u8` state, `u16` node id / timer) keep
+  national-scale populations compact.
+- **State codes** —
+  [`laser_states()`](https://clorton.github.io/razer/reference/laser_states.md)
+  returns `c(S, E, I, R, M, D)`; `M` is maternal immunity, `D` is
+  deceased (stored as `255` in the `u8` state column).
+- **Distributions** — `Distribution` (from
+  [`dist_normal()`](https://clorton.github.io/razer/reference/dist_normal.md),
+  [`dist_gamma()`](https://clorton.github.io/razer/reference/dist_gamma.md),
+  [`dist_constant()`](https://clorton.github.io/razer/reference/dist_constant.md),
+  …) supplies per-agent state-timer durations.
+- **Per-tick kernels** — `calc_foi` (force of infection, with spatial
+  coupling); the transmission kernels `transmission` (S→E or S→I, sets a
+  u16 timer) and `transmission_si` (S→I absorbing); the three step
+  kernels `step_si` / `step_sir` / `step_sirs` (the timed M→S / E→I /
+  I→{S,R} / R→S transitions of the SI…SEIRS menagerie, each a single
+  u16-timer pass); `carry_forward` / `carry_forward_states` (incremental
+  census) with `move_count` (apply a kernel’s returned counts); and the
+  vital-dynamics kernels `births`, `mortality`,
+  `constant_pop_vitals_sir`, `import_infections`. The agent-loop kernels
+  **return per-node counts** and the model applies them to its census —
+  so a model allocates only the states it has. All parallelize the
+  per-agent work across cores with private per-node accumulators.
+- **Demographics & initialization** — `AliasedDistribution`
+  (`aliased_distribution`) for sampling ages from a pyramid,
+  `KaplanMeierEstimator` (`kaplan_meier_estimator`) for realistic dates
+  of death, `load_pyramid_csv` / `sample_pyramid_ages`, and
+  `calc_capacity` / `calc_capacity_cdr` for sizing agent arrays under
+  births (the latter bounds the *peak living* population for runs that
+  reclaim dead slots with `squash`).
+- **Compaction & binning** — `squash` reclaims the slots of departed
+  (e.g. deceased) agents; the parallel binning family `bincount` /
+  `bincount_wt` (weighted) / `bincount_where` (predicate-filtered,
+  count-aware) / `bincount_where_wt` (weighted + filtered) rolls
+  per-agent properties up into per-node, per-tick reports.
+- **Spatial coupling** — `distances` plus migration-network models
+  (`gravity`, `radiation`, `stouffer`, `competing_destinations`,
+  `row_normalizer`) build the coupling matrix `calc_foi` redistributes
+  the force of infection through.
 
-| Call | Description |
-|----|----|
-| `LaserFrame$new(capacity, initial_count)` | Create a frame. Pass `initial_count = -1L` to start fully populated. |
+## Modeling: per-tick ordering and the effective R0
 
-### Metadata
+Every model in the SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS menagerie is a
+transmission kernel (`transmission` for S→E or S→I; `transmission_si`
+for SI’s absorbing S→I) plus one step kernel (`step_si`, `step_sir` with
+the absorbing state parameterized to S or R, or `step_sirs`). Each step
+kernel leads with M→S, so any model can add a maternal state. Every
+model uses **one per-tick ordering**:
 
-| Call | Returns |
-|----|----|
-| `f$count` | Number of currently active entries (`integer`) |
-| `f$capacity` | Fixed capacity set at construction (`integer`) |
-| `f$scalar_names()` | Alphabetically sorted names of scalar properties (`character`) |
-| `f$vector_names()` | Alphabetically sorted names of vector properties (`character`) |
-| `f$vector_ncols(name)` | Number of columns in a vector property (`integer`) |
-| `f$describe()` | Human-readable layout summary (`character`) |
+> `carry_forward_states` → `step_*` → `calc_foi` → `transmission`
 
-### Property registration
+with `calc_foi` placed **immediately before `transmission`** (no step
+kernel between them). `calc_foi` reads the *settled start-of-interval*
+infectious census `I[t]` (not the working column it is building), so its
+value does not depend on where the step kernel runs. A newly infectious
+agent enters `I` one census column after infection and recovers `D`
+columns later, contributing to the force of infection on exactly those
+`D` columns — so the effective basic reproduction number is the **full
+`R0 = beta * D`** (never `beta * (D − 1)`), for both direct-S→I and
+E-entry families, with no special-casing.
 
-| Call | Description |
-|----|----|
-| `f$add_scalar_property(name, dtype, default)` | Add a 1-D property. `dtype` is `"integer"`, `"real"`, or `"logical"`. |
-| `f$add_vector_property(name, length, dtype, default)` | Add a 2-D property with `length` columns (e.g., number of ticks). |
+Each step kernel is a single pass branching on each agent’s entry state,
+so a just-entered timed state is never decremented again the same tick.
+See `CLAUDE.md` for the full rationale and the per-model table.
 
-Properties may not be added twice under the same name.
+For the closed-population menagerie you usually don’t wire this by hand:
+**`run_model(scenario, model, nticks, r0, …)`** builds the population,
+runs the correct per-tick loop and applies all census deltas, and
+returns a **`model` environment** (bundling `$people`, `$nodes`,
+`$network`, `$carry`) with per-node census and the `incidence` / `onset`
+/ `recovery` / `waning` flows —
+e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0 = 2.5, infectious_period = 8, incubation_period = 5, seed = 1)`.
+It seeds any of the model’s `E`/`I`/`R` states the scenario supplies,
+and takes optional `init` plus the per-tick callbacks `step_enter`
+(start) / `step_update` (between the step kernel and `calc_foi`) /
+`step_exit` (end) for extension (see `examples/model_callbacks.R`). The
+hand-wired examples below show what it does under the hood (and how to
+go beyond the menagerie with vital dynamics, importation, and maternal
+immunity).
 
-### Scalar access
-
-| Call | Description |
-|----|----|
-| `f$get(name)` | Return the active slice `[1:count]` as an R vector. |
-| `f$set(name, values)` | Overwrite the active slice from an R vector of length `count`. |
-| `f$prop` | Shorthand for `f$get("prop")`. |
-| `f$prop <- values` | Shorthand for `f$set("prop", values)`. |
-
-Method names take priority over property names — if a property is named
-`count`, use `f$get("count")` explicitly.
-
-### Vector property access
-
-| Call | Description |
-|----|----|
-| `f$get_col(name, col)` | Return column `col` (1-based) for active entries — a contiguous memory copy. |
-| `f$set_col(name, col, values)` | Overwrite column `col` (1-based) for active entries. |
-| `f$get_matrix(name)` | Return the full active portion as a `(count × ncols)` R matrix. |
-| `f$prop` | Shorthand for `f$get_matrix("prop")` when `prop` is a vector property. |
-
-### Lifecycle
-
-| Call | Description |
-|----|----|
-| `f$add(n)` | Activate `n` more entries. Returns `c(start, end)` (1-based, inclusive). |
-| `f$squash(mask)` | Remove entries where `mask` is `FALSE`. Updates `count` in place. All scalar and vector properties are compacted consistently. |
-| `f$sort_by(perm)` | Reorder active scalar properties by the 1-based permutation `perm`. Parallelised across properties via Rayon. Vector (time-series) properties are left unchanged. |
-
-### Memory layout notes
-
-- **Scalar properties** — backing array of length `capacity`; active
-  slice is `[1:count]`.
-- **Vector properties** — backing array of `capacity × length` elements
-  stored **column-major** (R’s native order). Element `[entry, col]`
-  lives at byte offset `entry + col * capacity`. Column `col` (all
-  active entries for one time step) is a contiguous block, making
-  `get_col` a single `memcpy`.
-
-## Epidemic model components
-
-Beyond the `LaserFrame` data structure, `razer` provides composable
-per-tick **step kernels** for building SI / SIR / SEIR / SEIRS-family
-compartmental models, together with **parameterized distributions**
-([`dist_normal()`](https://clorton.github.io/razer/reference/dist_normal.md),
-[`dist_gamma()`](https://clorton.github.io/razer/reference/dist_gamma.md),
-[`dist_poisson()`](https://clorton.github.io/razer/reference/dist_poisson.md),
-…) for drawing state-timer durations such as incubation and infectious
-periods. See the [function
-reference](https://clorton.github.io/razer/reference/) for the complete
-list.
-
-### Order of update operations
-
-Call the transitions **downstream-first** within each tick — move agents
-*out* of a timed compartment before moving agents *in*, walking the
-disease-progression chain backwards:
-
-| Model | Per-tick call order |
-|----|----|
-| SIR | [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_transmission_si()`](https://clorton.github.io/razer/reference/step_transmission_si.md) |
-| SEIR | [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md) → [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md) |
-| SEIRS | [`step_recovered_rs()`](https://clorton.github.io/razer/reference/step_recovered_rs.md) → [`step_infectious_ir()`](https://clorton.github.io/razer/reference/step_infectious_ir.md) → [`step_exposed_ei()`](https://clorton.github.io/razer/reference/step_exposed_ei.md) → [`step_transmission_se()`](https://clorton.github.io/razer/reference/step_transmission_se.md) |
-
-This keeps each compartment’s residence time equal to its configured
-duration: a newly exposed or infectious agent would otherwise be
-decremented in the same tick it arrives, shortening its period by a
-tick. See the `model-composition` help topic (`?\`model-composition\`\`)
-for the full rationale and the SIR caveat.
-
-### Worked examples
+## Worked examples
 
 The [`examples/`](https://clorton.github.io/razer/examples/) directory
-has two runnable scripts that build a model, plot its trajectories, and
-validate the simulated final **attack fraction** against the classic
-**Kermack–McKendrick** final-size relation `A = 1 − exp(−R0·A)`. Both
-match the theory to within a few thousandths across the supercritical
-range. Run either with, e.g., `Rscript examples/sir_attack_fraction.R`.
+has runnable scripts (`Rscript examples/<name>.R`); plots are written to
+`examples/output/`.
+
+Two validate the simulated **attack fraction** against the
+**Kermack–McKendrick** final-size relation `A = 1 − exp(−R0·A)`,
+matching theory to within a few thousandths across the supercritical
+range — both with `R0 = beta · D`:
 
 **[`sir_attack_fraction.R`](https://clorton.github.io/razer/examples/sir_attack_fraction.R)
-— SIR model**
+— SIR**
 
 ![SIR S/I/R trajectories](reference/figures/sir_trajectories.png)![SIR
 attack fraction vs
 Kermack–McKendrick](reference/figures/sir_attack_fraction.png)
 
 **[`seir_attack_fraction.R`](https://clorton.github.io/razer/examples/seir_attack_fraction.R)
-— SEIR model**
+— SEIR**
 
 ![SEIR S/E/I/R
 trajectories](reference/figures/seir_trajectories.png)![SEIR attack
 fraction vs
 Kermack–McKendrick](reference/figures/seir_attack_fraction.png)
 
-See
-[`examples/README.md`](https://clorton.github.io/razer/examples/README.md)
-for details, including why the effective `R0` differs between SIR
-(`beta·(D−1)`) and SEIR (`beta·D`).
+The rest build progressively richer models: `simple_sir.R` (spatial SIR
+over the England & Wales measles patches), `endemic_sir.R` /
+`endemic_sir_seasonal.R` (endemic and seasonally-forced SIR with vital
+dynamics and importations), `aged_population.R` (age structure + dates
+of death), and `engwal_measles.R` (a full M-S-E-I-R measles model with
+maternal immunity, births, and natural mortality). See
+[`examples/README.md`](https://clorton.github.io/razer/examples/README.md).
 
 ## Development
 
@@ -235,34 +218,28 @@ for details, including why the effective `R0` differs between SIR
     razer/
     ├── R/
     │   ├── extendr-wrappers.R   # auto-generated by rextendr — do not edit
-    │   └── laser_frame.R        # .onLoad hook: wraps void methods with invisible()
+    │   ├── values_map.R, carry_states.R, calc_capacity.R, pyramid.R, bincount.R
     ├── src/
-    │   ├── entrypoint.c         # auto-generated C bridge
-    │   └── rust/
-    │       ├── Cargo.toml
-    │       └── src/
-    │           ├── lib.rs
-    │           └── laser_frame.rs   # LaserFrame implementation
+    │   └── rust/src/
+    │       ├── lib.rs           # module registration
+    │       ├── column.rs        # the Column typed-array store
+    │       ├── epidemic.rs      # state codes (laser_states)
+    │       ├── distributions.rs, migration.rs, bincount.rs
+    │       ├── sir.rs, measles.rs, vitals.rs, mortality.rs, births.rs
+    │       └── pyramid.rs, kmestimator.rs
+    ├── examples/                # runnable model scripts + output/
     ├── tests/testthat/
-    │   └── test-laser_frame.R
     ├── man/                     # auto-generated Rd files
     └── DESCRIPTION
 
 ### Building
 
-Regenerate R wrappers and compile the Rust library:
-
 ``` r
 
-devtools::document()
+devtools::document()   # cargo build + regenerate R/extendr-wrappers.R and man/*.Rd
 ```
 
-This calls `rextendr` under the hood, which runs `cargo build` and then
-regenerates `R/extendr-wrappers.R` and `man/*.Rd` from the Rust
-doc-comments.
-
-For a release (optimised) build, set the environment variable before
-loading:
+For a release (optimised) build:
 
 ``` bash
 REXTENDR_PROFILE=release Rscript -e "devtools::document()"
@@ -270,57 +247,21 @@ REXTENDR_PROFILE=release Rscript -e "devtools::document()"
 
 ### Running tests
 
-**From the R console or RStudio:**
-
-``` r
-
-devtools::test()
-```
-
-In RStudio you can also use the **Build → Test Package** menu item, or
-press `Ctrl+Shift+T` / `Cmd+Shift+T`.
-
-**From the command line:**
-
 ``` bash
 Rscript -e "devtools::test()"
-```
-
-Or using R’s built-in test runner:
-
-``` bash
-R CMD check --no-manual --no-vignettes .
 ```
 
 ### Modifying the Rust source
 
 1.  Edit files under `src/rust/src/`.
-
-2.  Check compilation quickly without going through R:
-
-    ``` bash
-    cd src/rust && cargo check
-    ```
-
-3.  Regenerate R wrappers and rebuild the shared library:
-
-    ``` r
-
-    devtools::document()
-    ```
-
-4.  Reload and test:
-
-    ``` r
-
-    devtools::load_all()
-    devtools::test()
-    ```
+2.  Quick compile check: `cd src/rust && cargo check`.
+3.  Regenerate wrappers and rebuild: `devtools::document()` (or
+    `R CMD INSTALL .`).
+4.  Reload and test: `devtools::test()`.
 
 Rust panics (from `assert!`, `panic!`, or index out-of-bounds) are
-caught by the extendr C boundary and converted to R
-[`stop()`](https://rdrr.io/r/base/stop.html) errors, so they behave like
-normal R errors from the caller’s perspective.
+caught at the extendr C boundary and converted to R
+[`stop()`](https://rdrr.io/r/base/stop.html) errors.
 
 ## License
 

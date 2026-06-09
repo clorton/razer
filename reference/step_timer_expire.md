@@ -1,39 +1,32 @@
-# Generalized timer-expiry transition into an *absorbing* (untimed) state.
+# Generic timed transition `from_state -> to_state` into an UNTIMED destination.
 
-For each agent currently in `from_state`, decrements `timer` by 1; when
-the timer reaches 0 the agent moves to `to_state` and its timer is left
-at 0. The destination carries no duration of its own — this is the
-"transition to an absorbing state" generalization (laser-generic's
-`nb_timer_update`), e.g. I→S in SIS, I→R in SIR, or R→S waning.
+For each agent in `from_state`, decrements its u16 `timer`; on expiry
+the agent moves to `to_state` (timer left at 0). Returns the per-node
+count of transitions. Compose these (downstream-first) to build models
+beyond the named menagerie; apply the counts with `move_count`.
+Generalizes the M→S / R→S / I→S or I→R legs.
 
 ## Usage
 
 ``` r
-step_timer_expire(people, from_state, to_state)
+step_timer_expire(state, timer, nodeid, count, n_nodes, from_state, to_state)
 ```
 
 ## Arguments
 
-- people:
+- state, timer, nodeid, count, n_nodes:
 
-  LaserFrame of agents.
+  As in
+  [`step_si()`](https://clorton.github.io/razer/reference/step_si.md).
 
 - from_state:
 
-  Integer state code an agent must currently occupy to be eligible.
+  Integer state code an agent must occupy to be eligible.
 
 - to_state:
 
-  Integer state code an agent moves to when its timer expires.
+  Integer (untimed) state code an agent moves to on expiry.
 
-## Details
+## Value
 
-This is the engine behind
-[`step_infectious_is()`](https://clorton.github.io/razer/reference/step_infectious_is.md)
-(I→S) and
-[`step_recovered_rs()`](https://clorton.github.io/razer/reference/step_recovered_rs.md)
-(R→S):
-`step_timer_expire(people, laser_states()[["I"]], laser_states()[["S"]])`
-is exactly `step_infectious_is(people)`.
-
-**Required people properties:** `state`, `timer` (both integer).
+An integer vector of per-node transition counts (length `n_nodes`).

@@ -1,7 +1,9 @@
-# Named integer vector of epidemic compartment state codes.
+# Named integer vector of epidemic state codes.
 
-Returns `c(S=0L, E=1L, I=2L, R=3L, D=-1L)`. Use these constants to set
-and test the `state` property on a people frame.
+Returns `c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)`. Use these constants to
+set and test the `state` property on a people frame. `M` is maternal
+immunity (newborns protected by maternal antibodies, waning to `S`); `D`
+is deceased.
 
 ## Usage
 
@@ -11,4 +13,4 @@ laser_states()
 
 ## Value
 
-Named integer vector with elements S, E, I, R, D.
+Named integer vector with elements S, E, I, R, M, D.

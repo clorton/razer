@@ -16,6 +16,8 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../articles/index.html">Articles</a></li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
 <li class="nav-item"><a class="external-link nav-link" href="https://github.com/clorton/razer/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
@@ -31,9 +33,9 @@
     </div>
 
     <div class="section level2">
-      <h2 id="population-frame">Population frame<a class="anchor" aria-label="anchor" href="#population-frame"></a></h2>
+      <h2 id="model-runner">Model runner<a class="anchor" aria-label="anchor" href="#model-runner"></a></h2>
 
-      <div class="section-desc"><p>Struct-of-arrays data store for agents and patches, and the epidemic state codes used by the model kernels.</p></div>
+      <div class="section-desc"><p>One call to build, seed, and run a closed-population agent-based model (SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS) on the Column kernels.</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -42,17 +44,61 @@
 
       <dl><dt>
 
-          <code><a href="LaserFrame.html">LaserFrame</a></code>
+          <code><a href="run_model.html">run_model()</a></code>
 
         </dt>
-        <dd>Fixed-capacity struct-of-arrays population or patch data store.</dd>
+        <dd>Run a closed-population agent-based model.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="agent-node-storage">Agent &amp; node storage<a class="anchor" aria-label="anchor" href="#agent-node-storage"></a></h2>
+
+      <div class="section-desc"><p>Rust-owned, dtype-tagged property arrays (per-agent and per-node/per-tick), the incremental-census carry-forward helpers, and the epidemic state codes.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="Column.html">Column</a></code>
+
+        </dt>
+        <dd>A Rust-owned, dtype-tagged property array (1-D scalar, or a 2-D vector report).</dd>
+
+        <dt>
+
+          <code><a href="allocate_scalar.html">allocate_scalar()</a></code>
+
+        </dt>
+        <dd>Allocate a fresh, zero-filled property array of a given type and length.</dd>
+
+        <dt>
+
+          <code><a href="allocate_vector.html">allocate_vector()</a></code>
+
+        </dt>
+        <dd>Allocate a fresh, zero-filled 2-D property array (a per-slot report buffer).</dd>
+
+        <dt>
+
+          <code><a href="carry_forward.html">carry_forward()</a></code>
+
+        </dt>
+        <dd>Carry a per-node counter forward one tick: copy column <code>tick</code> onto <code>tick + 1</code>.</dd>
+
+        <dt>
+
+          <code><a href="carry_forward_states.html">carry_forward_states()</a></code>
+
+        </dt>
+        <dd>Carry census counters forward, and optionally total some of them.</dd>
 
         <dt>
 
           <code><a href="laser_states.html">laser_states()</a></code>
 
         </dt>
-        <dd>Named integer vector of epidemic compartment state codes.</dd>
+        <dd>Named integer vector of epidemic state codes.</dd>
       </dl></div><div class="section level2">
       <h2 id="distributions">Distributions<a class="anchor" aria-label="anchor" href="#distributions"></a></h2>
 
@@ -133,9 +179,9 @@
         </dt>
         <dd>Create a continuous uniform distribution on the half-open interval [low, high).</dd>
       </dl></div><div class="section level2">
-      <h2 id="model-step-kernels">Model step kernels<a class="anchor" aria-label="anchor" href="#model-step-kernels"></a></h2>
+      <h2 id="transmission-disease-dynamics">Transmission &amp; disease dynamics<a class="anchor" aria-label="anchor" href="#transmission-disease-dynamics"></a></h2>
 
-      <div class="section-desc"><p>Per-tick transition kernels for composing SI / SIR / SEIR / SEIRS-family models. Call them downstream-first within a tick — see “Composing models: order of per-tick update operations” below.</p></div>
+      <div class="section-desc"><p>Per-tick Column kernels for force of infection and the timed state transitions of the SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS menagerie. The kernels return per-node counts the model applies to its census via <code>move_count</code>; place <code>calc_foi</code> so the effective reproduction number is the full <code>beta * D</code> (see the modeling note in the package README / CLAUDE.md).</p></div>
 
       <dl></dl></div><div class="section level2">
 
@@ -144,80 +190,293 @@
 
       <dl><dt>
 
-          <code><a href="model-composition.html">model-composition</a></code> <code><a href="model-composition.html">update-order</a></code>
+          <code><a href="calc_foi.html">calc_foi()</a></code>
 
         </dt>
-        <dd>Composing models: order of per-tick update operations</dd>
+        <dd>Compute the per-node force of infection (FOI) for one tick.</dd>
 
         <dt>
 
-          <code><a href="step_births_cbr.html">step_births_cbr()</a></code>
+          <code><a href="transmission.html">transmission()</a></code>
 
         </dt>
-        <dd>Stochastic birth step using a crude birth rate.</dd>
+        <dd>Stochastic transmission S→<code>to_state</code>, returning new infections per node.</dd>
 
         <dt>
 
-          <code><a href="step_exposed_ei.html">step_exposed_ei()</a></code>
+          <code><a href="transmission_si.html">transmission_si()</a></code>
 
         </dt>
-        <dd>Timer-based E→I transition (SEIR kernel).</dd>
+        <dd>Stochastic transmission S→I into an ABSORBING <code>I</code> (the SI model), returning new infections per node.</dd>
 
         <dt>
 
-          <code><a href="step_infectious_ir.html">step_infectious_ir()</a></code>
+          <code><a href="step_si.html">step_si()</a></code>
 
         </dt>
-        <dd>Timer-based I→R transition (SIR / SEIR / SEIRS kernel).</dd>
+        <dd>Advance M→S (maternal waning) and E→I (incubation) for one tick — SI / SEI.</dd>
 
         <dt>
 
-          <code><a href="step_infectious_is.html">step_infectious_is()</a></code>
+          <code><a href="step_sir.html">step_sir()</a></code>
 
         </dt>
-        <dd>Timer-based I→S transition for SIS models (no immunity).</dd>
+        <dd>Advance M→S, E→I, and I→<code>absorbing_state</code> for one tick — SIS / SIR / SEIS / SEIR.</dd>
 
         <dt>
 
-          <code><a href="step_mortality_cdr.html">step_mortality_cdr()</a></code>
+          <code><a href="step_sirs.html">step_sirs()</a></code>
 
         </dt>
-        <dd>Stochastic mortality step using a crude death rate.</dd>
-
-        <dt>
-
-          <code><a href="step_recovered_rs.html">step_recovered_rs()</a></code>
-
-        </dt>
-        <dd>Timer-based R→S transition for waning-immunity models.</dd>
+        <dd>Advance M→S, E→I, I→R (with waning immunity), and R→S for one tick — SIRS / SEIRS.</dd>
 
         <dt>
 
           <code><a href="step_timer_expire.html">step_timer_expire()</a></code>
 
         </dt>
-        <dd>Generalized timer-expiry transition into an <em>absorbing</em> (untimed) state.</dd>
+        <dd>Generic timed transition <code>from_state -&gt; to_state</code> into an UNTIMED destination.</dd>
 
         <dt>
 
           <code><a href="step_timer_expire_set.html">step_timer_expire_set()</a></code>
 
         </dt>
-        <dd>Generalized timer-expiry transition into a state that has <em>its own</em> duration.</dd>
+        <dd>Generic timed transition <code>from_state -&gt; to_state</code> into a TIMED destination.</dd>
 
         <dt>
 
-          <code><a href="step_transmission_se.html">step_transmission_se()</a></code>
+          <code><a href="move_count.html">move_count()</a></code>
 
         </dt>
-        <dd>Stochastic S→E exposure step (SEIR kernel).</dd>
+        <dd>Apply a per-node transition count to the census at <code>tick + 1</code>.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="vital-dynamics-importation">Vital dynamics &amp; importation<a class="anchor" aria-label="anchor" href="#vital-dynamics-importation"></a></h2>
+
+      <div class="section-desc"><p>Births, deaths, and externally-seeded cases.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="births.html">births()</a></code>
+
+        </dt>
+        <dd>Apply crude-birth-rate births for one tick; newborns enter maternal immunity (M).</dd>
 
         <dt>
 
-          <code><a href="step_transmission_si.html">step_transmission_si()</a></code>
+          <code><a href="mortality.html">mortality()</a></code>
 
         </dt>
-        <dd>Stochastic S→I transmission step (SI / SIR kernel).</dd>
+        <dd>Apply natural mortality for one tick, returning deaths per node by state.</dd>
+
+        <dt>
+
+          <code><a href="constant_pop_vitals_sir.html">constant_pop_vitals_sir()</a></code>
+
+        </dt>
+        <dd>Apply constant-population SIR vital dynamics for one tick.</dd>
+
+        <dt>
+
+          <code><a href="import_infections.html">import_infections()</a></code>
+
+        </dt>
+        <dd>Import new infectious cases from a schedule, activating reserved agent slots.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="demographics-initialization">Demographics &amp; initialization<a class="anchor" aria-label="anchor" href="#demographics-initialization"></a></h2>
+
+      <div class="section-desc"><p>Realistic age structure and dates of death, and capacity sizing.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="AliasedDistribution.html">AliasedDistribution</a></code>
+
+        </dt>
+        <dd>A discrete distribution over bin indices <code>0..n</code>, sampled by the Vose alias method.</dd>
+
+        <dt>
+
+          <code><a href="aliased_distribution.html">aliased_distribution()</a></code>
+
+        </dt>
+        <dd>Build an AliasedDistribution from a vector of non-negative bin counts.</dd>
+
+        <dt>
+
+          <code><a href="KaplanMeierEstimator.html">KaplanMeierEstimator</a></code>
+
+        </dt>
+        <dd>A Kaplan–Meier sampler over a cumulative-deaths-by-year life table.</dd>
+
+        <dt>
+
+          <code><a href="kaplan_meier_estimator.html">kaplan_meier_estimator()</a></code>
+
+        </dt>
+        <dd>Build a KaplanMeierEstimator from cumulative deaths by year.</dd>
+
+        <dt>
+
+          <code><a href="load_pyramid_csv.html">load_pyramid_csv()</a></code>
+
+        </dt>
+        <dd>Load a population-pyramid CSV into a numeric matrix.</dd>
+
+        <dt>
+
+          <code><a href="sample_pyramid_ages.html">sample_pyramid_ages()</a></code>
+
+        </dt>
+        <dd>Sample realistic per-agent ages (in days) from a population pyramid.</dd>
+
+        <dt>
+
+          <code><a href="calc_capacity.html">calc_capacity()</a></code>
+
+        </dt>
+        <dd>Estimate the agent capacity needed for a growing population.</dd>
+
+        <dt>
+
+          <code><a href="calc_capacity_cdr.html">calc_capacity_cdr()</a></code>
+
+        </dt>
+        <dd>Estimate the agent capacity for a growing population reclaimed with <code><a href="../reference/squash.html">squash()</a></code>.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="spatial-coupling-migration">Spatial coupling &amp; migration<a class="anchor" aria-label="anchor" href="#spatial-coupling-migration"></a></h2>
+
+      <div class="section-desc"><p>Pairwise distances and migration-network models for spatial coupling of the force of infection.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="distances.html">distances()</a></code>
+
+        </dt>
+        <dd>Great-circle distance matrix between geographic points.</dd>
+
+        <dt>
+
+          <code><a href="gravity.html">gravity()</a></code>
+
+        </dt>
+        <dd>Gravity migration-network model.</dd>
+
+        <dt>
+
+          <code><a href="radiation.html">radiation()</a></code>
+
+        </dt>
+        <dd>Radiation migration-network model (Simini et al., Nature 2012).</dd>
+
+        <dt>
+
+          <code><a href="stouffer.html">stouffer()</a></code>
+
+        </dt>
+        <dd>Stouffer's intervening-opportunities migration model (Stouffer, 1940).</dd>
+
+        <dt>
+
+          <code><a href="competing_destinations.html">competing_destinations()</a></code>
+
+        </dt>
+        <dd>Competing-destinations migration model (Fotheringham, 1984).</dd>
+
+        <dt>
+
+          <code><a href="row_normalizer.html">row_normalizer()</a></code>
+
+        </dt>
+        <dd>Cap each row sum of a network matrix at <code>max_rowsum</code>.</dd>
+      </dl></div><div class="section level2">
+      <h2 id="reproducibility">Reproducibility<a class="anchor" aria-label="anchor" href="#reproducibility"></a></h2>
+
+      <div class="section-desc"><p>Seed the simulation RNG. After <code><a href="../reference/set_seed.html">set_seed()</a></code>, a run is reproducible regardless of CPU/thread count; <code><a href="../reference/unset_seed.html">unset_seed()</a></code> reverts to entropy-seeded (random) runs.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="set_seed.html">set_seed()</a></code>
+
+        </dt>
+        <dd>Set the global random seed, making subsequent razer runs reproducible.</dd>
+
+        <dt>
+
+          <code><a href="unset_seed.html">unset_seed()</a></code>
+
+        </dt>
+        <dd>Revert to a non-reproducible, entropy-seeded RNG (undo <code><a href="../reference/set_seed.html">set_seed()</a></code>).</dd>
+      </dl></div><div class="section level2">
+      <h2 id="utilities">Utilities<a class="anchor" aria-label="anchor" href="#utilities"></a></h2>
+
+      <div class="section-desc"><p>Grid broadcasting and binning helpers.</p></div>
+
+      <dl></dl></div><div class="section level2">
+
+
+
+
+      <dl><dt>
+
+          <code><a href="values_map.html">values_map()</a></code>
+
+        </dt>
+        <dd>Build a values map: broadcast a value into a <code>n_ticks x n_nodes</code> grid Column.</dd>
+
+        <dt>
+
+          <code><a href="bincount.html">bincount()</a></code>
+
+        </dt>
+        <dd>Count occurrences of each value, NumPy <code>bincount</code>-style, into a buffer.</dd>
+
+        <dt>
+
+          <code><a href="bincount_wt.html">bincount_wt()</a></code>
+
+        </dt>
+        <dd>Weighted bincount: sum each element's weight into its bin.</dd>
+
+        <dt>
+
+          <code><a href="bincount_where.html">bincount_where()</a></code>
+
+        </dt>
+        <dd>Count, per group, the agents whose property satisfies a comparison.</dd>
+
+        <dt>
+
+          <code><a href="bincount_where_wt.html">bincount_where_wt()</a></code>
+
+        </dt>
+        <dd>Sum a weight, per group, over the agents whose property satisfies a comparison.</dd>
+
+        <dt>
+
+          <code><a href="squash.html">squash()</a></code>
+
+        </dt>
+        <dd>Compact a people environment, dropping excluded agents and reclaiming their slots.</dd>
       </dl></div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>

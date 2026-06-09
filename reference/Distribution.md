@@ -26,8 +26,8 @@ a whole-tick state timer) are responsible for rounding or truncating as
 appropriate — the simulation kernels round to the nearest tick.
 
 The handle is opaque to R — it is passed to simulation kernels (e.g.
-`step_exposed_ei`) by reference, so the same object can be reused every
-tick and shared across all worker threads.
+`step_sir` or `transmission`) by reference, so the same object can be
+reused every tick and shared across all worker threads.
 
 ## Methods
 
@@ -42,8 +42,6 @@ performance.
 #### return
 
 A single numeric (double) draw from the distribution.
-
-#### export
 
 ### Method `sample_n`
 
@@ -62,5 +60,3 @@ samples (e.g. one million draws) from R.
 #### return
 
 A numeric (double) vector of length `n`.
-
-#### export

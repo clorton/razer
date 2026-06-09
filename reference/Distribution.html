@@ -20,6 +20,8 @@ RNG and passes it in), or from R via $sample_one() / $sample_n()."></head><body>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="nav-link" href="../articles/index.html">Articles</a></li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
 <li class="nav-item"><a class="external-link nav-link" href="https://github.com/clorton/razer/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
@@ -57,8 +59,8 @@ RNG and passes it in), or from R via <code>$sample_one()</code> / <code>$sample_
 whole-tick state timer) are responsible for rounding or truncating as
 appropriate — the simulation kernels round to the nearest tick.</p>
 <p>The handle is opaque to R — it is passed to simulation kernels (e.g.
-<code>step_exposed_ei</code>) by reference, so the same object can be reused every tick
-and shared across all worker threads.</p>
+<code>step_sir</code> or <code>transmission</code>) by reference, so the same object can be reused
+every tick and shared across all worker threads.</p>
     </div>
     <div class="section level2">
     <h2 id="methods">Methods<a class="anchor" aria-label="anchor" href="#methods"></a></h2>
@@ -72,12 +74,6 @@ use the internal sampler with an explicit, reusable RNG for performance.</p>
 <div class="section">
 <h4 id="return">return<a class="anchor" aria-label="anchor" href="#return"></a></h4>
 <p>A single numeric (double) draw from the distribution.</p>
-</div>
-<div class="section">
-<h4 id="export">export<a class="anchor" aria-label="anchor" href="#export"></a></h4>
-
-
-
 </div>
 
 </div>
@@ -99,12 +95,6 @@ makes it practical to validate the sampler against large empirical samples
 <div class="section">
 <h4 id="return-1">return<a class="anchor" aria-label="anchor" href="#return-1"></a></h4>
 <p>A numeric (double) vector of length <code>n</code>.</p>
-</div>
-<div class="section">
-<h4 id="export-1">export<a class="anchor" aria-label="anchor" href="#export-1"></a></h4>
-
-
-
 </div>
 
 </div>
