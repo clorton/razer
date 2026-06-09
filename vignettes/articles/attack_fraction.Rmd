@@ -14,7 +14,7 @@ knitr::opts_chunk$set(fig.width = 8, fig.height = 4.8, message = FALSE, warning 
 library(razer)
 ```
 
-> Companion to `examples/sir_attack_fraction.R` and `examples/seir_attack_fraction.R`.
+> Companion to [`examples/sir_attack_fraction.R`](https://github.com/clorton/razer/blob/main/examples/sir_attack_fraction.R) and [`examples/seir_attack_fraction.R`](https://github.com/clorton/razer/blob/main/examples/seir_attack_fraction.R).
 > This notebook is the *why*; those scripts are the runnable reference.
 
 ## The model and the question
@@ -132,7 +132,7 @@ legend("bottomright", c("Kermack–McKendrick", "razer SEIR"), pch = c(NA, 17),
   fraction near threshold.
 - **Beyond one node.** Pass a `network` matrix (an $n_\text{nodes}\times n_\text{nodes}$
   coupling) and a multi-row `scenario`; the same final-size logic holds per well-mixed
-  patch (see `examples/simple_sir.R` for a 954-patch spatial version).
+  patch (see [`examples/simple_sir.R`](https://github.com/clorton/razer/blob/main/examples/simple_sir.R) for a 954-patch spatial version).
 - **Other structures.** Swap `"SIR"` for any of the eight menagerie models, or add waning
   (`"SIRS"`/`"SEIRS"`, with `immunity_period`) — but note waning breaks the single-epidemic
-  assumption, so the final-size relation no longer applies (see the endemic notebook).
+  assumption, so the final-size relation no longer applies (see the [endemic dynamics notebook](endemic_dynamics.html)).

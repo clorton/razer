@@ -14,11 +14,11 @@ knitr::opts_chunk$set(fig.width = 8, fig.height = 5, message = FALSE, warning = 
 library(razer)
 ```
 
-> Companion to `examples/endemic_sir.R` and `examples/endemic_sir_seasonal.R`.
+> Companion to [`examples/endemic_sir.R`](https://github.com/clorton/razer/blob/main/examples/endemic_sir.R) and [`examples/endemic_sir_seasonal.R`](https://github.com/clorton/razer/blob/main/examples/endemic_sir_seasonal.R).
 
 ## From a single epidemic to a persistent one
 
-The final-size notebook showed a *closed* SIR burning through its susceptibles once and
+The [final-size notebook](attack_fraction.html) showed a *closed* SIR burning through its susceptibles once and
 stopping. Real endemic diseases persist because the susceptible pool is continually
 **replenished** — by births, by loss of immunity, by migration. Add demographic turnover
 (birth/death rate $\mu$) to SIR and the system has a non-trivial **endemic equilibrium**:
@@ -146,8 +146,8 @@ abline(v = 0:10, col = "grey92")
 - **Forcing.** Change `amp`, or replace the sinusoid with school-term square waves; try the
   $R_0$ that makes the inter-epidemic period resonate with the annual drive.
 - **Growing populations.** For true births (population growth, newborns into a maternal `M`
-  state) rather than constant-population turnover, see `examples/engwal_measles.R`
-  and the interventions notebook — `run_model(extra_states = "M", capacity = …)` plus the
+  state) rather than constant-population turnover, see [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R)
+  and the [interventions notebook](interventions.html) — `run_model(extra_states = "M", capacity = …)` plus the
   `births` / `mortality` kernels.
 - **Space.** Add patches to `scenario` and entries to `network` to study spatial coupling,
   travelling waves, and metapopulation persistence.

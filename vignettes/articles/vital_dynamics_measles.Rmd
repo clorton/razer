@@ -14,7 +14,7 @@ knitr::opts_chunk$set(fig.width = 8, fig.height = 6, message = FALSE, warning = 
 library(razer)
 ```
 
-> Companion to `examples/engwal_measles.R`. Builds on the demographics and endemic notebooks.
+> Companion to [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R). Builds on the [demographics](demographics.html) and [endemic dynamics](endemic_dynamics.html) notebooks.
 
 ## Measles: why a richer model
 
@@ -39,7 +39,7 @@ This is where razer's extensibility pays off — no kernel changes, just `run_mo
 - **`capacity`** (from `calc_capacity()`) reserves slots for the population to grow into over
   the 20-year run; the `births` kernel activates them.
 - an **`init` callback** gives each agent an age (from a pyramid-like curve) and a
-  Kaplan–Meier date of death (see the demographics notebook).
+  Kaplan–Meier date of death (see the [demographics notebook](demographics.html)).
 - a **`step_exit` callback** runs `births` (newborns into M, with a maternal timer + a KM
   date of death) and `mortality` (retire agents whose `dod` has arrived) each tick.
 
@@ -123,7 +123,7 @@ that births top up), `M` is a thin layer of protected newborns, and incidence br
 ## Customize and extend
 
 - **Vaccination.** Layer an SIA campaign on top — register `c("M", "V")` and add a campaign
-  callback (see the interventions notebook); watch the inter-epidemic period lengthen as
+  callback (see the [interventions notebook](interventions.html)); watch the inter-epidemic period lengthen as
   coverage rises.
 - **Transmissibility / demography.** Change `r0`, `cbr`, or the maternal/latent/infectious
   distributions; higher birth rates shorten the inter-epidemic period (faster susceptible

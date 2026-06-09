@@ -14,7 +14,7 @@ knitr::opts_chunk$set(fig.width = 8, fig.height = 5, message = FALSE, warning = 
 library(razer)
 ```
 
-> Companion to `examples/simple_sir.R`.
+> Companion to [`examples/simple_sir.R`](https://github.com/clorton/razer/blob/main/examples/simple_sir.R).
 
 ## Why space?
 

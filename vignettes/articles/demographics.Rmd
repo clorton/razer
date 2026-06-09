@@ -15,7 +15,7 @@ library(razer)
 set_seed(1)   # seeds razer's internal RNG (used by the alias sampler and Kaplan–Meier)
 ```
 
-> Companion to `examples/aged_population.R`.
+> Companion to [`examples/aged_population.R`](https://github.com/clorton/razer/blob/main/examples/aged_population.R).
 
 ## Why bother with demographics?
 
@@ -106,7 +106,7 @@ cat(sprintf("under-5s at t=0: %s of %s agents\n",
   the synthetic Gompertz hazard.
 - **Use it in a model.** Pass these `dob`/`dod` Columns into a `run_model()` `init` callback
   and run the `births`/`mortality` kernels in `step_exit` — see
-  `examples/engwal_measles.R` and the vital-dynamics notebook.
+  [`examples/engwal_measles.R`](https://github.com/clorton/razer/blob/main/examples/engwal_measles.R) and the [vital dynamics notebook](vital_dynamics_measles.html).
 - **Sizing the array.** A growing population needs head-room: `calc_capacity()` bounds the
   cumulative births, `calc_capacity_cdr()` the peak-living size for a `squash()`-reclaimed
-  run (see the long-runs notebook).
+  run (see the [long runs notebook](long_runs_and_memory.html)).
