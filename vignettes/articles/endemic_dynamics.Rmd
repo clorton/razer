@@ -31,7 +31,7 @@ $R_\text{eff} = R_0\,S/N$ equals 1: each case replaces itself, no more. Push $S$
 $1/R_0$ and the epidemic grows; below, it shrinks. The approach to $S^*$ is a series of
 damped epidemic waves.
 
-## How razer builds it
+## How Razer builds it
 
 `run_model()` itself is **closed-population** (it allocates exactly the initial agents).
 Vital dynamics and importation are layered on through its callbacks and the `capacity`

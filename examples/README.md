@@ -1,6 +1,6 @@
-# razer examples
+# Razer examples
 
-Runnable example scripts for the `razer` package. Install the package first
+Runnable example scripts for the `Razer` package. Install the package first
 (`R CMD INSTALL .` or `devtools::install()` from the repository root), then run an
 example with `Rscript`. Only base-R graphics are used (no extra dependencies). Plots
 are written to `examples/output/`.
@@ -29,12 +29,12 @@ run during `R CMD check`). Each pairs 1:1 with a script here:
 - **`getting_started.Rmd`** — a tour of `run_model()`: a single SEIR run, a model
   comparison, and a callback-based intervention.
 - **`attack_fraction.Rmd`** — epidemic final size: deriving $R_0 = \beta D$ and the
-  Kermack–McKendrick relation $A = 1 - e^{-R_0 A}$, and validating razer against it
+  Kermack–McKendrick relation $A = 1 - e^{-R_0 A}$, and validating Razer against it
   (pairs with `sir_attack_fraction.R` / `seir_attack_fraction.R`).
 - **`endemic_dynamics.Rmd`** — the endemic equilibrium $S^\*/N = 1/R_0$ via vital turnover
   and importation, plus seasonal forcing → phase-locked annual waves (pairs with
   `endemic_sir.R` / `endemic_sir_seasonal.R`).
-- **`interventions.Rmd`** — extending razer with custom states and callbacks: vaccination
+- **`interventions.Rmd`** — extending Razer with custom states and callbacks: vaccination
   campaigns (with and without waning) and quarantine (pairs with `sia_campaigns.R`,
   `sia_campaigns_waning.R`, `quarantine.R`).
 - **`spatial_metapopulation.Rmd`** — coupling patches with migration networks

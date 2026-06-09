@@ -1,8 +1,8 @@
-# Bringing the LASER architecture to R: an assessment of `razer`
+# Bringing the LASER architecture to R: an assessment of `Razer`
 
 *An honest engineering retrospective comparing the Python **LASER** stack
-(`laser-core` + `laser-generic`) with the R/Rust port, **`razer`** — what carried over,
-what didn't, what's genuinely better, and whether an R user should reach for `razer` or
+(`laser-core` + `laser-generic`) with the R/Rust port, **`Razer`** — what carried over,
+what didn't, what's genuinely better, and whether an R user should reach for `Razer` or
 just drive LASER through `reticulate`.*
 
 ---
@@ -17,10 +17,10 @@ This document compares two living codebases:
   distance/migration models, demographic samplers, the Kaplan–Meier estimator, RNG, and
   Numba-compiled kernels) and **`laser-generic`** (a component library that assembles
   SI/SIR/SEIR-family models out of reusable processes).
-- **`razer`** — the R package in this repository, an extendr/Rust port of that
+- **`Razer`** — the R package in this repository, an extendr/Rust port of that
   architecture.
 
-The `razer` side of every claim is grounded in this repository's source. The LASER side is
+The `Razer` side of every claim is grounded in this repository's source. The LASER side is
 grounded in its **documented architecture** (the `software-overview` and tutorial docs) and
 its established public design; where an exact Python API signature would matter and I
 cannot verify it against source in this tree, I describe the behavior rather than invent a
@@ -79,11 +79,11 @@ compiled language.
 
 ---
 
-## 3. razer's answer: Rust + extendr + Rayon
+## 3. Razer's answer: Rust + extendr + Rayon
 
-`razer` fills both gaps with **Rust**, exposed to R through **extendr**:
+`Razer` fills both gaps with **Rust**, exposed to R through **extendr**:
 
-| LASER (Python) | razer (R) | Role |
+| LASER (Python) | Razer (R) | Role |
 |---|---|---|
 | NumPy array | **`Column`** — a Rust-owned `Vec<T>`, dtype-tagged (`i8/u8/i16/u16/i32/u32/f32/f64`), held in R as an opaque external pointer | typed, mutable, in-place agent/report storage |
 | Numba `@njit(parallel=True)` kernels | **Rust kernels** parallelized with **Rayon**, compiled ahead-of-time at package install | the hot per-agent loops |
@@ -111,19 +111,19 @@ another `@njit` function in Python."
 capacity, a live count, dead-slot reclamation via `squash`. Differences:
 
 - **Visibility.** LASER's properties are NumPy arrays you can index and mutate anywhere.
-  razer's are opaque handles; you read with `$values()`/`$col()` and write with
-  `$set()`/`$set_col()`. razer is safer and more compact but less hackable at the REPL.
+  Razer's are opaque handles; you read with `$values()`/`$col()` and write with
+  `$set()`/`$set_col()`. Razer is safer and more compact but less hackable at the REPL.
 - **Dynamic property creation.** Both can add properties; LASER's `add_scalar_property` /
-  `add_vector_property` on a frame is a touch more first-class than razer's "allocate a
+  `add_vector_property` on a frame is a touch more first-class than Razer's "allocate a
   `Column` and stash it in the `people` env" idiom (which `run_model`'s `init` callback
   exists to host).
 - **Persistence.** `laser-core` `LaserFrame` supports `save_snapshot` / `load_snapshot`.
-  **razer has no snapshot mechanism** — a real gap for long runs and checkpoint/restart.
+  **Razer has no snapshot mechanism** — a real gap for long runs and checkpoint/restart.
 
 ### 4.2 Parameters — *different*
 
 LASER's `PropertySet` is a structured, serializable parameter bag passed to the model and
-components. razer has **no `PropertySet` equivalent**; parameters are ordinary `run_model()`
+components. Razer has **no `PropertySet` equivalent**; parameters are ordinary `run_model()`
 arguments and values closed over in callbacks. Fine for the menagerie, weaker for
 reproducible parameter sweeps and provenance.
 
@@ -134,20 +134,20 @@ This is where the two part ways most.
 - **laser-generic is a component framework.** A model is an ordered list of component
   objects; you extend it by writing a new component class and registering it. The set of
   expressible models is open-ended and the composition is explicit and introspectable.
-- **razer is a fixed menagerie plus callbacks.** `run_model()` wires the eight closed-
+- **Razer is a fixed menagerie plus callbacks.** `run_model()` wires the eight closed-
   population models (SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS) in one correct per-tick order, and
   user extension happens through three lifecycle **callbacks** (`step_enter` / `step_update`
   / `step_exit`), `extra_states` (register a `"V"` or `"Q"` state), and the generic
   `step_timer_expire(_set)` kernels. This covers a lot — vaccination, waning, quarantine,
   importation, vital dynamics — and the worked examples prove it. But it is **composition by
   escape hatch, not by first-class component**. There is no plugin registry, no per-component
-  init/report contract, no way for a third party to ship "a razer component" the way they can
+  init/report contract, no way for a third party to ship "a Razer component" the way they can
   ship a laser-generic one. And because new *fast* dynamics need Rust, the callback route is
   capped at whatever you can do in R between kernel calls.
 
-### 4.4 The per-tick model loop and the `R0 = β·D` insight — *razer is arguably more correct*
+### 4.4 The per-tick model loop and the `R0 = β·D` insight — *Razer is arguably more correct*
 
-razer settled on a single per-tick ordering for **every** model —
+Razer settled on a single per-tick ordering for **every** model —
 `carry_forward → step → calc_foi → transmission` — with `calc_foi` reading the **settled
 start-of-interval** infectious census `I[t]` (not the working column being built). Because
 the FOI no longer depends on where the step kernel runs, every model uses one ordering and
@@ -160,7 +160,7 @@ ordering made the tally/infection interaction explicit. **Whether laser-generic 
 
 ### 4.5 Distributions — *equivalent, smaller surface*
 
-razer ships `dist_normal/constant/uniform/gamma/poisson/beta/exp/lognormal/logistic` as
+Razer ships `dist_normal/constant/uniform/gamma/poisson/beta/exp/lognormal/logistic` as
 Rust-backed `Distribution` handles with thread-local sampling, validated against R's
 `q*`/`d*` references. This mirrors LASER's use of parameterized distributions for timers.
 The set is smaller and the `dist_` prefix exists only to dodge R's namespace collisions
@@ -168,7 +168,7 @@ The set is smaller and the `dist_` prefix exists only to dodge R's namespace col
 
 ### 4.6 Spatial coupling / migration — *at parity*
 
-razer ports the `laser-core` migration family essentially 1:1: `distances` (haversine),
+Razer ports the `laser-core` migration family essentially 1:1: `distances` (haversine),
 `gravity`, `radiation`, `stouffer`, `competing_destinations`, and `row_normalizer`, with the
 network feeding `calc_foi`'s redistribution of the force of infection. The repository notes
 these match laser-core's reference outputs to floating-point precision. This is the
@@ -176,15 +176,15 @@ strongest area of parity.
 
 ### 4.7 Demographics & initialization — *at parity, with one addition*
 
-razer ports the alias-method age sampler (`AliasedDistribution` / `sample_pyramid_ages` /
+Razer ports the alias-method age sampler (`AliasedDistribution` / `sample_pyramid_ages` /
 `load_pyramid_csv`) and the `KaplanMeierEstimator` (date-of-death conditioned on current
 age), plus `calc_capacity`. It **adds `calc_capacity_cdr`**, a mortality-aware bound on the
 *peak living* population (vs. the cumulative-births bound), so a `squash`-reclaimed century
 run can be sized realistically. That addition is a backport candidate (§6).
 
-### 4.8 RNG & reproducibility — *razer is better*
+### 4.8 RNG & reproducibility — *Razer is better*
 
-razer's RNG (`set_seed` / `unset_seed`, `SmallRng`/xoshiro256++) is **reproducible
+Razer's RNG (`set_seed` / `unset_seed`, `SmallRng`/xoshiro256++) is **reproducible
 independent of CPU/thread count**: parallel kernels split agents into fixed-size chunks and
 seed each chunk deterministically from `(call_base, chunk_index)`, so results don't depend on
 how Rayon schedules work. Reproducibility that survives a change in core count is hard to get
@@ -193,7 +193,7 @@ from a Numba `prange` + global NumPy RNG design, and is a genuine improvement (�
 ### 4.9 Performance — *comparable, different cost curve*
 
 Both end up running native, parallel kernels over contiguous typed arrays. Expected
-differences: razer pays **zero JIT warm-up** (Rust is compiled at install; Numba compiles on
+differences: Razer pays **zero JIT warm-up** (Rust is compiled at install; Numba compiles on
 first call each session) but pays a **one-time Cargo build** at install. Steady-state
 throughput should be in the same ballpark; the repository reports tens of millions of agents
 processed per kernel in tens of milliseconds. No head-to-head benchmark exists in this tree,
@@ -222,12 +222,12 @@ so treat "comparable" as a design-level expectation, not a measured result.
   novel per-agent kernel; there is no in-language JIT to fall back on.
 - **Missing infrastructure:** no `PropertySet`, no snapshots, no `SortedQueue`/event queue, no
   within-host or age-structured-contact machinery, a fixed model set.
-- **Maturity and bus factor.** razer is `0.0.0.9000`, single-author, pre-release. LASER is an
+- **Maturity and bus factor.** Razer is `0.0.0.9000`, single-author, pre-release. LASER is an
   established, multi-contributor, actively developed toolkit.
 
 ---
 
-## 6. Changes to give razer parity with LASER
+## 6. Changes to give Razer parity with LASER
 
 Roughly in priority order:
 
@@ -246,7 +246,7 @@ Roughly in priority order:
 7. **A real head-to-head benchmark** against LASER to replace design-level "comparable" claims
    with numbers.
 
-## 7. Decisions in razer that should be backported to LASER
+## 7. Decisions in Razer that should be backported to LASER
 
 Stated plainly, these are places where the port improved on the original:
 
@@ -266,9 +266,9 @@ Stated plainly, these are places where the port improved on the original:
 
 ---
 
-## 8. Honest assessment: `razer` vs. LASER-through-`reticulate`
+## 8. Honest assessment: `Razer` vs. LASER-through-`reticulate`
 
-The blunt question for an R user: *should I use `razer`, or call LASER from R via
+The blunt question for an R user: *should I use `Razer`, or call LASER from R via
 `reticulate`?*
 
 **The case for `reticulate` + LASER (today, for serious work): stronger.** You get the
@@ -277,29 +277,29 @@ development and bug-fixing, NumPy arrays that `reticulate` will hand back to R a
 vectors/matrices, and parameters/objects you can introspect. The price is real but bounded:
 a managed Python environment, marshaling across the R↔Python boundary, two-language
 debugging, and `reticulate`'s occasional friction. For anyone doing production spatial ABM
-of the kind LASER already supports, that price buys vastly more capability than `razer`
+of the kind LASER already supports, that price buys vastly more capability than `Razer`
 currently offers. **If your requirement is "do the modeling LASER does," `reticulate` + LASER
 is the more capable answer right now, and it is not close on feature breadth.**
 
-**The case for `razer`: narrower but real.** It wins decisively when:
+**The case for `Razer`: narrower but real.** It wins decisively when:
 - **A Python runtime is unacceptable** — locked-down environments, pure-R deployment targets,
   CRAN-style distribution, or teams that simply will not maintain a Python env.
 - **The model is in the menagerie** (SI…SEIRS, ± vital dynamics, importation, simple
-  interventions) — here `razer` is *easier* than wiring LASER components, fully native, and
+  interventions) — here `Razer` is *easier* than wiring LASER components, fully native, and
   fast.
-- **Teaching and onboarding** — the articles + `run_model()` make razer an excellent vehicle
+- **Teaching and onboarding** — the articles + `run_model()` make Razer an excellent vehicle
   for explaining LASER's ideas to R-literate epidemiologists without a Python detour.
-- **You value the specific improvements** razer made (reproducibility, the `β·D` discipline).
+- **You value the specific improvements** Razer made (reproducibility, the `β·D` discipline).
 
-**The honest verdict.** `razer` is a *successful proof that the LASER architecture ports to
+**The honest verdict.** `Razer` is a *successful proof that the LASER architecture ports to
 R*, and in a few spots it is cleaner than the original. It is **not** a substitute for LASER's
 breadth, and pretending otherwise would do users a disservice. For most R users doing
 non-trivial LASER-style work today, `reticulate` + LASER is the pragmatic choice — you get the
-real, maintained toolkit. `razer` earns its place as (1) a Python-free option for the model
+real, maintained toolkit. `Razer` earns its place as (1) a Python-free option for the model
 menagerie it covers, (2) a first-class teaching tool, and (3) a design laboratory whose better
 ideas should flow back upstream. Its long-term relevance depends almost entirely on two
 things: whether it grows a genuine **component framework** (without which it stays a fixed
 menagerie), and whether enough R users actually need native-R ABM to justify maintaining a
 parallel implementation rather than investing that effort in making `reticulate` + LASER
-seamless. If neither holds, razer's most durable contribution may be the upstream
+seamless. If neither holds, Razer's most durable contribution may be the upstream
 backports in §7 — and that would still make the experiment worthwhile.

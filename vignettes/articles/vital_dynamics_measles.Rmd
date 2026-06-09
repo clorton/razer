@@ -30,9 +30,9 @@ it well needs more than SIR:
 The susceptible supply (births) makes the system endemic, with the damped/forced **recurrent
 epidemics** familiar from pre-vaccination measles.
 
-## How razer assembles it
+## How Razer assembles it
 
-This is where razer's extensibility pays off — no kernel changes, just `run_model()` knobs:
+This is where Razer's extensibility pays off — no kernel changes, just `run_model()` knobs:
 
 - **`extra_states = "M"`** registers the maternal state. The disease kernels lead with the
   M→S waning leg, so `run_model` applies it for us each tick (recording the `waning_m` flow).
