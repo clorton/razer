@@ -1,5 +1,10 @@
 # razer — project notes for Claude
 
+> See **`AGENTS.md`** for the short, operational agent manual
+> (build/test loop, repo map, the kernel-ABI hard rules, and the
+> finishing checklist). This file holds the detailed modeling,
+> commenting, build, and git conventions it references.
+
 ## Modeling convention: the Column kernels and per-tick ordering
 
 Models are composed from the **Column-based** per-tick kernels over
@@ -107,8 +112,8 @@ The audience for this codebase is a programmer fluent in **C / C++ / C#
   the turbofish (`::<T>`), `unsafe` blocks and their SAFETY contracts,
   and what attribute macros like `#[extendr]` generate. Don’t explain
   general programming; explain what differs from the languages above.
-  `src/rust/src/sir.rs` is the reference exemplar for the level and
-  style.
+  `src/rust/src/steps.rs` (and `transmission.rs`) is the reference
+  exemplar for the level and style.
 - **Always comment R code (`.R`) for this audience.** Explain R idioms
   that trip up non-R programmers — `<-` assignment, S3 dispatch
   (`generic.class`, `` `$<-` `` replacement methods), `.Call` into

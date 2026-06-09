@@ -32,3 +32,12 @@ century-long open-population runs.
   quarantine](https://clorton.github.io/razer/articles/interventions.md):
 - [Long runs and memory: capacity and
   squash()](https://clorton.github.io/razer/articles/long_runs_and_memory.md):
+
+### Customizing & extending
+
+The reference for going beyond run_model(): R callbacks and the kernel
+toolbox, the R-vs-Rust boundary, setting up Rust, and an LLM-prompting
+recipe for new kernels.
+
+- [Using and extending Razer: from R callbacks to custom Rust
+  kernels](https://clorton.github.io/razer/articles/extending_razer.md):

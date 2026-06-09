@@ -164,6 +164,11 @@ SEIR attack fractions match to ~1e-3).
   *Endemic dynamics*, *Spatial metapopulations*, *Demographics*, *Vital
   dynamics & measles*, *Interventions* (vaccination ± waning,
   quarantine), and *Long runs & memory*.
+- A **“Using and extending Razer”** guide (for human modelers and coding
+  assistants) covering basic use, customizing purely in R via callbacks,
+  the R-vs-Rust boundary, Rust-development setup, the kernel
+  ABI/conventions, and a copy-paste recipe for prompting an LLM to write
+  a correct Rust kernel.
 - Example scripts are **device-aware** (write to `examples/output/`
   under `Rscript`, draw to the Plots pane when
   [`source()`](https://rdrr.io/r/base/source.html)d in RStudio); see
