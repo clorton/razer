@@ -49,9 +49,10 @@ the "Keep a Changelog" convention.)
   the site's Changelog page; headed as the development version for pkgdown's news parser.
 
 ### Infrastructure
-- **GitHub Actions pinned by commit SHA.** `pkgdown.yaml` now references every action by its
-  full commit hash (with the version tag in a trailing comment) instead of a mutable tag,
-  for supply-chain integrity; `actions/checkout` bumped to v6 to match `R-CMD-check.yaml`.
+- **GitHub Actions pinned by commit SHA.** Both workflows (`pkgdown.yaml` and
+  `R-CMD-check.yaml`) now reference every action by its full commit hash (with the version
+  tag in a trailing comment) instead of a mutable tag, for supply-chain integrity;
+  `pkgdown.yaml`'s `actions/checkout` bumped to v6 to match `R-CMD-check.yaml`.
 
 ### Added
 - **`run_model()` gains `capacity` and `extra_states`** so the callbacks can express
