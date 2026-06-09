@@ -7,7 +7,7 @@ Description: R interface to the LASER (Light Agent Spatial modeling for ERadicat
     toolkit. Provides high-performance, Rust-backed data structures and
     epidemiological components for large-scale spatial agent-based disease
     models, including Rust-owned typed agent-property arrays, migration network
-    models, and composable M-S-E-I-R-family compartmental kernels with vital
+    models, and composable M-S-E-I-R-family agent-state kernels with vital
     dynamics and demographic (age / date-of-death) initialization.
 License: MIT + file LICENSE
 URL: https://clorton.github.io/razer/, https://github.com/clorton/razer

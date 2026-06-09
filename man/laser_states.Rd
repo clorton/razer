@@ -2,7 +2,7 @@
 % Please edit documentation in R/extendr-wrappers.R
 \name{laser_states}
 \alias{laser_states}
-\title{Named integer vector of epidemic compartment state codes.}
+\title{Named integer vector of epidemic state codes.}
 \usage{
 laser_states()
 }

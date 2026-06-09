@@ -13,7 +13,7 @@
 # Built on run_model(): there is no disease here, so we run the trivial model "SI" with
 # r0 = 0 (no transmission). The vital dynamics are added through run_model's callbacks:
 #   * `capacity` reserves the (calc_capacity_cdr) headroom births need to grow into;
-#   * `extra_states = "M"` registers the maternal-immunity compartment newborns enter
+#   * `extra_states = "M"` registers the maternal-immunity state newborns enter
 #     (run_model applies the step kernel's M->S waning each tick);
 #   * `init` gives each agent a date of birth / Kaplan-Meier date of death;
 #   * `step_exit` runs births (into M) and mortality each tick, and squash() once a year.
@@ -90,7 +90,7 @@ timing <- system.time(
       m$people$count <- b$count
       move_count(NULL, m$nodes$M, b$born, t)
       track$births[bi] <- sum(b$born)
-      # Crude mortality: retire agents whose dod has arrived; decrement their compartments
+      # Crude mortality: retire agents whose dod has arrived; decrement their states
       # (only S, M, and the unused I are populated here).
       d <- mortality(m$people$state, m$people$dod, m$people$nodeid, m$people$count, m$nodes$count, t)
       move_count(m$nodes$M, NULL, d$m, t)

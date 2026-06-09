@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Changed
+- **Terminology: "state", not "compartment".** razer is agent-based — each individual
+  carries a *state* (susceptible, exposed, infectious, recovered, vaccinated, quarantined,
+  maternally immune, deceased) — not compartmental (cohorts tracked only by a count). All
+  prose, comments, docstrings, plot labels, and user-facing messages now say "state"
+  accordingly. Two `run_model()` warning strings changed text: "model X has no E/R
+  **compartment**" → "no E/R **state**", and the `extra_states` error now reads "must not
+  repeat the model's own **states**" (matching test patterns updated).
+
 ### Examples / docs
 - **Examples now play well in RStudio.** Every example script is device-aware — under
   `Rscript` it writes its PNG to `examples/output/` as before, but `source()`d in an
@@ -18,14 +27,14 @@ All notable changes to this project are documented here.
 - **Richer example visuals:** `simple_sir.R` (previously plotless) now plots the national
   S/I/R trajectory and a geographic England & Wales attack-rate map; `quarantine.R` gained a
   2×2 figure (infectious baseline-vs-quarantine, cumulative cases averted, the Q
-  compartment, and per-test detections).
+  state, and per-test detections).
 - **`quarantine.R` enhancements:** the testing programme now runs on a configurable schedule
   (`test_period`, default fortnightly) and is **leaky** — each infectious agent is detected
   with probability `sensitivity` (default 0.80; 20% false negatives, no false positives).
 
 ### Added
 - **`run_model()` gains `capacity` and `extra_states`** so the callbacks can express
-  vital-dynamics and extra-compartment models, not just the closed-population menagerie:
+  vital-dynamics and extra-state models, not just the closed-population menagerie:
   - `capacity` (default = initial population) reserves agent-array slots a `step_*`
     callback can activate with `births` / `import_infections` — i.e. lets the population
     grow (size it with `calc_capacity()` / `calc_capacity_cdr()`).
@@ -40,7 +49,7 @@ All notable changes to this project are documented here.
     For `"M"`, run_model additionally applies the kernels' built-in M→S waning each tick
     (the `waning_m` flow), closing the desync that discarding `waned` would cause.
   These unblock expressing constant-population vitals, importation, growth, and a maternal
-  `M` compartment through `run_model()` + callbacks (see the converted `simple_sir.R`,
+  `M` state through `run_model()` + callbacks (see the converted `simple_sir.R`,
   `endemic_sir*.R`, `long_run_squash.R`).
 
 ### Fixed (red-team follow-up)
@@ -73,7 +82,7 @@ All notable changes to this project are documented here.
   three per-tick callbacks: `step_enter(model)` (start of tick), `step_update(model)`
   (between the step kernel and `calc_foi`), and `step_exit(model)` (end of tick). It now
   seeds **any**
-  of the model's `E`/`I`/`R` compartments that the scenario supplies a column for (a state
+  of the model's `E`/`I`/`R` states that the scenario supplies a column for (a state
   absent from the scenario, or from the model, is not seeded), and records the per-node
   flows `incidence` (all models), `onset` (E→I), `recovery` (I-exit), and `waning` (R→S).
   `$nodes$recoveries` is renamed `$nodes$recovery`.
@@ -148,7 +157,7 @@ All notable changes to this project are documented here.
 - **Unified the per-tick kernels into a return-counts menagerie (all `u16` timers).**
   The transmission and step kernels no longer take node census/flow buffers: they mutate
   the per-agent arrays and **return per-node counts**, which the model applies to the
-  compartments it maintains via the new `move_count(from, to, counts, tick)` helper (so a
+  states it maintains via the new `move_count(from, to, counts, tick)` helper (so a
   model allocates only the states it has). The agent `timer` is now `u16` everywhere.
   - `transmission(state, timer, nodeid, count, foi, tick, to_state, duration)` →
     per-node infection counts (S→E or S→I, sets a u16 timer). Replaces the old
@@ -159,7 +168,7 @@ All notable changes to this project are documented here.
     `sir_step` and `measles_step`: `step_si` (M→S, E→I), `step_sir` (+ I→`absorbing_state`,
     S or R), `step_sirs` (+ I→R with immunity timer, R→S). Each is a single u16-timer pass
     leading with M→S and returns a named list of per-node transition counts.
-  - `mortality(...)` → `list(m, s, e, i, r)` of per-node deaths by source compartment, and
+  - `mortality(...)` → `list(m, s, e, i, r)` of per-node deaths by source state, and
     `births(...)` → `list(count, born)` (new active count + per-node births), instead of
     writing the census/flow directly. (`calc_foi` is unchanged; `constant_pop_vitals_sir`
     and `import_infections` keep writing their own census, now u16-timer-aware.)
@@ -180,7 +189,7 @@ All notable changes to this project are documented here.
   removes the last `beta · (D − 1)` path. `examples/sir_attack_fraction.R` and
   `seir_attack_fraction.R` were rewritten on the Column kernels (both now validate
   Kermack–McKendrick with `R0 = beta · D`); SEIR reuses `measles_step` with the maternal
-  compartment empty. Associated tests removed; `laser_states` keeps its own test.
+  state empty. Associated tests removed; `laser_states` keeps its own test.
 
 ### Fixed
 - **SIR models now realize the full `R0 = beta · D`, not `beta · (D − 1)`.** With direct
@@ -227,7 +236,7 @@ All notable changes to this project are documented here.
   regulated at the `N/R0` threshold; writes a reservoirs/incidence dynamics plot.
 - `measles_step(state, timer, nodeid, count, M, S, E, I, R, inf_duration, tick)`
   (`src/rust/src/measles.rs`) — the combined timed-transition kernel for the measles
-  model, advancing all three timed compartments in a single pass over a **uint16**
+  model, advancing all three timed states in a single pass over a **uint16**
   timer: **M→S** (maternal-immunity waning → Susceptible), **E→I** (incubation end →
   Infectious, drawing a fresh infectious-period timer from `inf_duration`), and **I→R**
   (recovery → Recovered, lifelong). Branching on each agent's entry state means every
@@ -238,7 +247,7 @@ All notable changes to this project are documented here.
   with private per-thread node buffers. Covered by `tests/testthat/test-measles-step.R`
   (incl. a parallel-vs-census check at 900k agents).
 - **Natural (non-disease) mortality by date of death** for the measles model.
-  - New `M` (maternal-immunity) compartment: `STATE_M = 4` and `laser_states()` now
+  - New `M` (maternal-immunity) state: `STATE_M = 4` and `laser_states()` now
     returns `c(S=0, E=1, I=2, R=3, M=4, D=-1)` (`src/rust/src/epidemic.rs`).
   - `mortality(state, dod, nodeid, count, M, S, E, I, R, deaths, tick)`
     (`src/rust/src/mortality.rs`) — retires every living agent whose date of death
@@ -303,7 +312,7 @@ All notable changes to this project are documented here.
   sets `total`'s column `tick+1` to the elementwise sum of the `summands` Columns at
   `tick+1` — e.g. carry S/I/R forward and total them into N (the population / FOI
   denominator) in one call, keeping N current as births, deaths, and imports change
-  the compartments. Covered by `tests/testthat/test-carry-forward-states.R`.
+  the states. Covered by `tests/testthat/test-carry-forward-states.R`.
 - `$col(slot)` / `$set_col(slot, values)` accessor methods on `Column`
   (`src/rust/src/column.rs`) — read or overwrite one column (e.g. all nodes for one
   tick) of a 2-D Column in place, widening / casting like `$values()` / `$set()`.
@@ -340,7 +349,7 @@ All notable changes to this project are documented here.
   `tick` column of the `births`/`deaths` flow reports. The S/I/R node census is kept
   exactly in sync at column `tick+1`: a death out of I/R moves that count to S (a
   death out of S nets to zero), so `S+I+R` stays equal to the population and matches
-  a direct agent census. SIR-specific (knows the S/I/R compartments). Parallelized
+  a direct agent census. SIR-specific (knows the S/I/R states). Parallelized
   across cores with private per-thread node buffers reduced at the end. Covered by
   `tests/testthat/test-vitals.R` (incl. a parallel-vs-census check at 1M agents).
   `examples/simple_sir.R`'s `run_sir_model()` gains a `cdr` argument and runs it as
@@ -510,7 +519,7 @@ All notable changes to this project are documented here.
   data.frame (one row per node, an integer `population` column), builds an agent
   `LaserFrame` sized to the total population, assigns each agent to its node,
   seeds initial infections, and runs the downstream-first SIR loop (recovery I→R
-  before transmission S→I). It records per-node compartment trajectories (`S`,
+  before transmission S→I). It records per-node state trajectories (`S`,
   `I`, `R`) and per-tick flows (`incidence` S→I, `recovery` I→R) into a node-level
   report `LaserFrame` attached as `attr(model, "report")`, alongside `runtime`,
   `nticks`, `model`, and `parameters` attributes. `infectious_period` accepts a
@@ -561,7 +570,7 @@ All notable changes to this project are documented here.
   parameter wiring against R's reference implementations (`qnorm`, `qunif`,
   `qgamma`, `qpois`/`dpois`) over one million draws.
 - `examples/sir_attack_fraction.R` and `examples/seir_attack_fraction.R` —
-  runnable SIR and SEIR examples that plot the compartment trajectories and
+  runnable SIR and SEIR examples that plot the state trajectories and
   compare the simulated final attack fraction against the Kermack–McKendrick
   final-size relation `A = 1 - exp(-R0 * A)` across an `R0` sweep, with timing
   output (with `examples/README.md` and sample output plots).
@@ -570,7 +579,7 @@ All notable changes to this project are documented here.
 
 ### Changed
 - Model compositions (SIR/SEIR/SEIRS test helpers and the examples) now call the
-  per-tick transitions **downstream-first** (out of each timed compartment before
+  per-tick transitions **downstream-first** (out of each timed state before
   into it: R→S, I→R, E→I, S→E) so that exposed/infectious periods reflect their
   full configured duration rather than being shortened by one tick. See `CLAUDE.md`.
 - Distributions return **floating-point** values; the integer rounding for state

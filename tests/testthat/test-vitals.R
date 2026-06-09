@@ -23,7 +23,7 @@ test_that("constant_pop_vitals_sir reverts the dead to S and keeps the census in
   # Then every node-0 agent dies and is reborn susceptible; node-0 census becomes
   #       S=3 (the two ex-I and one ex-R), I=0, R=0; node 1 is untouched; births ==
   #       deaths == per-node events; S+I+R is conserved and matches the agents.
-  # Failure would mean the reversion, the per-compartment census delta, or the tally
+  # Failure would mean the reversion, the per-state census delta, or the tally
   #       is wrong.
   state  <- mk("u8",  c(I, I, R, S, R))
   timer  <- mk("u16",  c(7, 3, 0, 0, 5))

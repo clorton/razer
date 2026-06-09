@@ -8,7 +8,7 @@ is a **`u16`** everywhere (maternal / immunity periods exceed a `u8`'s 255).
 
 **Kernels mutate the per-agent arrays and RETURN per-node counts; the model applies the
 deltas to the census it maintains.** So no kernel takes census/flow buffers, and a model
-allocates only the compartments it has. The flow is: `carry_forward(_states)` copies each
+allocates only the states it has. The flow is: `carry_forward(_states)` copies each
 census column `t → t+1`, then the model applies each kernel's returned counts to column
 `t+1` with `move_count(from, to, counts, t)` (`from`/`to` may be `NULL` for one-sided
 moves — a death decrements only, a birth increments only).
@@ -40,7 +40,7 @@ moves — a death decrements only, a birth increments only).
 | SEIRS | `transmission` (S→E) | `step_sirs` |
 
 Each step kernel is a **single pass branching on the agent's entry state** (and leads
-with M→S, so any model can add a maternal compartment), so a just-entered timed state is
+with M→S, so any model can add a maternal state), so a just-entered timed state is
 never decremented again the same tick — the residency artifact (`duration − 1`) is
 avoided structurally.
 

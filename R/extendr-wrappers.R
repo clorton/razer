@@ -5,7 +5,7 @@
 #' @useDynLib razer, .registration = TRUE
 NULL
 
-#' Named integer vector of epidemic compartment state codes.
+#' Named integer vector of epidemic state codes.
 #'
 #' Returns `c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)`. Use these constants to set
 #' and test the `state` property on a people frame. `M` is maternal immunity
@@ -597,7 +597,7 @@ step_timer_expire_set <- function(state, timer, nodeid, count, n_nodes, from_sta
 #' The S/I/R node census is updated IN PLACE at column `tick + 1` (the working
 #' column the caller has already carried forward): a death out of I decrements `I`
 #' and increments `S`; a death out of R decrements `R` and increments `S`; a death
-#' out of S nets to zero. Every event (from any compartment) is counted per node and
+#' out of S nets to zero. Every event (from any state) is counted per node and
 #' written to BOTH the `births` and `deaths` flow reports for `tick` (equal under
 #' constant population). Agents are assumed to be in S, I, or R (it is the SIR
 #' variant). Parallelized with private per-thread node buffers summed at the end.
@@ -674,12 +674,12 @@ aliased_distribution <- function(counts) .Call(wrap__aliased_distribution, count
 #' @export
 kaplan_meier_estimator <- function(cumulative_deaths) .Call(wrap__kaplan_meier_estimator, cumulative_deaths)
 
-#' Apply natural mortality for one tick, returning deaths per node by compartment.
+#' Apply natural mortality for one tick, returning deaths per node by state.
 #'
 #' For each of the first `count` living agents (state != D) whose `dod` (an absolute
 #' tick) is `<= tick`, sets the agent's `state` to D and tallies the death against the
-#' compartment it occupied. Returns `list(m, s, e, i, r)` of per-node death counts; the
-#' caller decrements those census compartments (and records the total deaths flow).
+#' state it occupied. Returns `list(m, s, e, i, r)` of per-node death counts; the
+#' caller decrements those census states (and records the total deaths flow).
 #'
 #' @param state   Per-agent `u8` state Column (mutated; the deceased become D = 255).
 #' @param dod     Per-agent `u32` date-of-death Column (an absolute tick index).
@@ -687,7 +687,7 @@ kaplan_meier_estimator <- function(cumulative_deaths) .Call(wrap__kaplan_meier_e
 #' @param count   Number of active agents to process.
 #' @param n_nodes Number of nodes (the length of each returned vector).
 #' @param tick    0-based tick index; agents with `dod <= tick` die.
-#' @return `list(m, s, e, i, r)` of `integer[n_nodes]` death counts by source compartment.
+#' @return `list(m, s, e, i, r)` of `integer[n_nodes]` death counts by source state.
 #' @export
 mortality <- function(state, dod, nodeid, count, n_nodes, tick) .Call(wrap__mortality, state, dod, nodeid, count, n_nodes, tick)
 

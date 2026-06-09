@@ -1,9 +1,9 @@
 // ════════════════════════════════════════════════════════════════════════════
-// epidemic.rs — disease-compartment state codes.
+// epidemic.rs — disease-state codes.
 //
 // The per-tick dynamics live in the Column-based kernels (sir.rs, measles.rs,
 // vitals.rs, mortality.rs, births.rs); those kernels and the R model scripts share
-// the compartment codes defined here. `laser_states()` exposes the same codes to R.
+// the state codes defined here. `laser_states()` exposes the same codes to R.
 //
 // Orientation for readers coming from C / C++ / C# / Python:
 //   * `pub const` is a compile-time constant (like a C `#define` / C# `const`).
@@ -16,7 +16,7 @@
 use extendr_api::prelude::*;
 
 // ── State constants ───────────────────────────────────────────────────────────
-// -1 for D keeps the alive compartments in the non-negative range, so a
+// -1 for D keeps the alive states in the non-negative range, so a
 // `state != D` test is an unambiguous "is alive?" check. The u8 `state` Column
 // stores D (= -1) as 255.
 
@@ -27,7 +27,7 @@ pub const STATE_R: i32 =  3;
 pub const STATE_M: i32 =  4;   // maternal immunity (newborns); wanes to S
 pub const STATE_D: i32 = -1;
 
-/// Named integer vector of epidemic compartment state codes.
+/// Named integer vector of epidemic state codes.
 ///
 /// Returns `c(S=0L, E=1L, I=2L, R=3L, M=4L, D=-1L)`. Use these constants to set
 /// and test the `state` property on a people frame. `M` is maternal immunity

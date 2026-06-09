@@ -2,7 +2,7 @@
 # census at column tick+1 (from -= counts, to += counts), with either side NULL-skippable
 # (one-sided decrement for deaths, increment for births). Written given-when-then.
 
-test_that("move_count applies the delta to both compartments at tick+1", {
+test_that("move_count applies the delta to both states at tick+1", {
   # Given a from (10, 20) and to (1, 2) census, both carried to column 1
   # When move_count moves (3, 4) at tick 0
   # Then column 1 of from becomes (7, 16) and to becomes (4, 6); column 0 is untouched.

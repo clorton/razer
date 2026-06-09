@@ -38,7 +38,7 @@ test_that("the generic kernels compose into a hand-built SIRS that conserves pop
   # Given a single-node SIRS assembled purely from the generic kernels + transmission
   #       (steps first: R->S, I->R, then calc_foi immediately before S->I)
   # When it is run for 80 ticks
-  # Then the living compartments sum to N at every tick and an epidemic takes off — i.e.
+  # Then the living states sum to N at every tick and an epidemic takes off — i.e.
   #      the building blocks compose into a working model. Failure would mean the generics
   #      cannot be composed correctly.
   set_seed(1)

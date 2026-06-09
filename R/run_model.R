@@ -1,4 +1,4 @@
-# run_model() — a high-level runner for the closed-population compartmental menagerie
+# run_model() — a high-level runner for the closed-population agent-based menagerie
 # (SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS) on the Column kernels. It owns the per-tick
 # bookkeeping — the carry-forward, the single `step → calc_foi → transmission` ordering
 # that yields R0 = beta*D, and the move_count census deltas — so a user gets a correct
@@ -8,7 +8,7 @@
 # It bundles `people`, `nodes`, `network`, and `carry` into one `model` environment and
 # exposes three optional callbacks — `init(model)` (once, before the loop), and
 # `step_enter(model)` / `step_exit(model)` (at the start / end of each tick) — so users can
-# add their own properties, compartments, and per-tick logic without forking the runner.
+# add their own properties, states, and per-tick logic without forking the runner.
 #
 # For readers new to R: `switch`/`if` choose per-model behaviour; closures (`function(t)`)
 # capture the people/nodes/distribution objects; `inherits(x,"Distribution")` is an
@@ -37,7 +37,7 @@
   as.integer(x)
 }
 
-#' Run a closed-population compartmental model.
+#' Run a closed-population agent-based model.
 #'
 #' Builds an agent population from a per-node scenario, seeds it, and advances one of the
 #' eight SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS models for `nticks` ticks using
@@ -83,7 +83,7 @@
 #'   `step_timer_expire(V, S)` in `step_update`). For `"M"` only, run_model additionally
 #'   applies the step kernels' built-in M→S waning each tick (recording the `waning_m` flow).
 #' @param init Optional `function(model)` called once after the model is built and before
-#'   the loop. Use it to add per-agent property [Column]s, add a compartment census Column
+#'   the loop. Use it to add per-agent property [Column]s, add a state census Column
 #'   (append it to `model$carry` to have it carried forward), set agent states/timers, etc.
 #'   The initial per-node census is (re)derived from the agents' states AFTER `init` runs,
 #'   so changing agent states in `init` keeps the census consistent.
@@ -158,7 +158,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   has_step_clearance <- !model %in% c("SI", "SEI")     # I leaves I (recovery/clearance)
   absorbing <- if (model %in% c("SIS", "SEIS")) states[["S"]] else states[["R"]]
 
-  # Extra compartments beyond the model's own S/E/I/R (e.g. a maternal-immunity "M"). Each
+  # Extra states beyond the model's own S/E/I/R (e.g. a maternal-immunity "M"). Each
   # is tracked in the node census, carried forward, and totalled into N. For "M" the step
   # kernels already compute the M->S waning leg, so run_model applies it (and records the
   # `waning_m` flow); other extra states are inert until a callback moves agents in/out.
@@ -166,7 +166,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   extra_states <- if (is.null(extra_states)) character(0) else as.character(extra_states)
   if (length(extra_states)) {
     if (any(extra_states %in% c(base_comp, "D")))
-      stop("`extra_states` must not repeat the model's own compartments or include D")
+      stop("`extra_states` must not repeat the model's own states or include D")
     if (anyDuplicated(extra_states)) stop("`extra_states` names must be unique")
     # Give each extra state a u8 code: a known laser_states() name (e.g. "M") keeps its
     # code; a NEW name (e.g. "V" for vaccinated) gets the next free code, becoming a genuine
@@ -185,11 +185,11 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   # Warn about inputs the chosen model does not use — usually a typo'd model name or a
   # wrong expectation (e.g. an `E` column or `incubation_period` passed to SIR).
   if (!has_E  && "E" %in% names(scenario))
-    warning(sprintf("model %s has no E compartment; the scenario's `E` column is ignored", model))
+    warning(sprintf("model %s has no E state; the scenario's `E` column is ignored", model))
   if (!has_R  && "R" %in% names(scenario))
-    warning(sprintf("model %s has no R compartment; the scenario's `R` column is ignored", model))
+    warning(sprintf("model %s has no R state; the scenario's `R` column is ignored", model))
   if (!has_E  && !is.null(incubation_period))
-    warning(sprintf("model %s has no E compartment; `incubation_period` is ignored", model))
+    warning(sprintf("model %s has no E state; `incubation_period` is ignored", model))
   if (!waning && !is.null(immunity_period))
     warning(sprintf("model %s does not have waning immunity; `immunity_period` is ignored", model))
 
@@ -222,7 +222,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   people$nodeid$set(c(rep(seq_len(n_nodes) - 1L, times = pops), integer(cap - n)))
 
   # ── flexible per-state seeding (item 3) ────────────────────────────────────────────
-  # Seed any of the model's E / I / R compartments that the scenario supplies a column
+  # Seed any of the model's E / I / R states that the scenario supplies a column
   # for; a state absent from the scenario is left unseeded. S is the remainder. Each
   # seeded state gets its natural timer: E -> incubation, I -> infectious, R -> immunity
   # (only when immunity wanes). States the MODEL lacks are never seeded.
@@ -255,7 +255,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   people$state$set(state0)
   people$timer$set(timer0)
 
-  # ── nodes: census (only this model's compartments) + drivers + flows (item 2) ──────
+  # ── nodes: census (only this model's states) + drivers + flows (item 2) ──────
   nodes <- new.env()
   nodes$count <- n_nodes
   nodes$S <- allocate_vector("i32", nticks, n_nodes)
@@ -273,8 +273,8 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nodes$beta        <- values_map(beta,        nticks, n_nodes)
   nodes$seasonality <- values_map(seasonality, nticks, n_nodes)
 
-  # The census compartments carried forward each tick (and totalled into N). A user can
-  # append a compartment Column here in `init` to have it carried too.
+  # The per-state census Columns carried forward each tick (and totalled into N). A user can
+  # append a state census Column here in `init` to have it carried too.
   carry <- c(list(nodes$S, nodes$I), if (has_E) list(nodes$E), if (has_R) list(nodes$R),
              lapply(extra_states, function(s) nodes[[s]]))
 
@@ -317,7 +317,7 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
       to <- if (identical(absorbing, states[["S"]])) nodes$S else nodes$R
       move_count(nodes$I, to, r$cleared, t); nodes$recovery$set_col(t, r$cleared)            # I->{S,R}
     }
-    # All step kernels lead with the maternal M->S leg; apply it when an M compartment is
+    # All step kernels lead with the maternal M->S leg; apply it when an M state is
     # registered (run_model otherwise discards `waned`, since the menagerie has no M).
     if (has_M) { move_count(nodes$M, nodes$S, r$waned, t); nodes$waning_m$set_col(t, r$waned) }
   }

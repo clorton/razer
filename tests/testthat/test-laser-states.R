@@ -1,4 +1,4 @@
-# Test for laser_states(): the named integer vector of compartment state codes shared
+# Test for laser_states(): the named integer vector of state codes shared
 # by the Column-based kernels and the R model scripts. Written given-when-then.
 
 test_that("laser_states returns a named integer vector with correct codes", {

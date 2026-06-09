@@ -6,7 +6,7 @@ template:
 reference:
 - title: Model runner
   desc: >
-    One call to build, seed, and run a closed-population compartmental model
+    One call to build, seed, and run a closed-population agent-based model
     (SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS) on the Column kernels.
   contents:
   - run_model
@@ -30,7 +30,7 @@ reference:
   - starts_with("dist_")
 - title: Transmission & disease dynamics
   desc: >
-    Per-tick Column kernels for force of infection and the timed compartment
+    Per-tick Column kernels for force of infection and the timed state
     transitions of the SI/SEI/SIS/SEIS/SIR/SEIR/SIRS/SEIRS menagerie. The kernels
     return per-node counts the model applies to its census via `move_count`; place
     `calc_foi` so the effective reproduction number is the full `beta * D` (see the

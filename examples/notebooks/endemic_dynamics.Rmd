@@ -128,7 +128,7 @@ abline(v = 0:10, col = "grey92")
 - **Forcing.** Change `amp`, or replace the sinusoid with school-term square waves; try the
   $R_0$ that makes the inter-epidemic period resonate with the annual drive.
 - **Growing populations.** For true births (population growth, newborns into a maternal `M`
-  compartment) rather than constant-population turnover, see `examples/engwal_measles.R`
+  state) rather than constant-population turnover, see `examples/engwal_measles.R`
   and the interventions notebook — `run_model(extra_states = "M", capacity = …)` plus the
   `births` / `mortality` kernels.
 - **Space.** Add patches to `scenario` and entries to `network` to study spatial coupling,

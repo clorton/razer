@@ -4,7 +4,7 @@
 // Every agent is assigned a date of death `dod` (an absolute tick) at creation. Each
 // tick, `mortality` retires the agents whose scheduled death has arrived: it sets their
 // state to D (deceased) and RETURNS the per-node count of deaths broken down by the
-// compartment each agent left, so the caller can decrement whichever compartments its
+// state each agent left, so the caller can decrement whichever states its
 // model maintains (and total them into a deaths report). It touches no node census.
 //
 // Parallel across agents (Rayon) with a private per-node tally reduced at the end.
@@ -17,12 +17,12 @@ use rayon::prelude::*;
 use crate::column::Column;
 use crate::epidemic::{STATE_S, STATE_E, STATE_I, STATE_R, STATE_M, STATE_D};
 
-/// Apply natural mortality for one tick, returning deaths per node by compartment.
+/// Apply natural mortality for one tick, returning deaths per node by state.
 ///
 /// For each of the first `count` living agents (state != D) whose `dod` (an absolute
 /// tick) is `<= tick`, sets the agent's `state` to D and tallies the death against the
-/// compartment it occupied. Returns `list(m, s, e, i, r)` of per-node death counts; the
-/// caller decrements those census compartments (and records the total deaths flow).
+/// state it occupied. Returns `list(m, s, e, i, r)` of per-node death counts; the
+/// caller decrements those census states (and records the total deaths flow).
 ///
 /// @param state   Per-agent `u8` state Column (mutated; the deceased become D = 255).
 /// @param dod     Per-agent `u32` date-of-death Column (an absolute tick index).
@@ -30,7 +30,7 @@ use crate::epidemic::{STATE_S, STATE_E, STATE_I, STATE_R, STATE_M, STATE_D};
 /// @param count   Number of active agents to process.
 /// @param n_nodes Number of nodes (the length of each returned vector).
 /// @param tick    0-based tick index; agents with `dod <= tick` die.
-/// @return `list(m, s, e, i, r)` of `integer[n_nodes]` death counts by source compartment.
+/// @return `list(m, s, e, i, r)` of `integer[n_nodes]` death counts by source state.
 /// @export
 #[extendr]
 fn mortality(

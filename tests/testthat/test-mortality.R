@@ -1,7 +1,7 @@
 # Tests for mortality(): natural-mortality step that retires agents whose date of death
 # `dod` (an absolute tick) has arrived. It mutates the per-agent state (D = 255) and
-# RETURNS per-node death counts broken down by source compartment, `list(m, s, e, i, r)`;
-# the caller decrements those census compartments. Written given-when-then.
+# RETURNS per-node death counts broken down by source state, `list(m, s, e, i, r)`;
+# the caller decrements those census states. Written given-when-then.
 
 states <- laser_states()                       # c(S=0, E=1, I=2, R=3, M=4, D=-1)
 S <- states[["S"]]; E <- states[["E"]]; I <- states[["I"]]; R <- states[["R"]]; M <- states[["M"]]
@@ -9,14 +9,14 @@ D_U8 <- 255L                                   # how D (-1) reads back from a u8
 
 mk <- function(dt, x) { col <- allocate_scalar(dt, length(x)); col$set(x); col }
 
-test_that("mortality retires due agents and returns deaths by compartment", {
+test_that("mortality retires due agents and returns deaths by state", {
   # Given (tick 0, two nodes) node 0 = {I(dod0), S(dod0), R(dod5)}, node 1 = {M(dod0),
   #       S(dod3)}
   # When mortality runs for tick 0
   # Then the agents with dod <= 0 (the I and S in node 0, the M in node 1) become D; the
   #       R (dod 5) and node-1 S (dod 3) survive; the returned counts are i=(1,0),
   #       s=(1,0), m=(0,1), with e and r zero. Failure would mean the due-date test or the
-  #       per-compartment tally is wrong.
+  #       per-state tally is wrong.
   state  <- mk("u8",  c(I, S, R, M, S))
   dod    <- mk("u32", c(0, 0, 5, 0, 3))
   nodeid <- mk("u16", c(0, 0, 0, 1, 1))

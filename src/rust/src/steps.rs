@@ -5,7 +5,7 @@
 // SINGLE pass over the agents, branching on each agent's state at the start of the pass
 // (so a just-arrived timed state is never decremented again the same tick — the
 // downstream-first ordering, achieved structurally). Each leads with M→S maternal
-// waning, so a maternal-immunity compartment can be added to any model.
+// waning, so a maternal-immunity state can be added to any model.
 //
 //   step_si   : M→S, E→I                      → SI, SEI
 //   step_sir  : M→S, E→I, I→{S|R} (param)      → SIS, SIR, SEIS, SEIR
@@ -13,7 +13,7 @@
 //
 // Following the project convention, the kernels touch NO node census/flow buffers: they
 // mutate the per-agent `state`/`timer` arrays and RETURN per-node transition counts as a
-// named list of integer vectors. The model applies the counts to whichever compartments
+// named list of integer vectors. The model applies the counts to whichever states
 // it maintains (a model with no E ignores `onset`, never allocating an E census). Timers
 // are u16 (maternal/immunity periods exceed a u8's 255). Parallel across agents (Rayon)
 // with private per-node tallies reduced at the end; RNG is thread-local.
@@ -244,7 +244,7 @@ fn step_sirs(
 // the GENERIC building blocks: one timed `from_state -> to_state` transition each, so you
 // can compose any model (or one off the menagerie — a vaccinated `V`, a second infectious
 // stage, …) from R without writing Rust. Call them downstream-first (move agents out of a
-// timed compartment before moving agents in) and apply the returned per-node counts with
+// timed state before moving agents in) and apply the returned per-node counts with
 // `move_count`. Like the bundles, they branch on the agent's state and decrement the u16
 // timer; `step_timer_expire` goes to an UNTIMED destination, `step_timer_expire_set` draws
 // the destination's own timer from a Distribution.

@@ -8,7 +8,7 @@
 // birth and a death (they balance under constant population), and the S/I/R node
 // census is kept exactly in sync: an agent dying out of I or R moves that count down
 // and S up (a death out of S nets to zero). This resupplies susceptibles and enables
-// endemic dynamics. The kernel is SIR-specific (it knows the S, I, R compartments);
+// endemic dynamics. The kernel is SIR-specific (it knows the S, I, R states);
 // an SEIR variant would also track E.
 //
 // Like the other agent-loop kernels it parallelizes across cores (Rayon) with a
@@ -40,7 +40,7 @@ use crate::rng;
 /// The S/I/R node census is updated IN PLACE at column `tick + 1` (the working
 /// column the caller has already carried forward): a death out of I decrements `I`
 /// and increments `S`; a death out of R decrements `R` and increments `S`; a death
-/// out of S nets to zero. Every event (from any compartment) is counted per node and
+/// out of S nets to zero. Every event (from any state) is counted per node and
 /// written to BOTH the `births` and `deaths` flow reports for `tick` (equal under
 /// constant population). Agents are assumed to be in S, I, or R (it is the SIR
 /// variant). Parallelized with private per-thread node buffers summed at the end.
@@ -135,7 +135,7 @@ fn constant_pop_vitals_sir(
             a
         });
 
-    // Apply the per-compartment census delta at column tick+1: S up, I/R down.
+    // Apply the per-state census delta at column tick+1: S up, I/R down.
     let dst = (tick + 1) * n;
     let ic = i_count.as_i32_mut();
     for k in 0..n { ic[dst + k] -= tally[n + k] as i32; }            // - deaths out of I

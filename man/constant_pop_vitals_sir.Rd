@@ -53,7 +53,7 @@ the agent's \code{state} is reset to Susceptible and its \code{timer} to 0.
 The S/I/R node census is updated IN PLACE at column \code{tick + 1} (the working
 column the caller has already carried forward): a death out of I decrements \code{I}
 and increments \code{S}; a death out of R decrements \code{R} and increments \code{S}; a death
-out of S nets to zero. Every event (from any compartment) is counted per node and
+out of S nets to zero. Every event (from any state) is counted per node and
 written to BOTH the \code{births} and \code{deaths} flow reports for \code{tick} (equal under
 constant population). Agents are assumed to be in S, I, or R (it is the SIR
 variant). Parallelized with private per-thread node buffers summed at the end.

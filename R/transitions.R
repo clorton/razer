@@ -7,7 +7,7 @@
 
 #' Apply a per-node transition count to the census at `tick + 1`.
 #'
-#' Subtracts `counts` from the `from` compartment and adds it to the `to` compartment at
+#' Subtracts `counts` from the `from` state and adds it to the `to` state at
 #' census column `tick + 1` (the working column the model has already carried forward).
 #' Either side may be `NULL` to skip it — e.g. a death is a one-sided decrement
 #' (`to = NULL`) and a birth a one-sided increment (`from = NULL`).

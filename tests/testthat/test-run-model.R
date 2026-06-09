@@ -1,6 +1,6 @@
 # Tests for run_model(): the high-level runner for the closed-population menagerie. It
 # builds people/nodes, seeds, runs the correct per-tick loop, and applies the census
-# deltas. Closed population (no births/deaths), so the living compartments sum to N at
+# deltas. Closed population (no births/deaths), so the living states sum to N at
 # every tick. Written given-when-then.
 
 # Run each model with the durations it needs; returns the result. We pass every period for
@@ -13,7 +13,7 @@ run_one <- function(model, nticks = 60L, n = 20000L, seed = 1L) {
               infectious_period = 8, incubation_period = 5, immunity_period = 60, seed = seed))
 }
 
-# Sum the present census compartments at each recorded tick (an n_ticks-length vector).
+# Sum the present census states at each recorded tick (an n_ticks-length vector).
 living_by_tick <- function(nodes, model) {
   cols <- list(nodes$S, nodes$I)
   if (grepl("E", model)) cols <- c(cols, list(nodes$E))
@@ -24,7 +24,7 @@ living_by_tick <- function(nodes, model) {
 test_that("run_model runs every model and conserves the closed population", {
   # Given each of the eight models
   # When run for 60 ticks at R0 = 2.5
-  # Then the present compartments sum to N at every recorded tick (no births/deaths), and
+  # Then the present states sum to N at every recorded tick (no births/deaths), and
   #      some transmission has occurred (final S < initial S). Failure would mean a
   #      mis-applied census delta (the desync the runner exists to prevent) or a model
   #      mis-wired.
@@ -47,7 +47,7 @@ test_that("run_model is reproducible under a seed", {
   expect_identical(a$nodes$I$values(), b$nodes$I$values())
 })
 
-test_that("SIS returns to susceptible (no R compartment); SIR accumulates R", {
+test_that("SIS returns to susceptible (no R state); SIR accumulates R", {
   # SIS: I clears back to S, so there is no R census and S recovers after the peak.
   sis <- run_one("SIS")
   expect_null(sis$nodes$R)
@@ -152,7 +152,7 @@ test_that("run_model fires the init and per-tick callbacks in order", {
 test_that("run_model seeds only states the model has (item 3)", {
   # Given a scenario carrying an E column
   # When run as SEIR (has E) vs SIR (no E)
-  # Then SEIR seeds the E compartment from the column, while SIR ignores it (no E census,
+  # Then SEIR seeds the E state from the column, while SIR ignores it (no E census,
   #      and those agents stay susceptible). Failure would mean states absent from the
   #      model get initialized, or present ones are skipped.
   scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
@@ -170,12 +170,12 @@ test_that("run_model seeds only states the model has (item 3)", {
 })
 
 test_that("run_model warns about inputs the chosen model does not use", {
-  # Given a model lacking a compartment/parameter that the caller still supplies
+  # Given a model lacking a state/parameter that the caller still supplies
   # When run_model runs
   # Then it warns (rather than silently ignoring the input) — catching typos and wrong
   #      expectations. Failure would let an ignored E column or unused period pass silently.
   scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
-  expect_warning(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6), "no E compartment")
+  expect_warning(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6), "no E state")
   expect_warning(run_model(data.frame(population = 1000L, I = 10L), "SIS",
                            nticks = 5L, r0 = 2, infectious_period = 6, immunity_period = 30),
                  "immunity_period")
@@ -199,13 +199,13 @@ test_that("run_model reserves agent-array capacity for population growth", {
                          infectious_period = 6, capacity = 500L), "capacity")
 })
 
-test_that("run_model tracks an extra M compartment and applies its M->S waning", {
+test_that("run_model tracks an extra M state and applies its M->S waning", {
   # Given an SIR model with M registered and 100 agents seeded into M (maternal timer 5)
   # When run for 20 ticks (closed population)
   # Then nodes$M and the waning_m flow exist, M is seeded at tick 0, the maternally immune
   #      wane to S (waning_m > 0), and the living total S+I+R+M is conserved AND equals N
   #      (no vital dynamics, so M->S is purely internal). Failure would mean the extra
-  #      compartment isn't carried/applied — the desync the menagerie step kernels' `waned`
+  #      state isn't carried/applied — the desync the menagerie step kernels' `waned`
   #      leg would otherwise cause.
   st <- laser_states()
   scen <- data.frame(population = 1000L, I = 10L)
@@ -225,7 +225,7 @@ test_that("run_model tracks an extra M compartment and applies its M->S waning",
   expect_true(all(living == rowSums(m$nodes$N$values())))# N agrees (no within-tick vitals)
 
   expect_error(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6,
-                         extra_states = "I"), "compartments")   # can't repeat a model state
+                         extra_states = "I"), "states")   # can't repeat a model state
 })
 
 test_that("run_model supports a user-defined vaccinated state V (no waning)", {

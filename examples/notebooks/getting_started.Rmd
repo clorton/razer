@@ -42,9 +42,9 @@ legend("right", c("S", "E", "I", "R"), col = c("#2c7fb8", "#ff7f00", "#e31a1c", 
        lwd = 2, bty = "n")
 ```
 
-## 2. Compare compartment structures
+## 2. Compare state structures
 
-Run four models on the *same* population and parameters; colour by compartment, line type
+Run four models on the *same* population and parameters; colour by state, line type
 by model (this is `examples/compare_models.R`, condensed).
 
 ```{r compare}

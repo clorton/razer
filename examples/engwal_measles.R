@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# England & Wales measles model. Measles needs a richer compartment structure than the
+# England & Wales measles model. Measles needs a richer state structure than the
 # SIR/SEIR examples:
 #
 #   M  maternal immunity  newborns temporarily protected by maternal antibodies; after a
@@ -9,7 +9,7 @@
 #   E  exposed/incubating infected but not yet infectious; after a latent period -> I.
 #   I  infectious
 #   R  recovered          lifelong immunity.
-#   D  deceased           absorbing; removed from the living compartments.
+#   D  deceased           absorbing; removed from the living states.
 #
 # Disease progression is M -> S -> E -> I -> R, plus vital dynamics (a crude birth rate
 # feeds newborns into M) and natural (non-disease) mortality (every agent has a realistic
@@ -17,7 +17,7 @@
 #
 # Built on the high-level runner run_model(), exercising the two features that let it go
 # beyond the closed-population menagerie:
-#   * `extra_states = "M"` — registers the maternal compartment. run_model tracks M in the
+#   * `extra_states = "M"` — registers the maternal state. run_model tracks M in the
 #     census, carries it forward, totals it into N, and applies the step kernels' built-in
 #     M -> S waning each tick (so a newborn is protected until its maternal timer expires).
 #   * `capacity` — sized with calc_capacity() so the births kernel has reserved slots to
@@ -58,7 +58,7 @@ run_measles_model <- function(scenario, network, nticks,
   birthrates <- matrix(cbr, nrow = nticks - 1L, ncol = n_nodes)
   capacity   <- as.integer(sum(calc_capacity(birthrates, pops, safety_factor = 1)))
 
-  # SEIR + a maternal M compartment. run_model owns the M->S / E->I / I->R disease step and
+  # SEIR + a maternal M state. run_model owns the M->S / E->I / I->R disease step and
   # the S->E transmission (drawing the incubation timer); M->S is applied because "M" is a
   # registered extra state. Births-into-M and natural mortality are the step_exit callback.
   m <- run_model(
@@ -89,7 +89,7 @@ run_measles_model <- function(scenario, network, nticks,
       model$people$count <- b$count
       move_count(NULL, model$nodes$M, b$born, t)
       model$nodes$births$set_col(t, b$born)
-      # Natural mortality: retire agents whose dod has arrived; decrement their compartments.
+      # Natural mortality: retire agents whose dod has arrived; decrement their states.
       d <- mortality(model$people$state, model$people$dod, model$people$nodeid,
                      model$people$count, n_nodes, t)
       move_count(model$nodes$M, NULL, d$m, t); move_count(model$nodes$S, NULL, d$s, t)

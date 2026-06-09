@@ -7,7 +7,7 @@
 // convention, the transmission kernels DO NOT touch the node census: they set each
 // infectee's agent `state` (and u16 `timer`) and RETURN the per-node infection count,
 // leaving the caller to apply the S↓ / {E,I}↑ census delta and record incidence for
-// whichever compartments its model maintains.
+// whichever states its model maintains.
 //
 //   * `transmission`     — S→`to_state` (E or I), drawing the destination's timer from
 //                          a Distribution. Used by every model with a timed I.

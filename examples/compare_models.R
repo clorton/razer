@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Compare four models from the menagerie — SIR, SIRS, SEIR, SEIRS — on the SAME population,
-# duration, and transmission parameters, so the only differences are the compartment
+# duration, and transmission parameters, so the only differences are the state
 # structure (an exposed/latent E stage) and waning immunity (R -> S).
 #
 #   * population     1,000,000 (single well-mixed node), 100 initially infectious
@@ -12,7 +12,7 @@
 #   * immunity        60 days (SIRS/SEIRS only; not part of the shared comparison, chosen
 #                     so waning resupplies susceptibles within the year)
 #
-# Each trajectory is colored by COMPARTMENT (S blue, E orange, I red, R green) and styled by
+# Each trajectory is colored by STATE (S blue, E orange, I red, R green) and styled by
 # MODEL (line type), so e.g. all four S curves are blue but distinguishable by line style.
 #
 # Run from anywhere:  Rscript examples/compare_models.R
@@ -45,7 +45,7 @@ run_one <- function(model) {
 results <- lapply(models, run_one)
 names(results) <- models
 
-# Pull each present compartment's trajectory (single node -> column 1 of the census matrix).
+# Pull each present state's trajectory (single node -> column 1 of the census matrix).
 traj <- lapply(results, function(m) {
   comp <- list(S = m$nodes$S$values()[, 1], I = m$nodes$I$values()[, 1])
   if (!is.null(m$nodes$E)) comp$E <- m$nodes$E$values()[, 1]
@@ -53,7 +53,7 @@ traj <- lapply(results, function(m) {
   comp
 })
 
-# ── styling: colour = compartment, line type = model ───────────────────────────────
+# ── styling: colour = state, line type = model ───────────────────────────────
 col_comp <- c(S = "#1f78b4", E = "#ff7f00", I = "#e31a1c", R = "#33a02c")   # blue/orange/red/green
 lty_model <- c(SIR = 1, SIRS = 2, SEIR = 3, SEIRS = 5)                      # solid/dashed/dotted/longdash
 ticks <- 0:(nticks - 1L)
@@ -70,7 +70,7 @@ close_png <- function() if (to_png) grDevices::dev.off()
 out_dir    <- file.path(script_dir, "output")
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 
-# ── plot 1: all trajectories overlaid (colour = compartment, line type = model) ─────
+# ── plot 1: all trajectories overlaid (colour = state, line type = model) ─────
 open_png(file.path(out_dir, "compare_models.png"), width = 1150, height = 760, res = 120)
 graphics::par(mar = c(4.5, 4.5, 3, 1))
 plot(NA, xlim = c(0, nticks - 1L), ylim = c(0, N / 1e6),
@@ -81,13 +81,13 @@ for (model in models)
   for (comp in names(traj[[model]]))
     graphics::lines(ticks, traj[[model]][[comp]] / 1e6,
                     col = col_comp[comp], lty = lty_model[model], lwd = 2)
-legend("top", title = "compartment", legend = names(col_comp), col = col_comp,
+legend("top", title = "state", legend = names(col_comp), col = col_comp,
        lwd = 2, lty = 1, bty = "n", horiz = TRUE)
 legend("right", title = "model", legend = names(lty_model), col = "grey30",
        lwd = 2, lty = lty_model, bty = "n")
 close_png()
 
-# ── plot 2: one panel per compartment (the four models compared within each) ────────
+# ── plot 2: one panel per state (the four models compared within each) ────────
 # Clearer than the overlay when curves cross; same colour/line-type scheme.
 open_png(file.path(out_dir, "compare_models_panels.png"), width = 1150, height = 900, res = 120)
 op <- graphics::par(mfrow = c(2L, 2L), mar = c(4, 4.2, 2.5, 1))
@@ -96,7 +96,7 @@ for (comp in c("S", "E", "I", "R")) {
   ymax <- max(vapply(have, function(m) max(traj[[m]][[comp]]), numeric(1))) / 1e6
   plot(NA, xlim = c(0, nticks - 1L), ylim = c(0, ymax),
        xlab = "day", ylab = "agents (millions)",
-       main = sprintf("%s compartment", comp), col.main = col_comp[comp])
+       main = sprintf("%s state", comp), col.main = col_comp[comp])
   for (model in have)
     graphics::lines(ticks, traj[[model]][[comp]] / 1e6,
                     col = col_comp[comp], lty = lty_model[model], lwd = 2)

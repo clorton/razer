@@ -92,7 +92,7 @@ predicts zero — the expected near-critical behavior.
 ## Other examples
 
 All examples build their model through **`run_model()`**; the ones with vital dynamics,
-importation, growth, or extra compartments add that behaviour through `run_model`'s
+importation, growth, or extra states add that behaviour through `run_model`'s
 callbacks (`init` / `step_enter` / `step_update` / `step_exit`) and its `capacity` /
 `extra_states` arguments, rather than a hand-wired per-tick loop.
 
@@ -106,7 +106,7 @@ callbacks (`init` / `step_enter` / `step_update` / `step_exit`) and its `capacit
   to `run_model`'s `seasonality`, producing phase-locked annual epidemic waves.
 - **`engwal_measles.R`** — a full single-patch M-S-E-I-R measles model via
   `run_model("SEIR", extra_states = "M", capacity = ...)`: run_model tracks the maternal `M`
-  compartment and applies its M→S waning, while births-into-M and Kaplan–Meier natural
+  state and applies its M→S waning, while births-into-M and Kaplan–Meier natural
   mortality run in a `step_exit` callback. Twenty years; recurrent epidemic waves.
 - **`aged_population.R`** — builds a realistic age-structured population from a pyramid
   (alias sampler) and assigns each agent a Kaplan–Meier age at death.
@@ -118,10 +118,10 @@ callbacks (`init` / `step_enter` / `step_update` / `step_exit`) and its `capacit
 - **`compare_models.R`** — runs `SIR`, `SIRS`, `SEIR`, and `SEIRS` through `run_model()` on
   the same population (1,000,000), duration (365 days), and transmission parameters
   (R0 = 2.5, infectious & incubation periods `gamma(140, 0.05)` ≈ 7 days), so only the
-  compartment structure and waning differ. Trajectories are coloured by compartment
+  state structure and waning differ. Trajectories are coloured by state
   (S blue, E orange, I red, R green) and styled by model (solid / dashed / dotted /
   long-dash); the waning models (SIRS, SEIRS) show recurrent epidemic waves while SIR/SEIR
-  settle after one. Produces an overlay plot and a per-compartment 2×2 panel.
+  settle after one. Produces an overlay plot and a per-state 2×2 panel.
 - **`sia_campaigns.R`** — periodic vaccination campaigns (Supplemental Immunization
   Activities) via a user-defined `"V"` state (`run_model(extra_states = "V")`). A
   configurable schedule (annual) runs a `step_exit` callback that, in the targeted nodes,

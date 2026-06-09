@@ -25,7 +25,7 @@
 # (run_model derives beta = R0 / mean(infectious_period)). The deterministic final size
 # then satisfies the equation above; the sweep below confirms it. See simple_sir.R /
 # endemic_sir.R / engwal_measles.R for hand-wired loops that go BEYOND run_model's closed-
-# population menagerie (vital dynamics, importation, a maternal compartment).
+# population menagerie (vital dynamics, importation, a maternal state).
 #
 # Run from anywhere:  Rscript examples/sir_attack_fraction.R
 # Output PNGs are written next to this script in examples/output/.

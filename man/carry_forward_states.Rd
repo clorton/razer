@@ -24,7 +24,7 @@ For each Column in \code{carry}, calls \code{\link[=carry_forward]{carry_forward
 \code{tick + 1} to the elementwise sum of the \code{summands} Columns at \code{tick + 1} — for
 example carrying \code{S}, \code{I}, \code{R} forward and totalling them into \code{N} so the current
 per-node population is available to \code{\link[=calc_foi]{calc_foi()}} (and stays correct as births,
-deaths, and imports change the compartments).
+deaths, and imports change the states).
 }
 \examples{
 \dontrun{

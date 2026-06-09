@@ -2,7 +2,7 @@
 % Please edit documentation in R/run_model.R
 \name{run_model}
 \alias{run_model}
-\title{Run a closed-population compartmental model.}
+\title{Run a closed-population agent-based model.}
 \usage{
 run_model(
   scenario,
@@ -71,7 +71,7 @@ drive from callbacks (move \code{S}→\code{V} to vaccinate; for waning, set a t
 applies the step kernels' built-in M→S waning each tick (recording the \code{waning_m} flow).}
 
 \item{init}{Optional \verb{function(model)} called once after the model is built and before
-the loop. Use it to add per-agent property \link{Column}s, add a compartment census Column
+the loop. Use it to add per-agent property \link{Column}s, add a state census Column
 (append it to \code{model$carry} to have it carried forward), set agent states/timers, etc.
 The initial per-node census is (re)derived from the agents' states AFTER \code{init} runs,
 so changing agent states in \code{init} keeps the census consistent.}

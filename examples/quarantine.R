@@ -121,7 +121,7 @@ matplot(days[-1L], cbind(baseline = cum_b, quarantine = cum_q) / 1e3, type = "l"
 legend("bottomright", legend = c("baseline", "with quarantine"),
        col = c("#d7301f", "#2c7fb8"), lwd = 2.5, bty = "n")
 
-# (3) The quarantine compartment Q — pulses up on each fortnightly test day, drains as
+# (3) The quarantine state Q — pulses up on each fortnightly test day, drains as
 # isolated cases are released to R.
 plot(days, Qq / 1e3, type = "l", lwd = 2.5, col = "#7570b3",
      xlab = "day", ylab = "in quarantine (thousands)",

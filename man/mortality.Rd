@@ -2,7 +2,7 @@
 % Please edit documentation in R/extendr-wrappers.R
 \name{mortality}
 \alias{mortality}
-\title{Apply natural mortality for one tick, returning deaths per node by compartment.}
+\title{Apply natural mortality for one tick, returning deaths per node by state.}
 \usage{
 mortality(state, dod, nodeid, count, n_nodes, tick)
 }
@@ -20,11 +20,11 @@ mortality(state, dod, nodeid, count, n_nodes, tick)
 \item{tick}{0-based tick index; agents with \code{dod <= tick} die.}
 }
 \value{
-\code{list(m, s, e, i, r)} of \code{integer[n_nodes]} death counts by source compartment.
+\code{list(m, s, e, i, r)} of \code{integer[n_nodes]} death counts by source state.
 }
 \description{
 For each of the first \code{count} living agents (state != D) whose \code{dod} (an absolute
 tick) is \verb{<= tick}, sets the agent's \code{state} to D and tallies the death against the
-compartment it occupied. Returns \code{list(m, s, e, i, r)} of per-node death counts; the
-caller decrements those census compartments (and records the total deaths flow).
+state it occupied. Returns \code{list(m, s, e, i, r)} of per-node death counts; the
+caller decrements those census states (and records the total deaths flow).
 }

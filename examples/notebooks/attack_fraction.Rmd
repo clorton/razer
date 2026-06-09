@@ -99,7 +99,7 @@ theory predicts zero: expected near-critical, finite-size stochastic behavior.
 
 ## SEIR: a latent stage delays but does not change the final size
 
-Adding an Exposed (latent) compartment — `run_model(model = "SEIR", incubation_period = …)`
+Adding an Exposed (latent) state — `run_model(model = "SEIR", incubation_period = …)`
 — inserts a non-infectious delay $S \to E \to I \to R$. It slows the epidemic's *timing*
 but, because the latent period doesn't change how many people one case infects, leaves the
 final size obeying the *same* relation in $R_0 = \beta D$ (the infectious period alone).

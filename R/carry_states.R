@@ -11,7 +11,7 @@
 #' `tick + 1` to the elementwise sum of the `summands` Columns at `tick + 1` — for
 #' example carrying `S`, `I`, `R` forward and totalling them into `N` so the current
 #' per-node population is available to [calc_foi()] (and stays correct as births,
-#' deaths, and imports change the compartments).
+#' deaths, and imports change the states).
 #'
 #' @param carry     A list of 2-D census [Column]s to carry forward.
 #' @param tick      0-based source tick; column `tick` is copied onto `tick + 1`.

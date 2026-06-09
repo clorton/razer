@@ -19,7 +19,7 @@ move_count(from, to, counts, tick)
 \code{NULL}, invisibly; the Columns are modified in place.
 }
 \description{
-Subtracts \code{counts} from the \code{from} compartment and adds it to the \code{to} compartment at
+Subtracts \code{counts} from the \code{from} state and adds it to the \code{to} state at
 census column \code{tick + 1} (the working column the model has already carried forward).
 Either side may be \code{NULL} to skip it — e.g. a death is a one-sided decrement
 (\code{to = NULL}) and a birth a one-sided increment (\code{from = NULL}).
