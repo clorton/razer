@@ -4,6 +4,15 @@ All notable changes to the `worldwide` (`wwsim`) data pipeline are recorded here
 
 ## [Unreleased]
 
+### Added — technical write-up
+- `writeup.md`: a thorough technical report (data collection, processing, the agent-based
+  SEIR engine, laptop-feasibility choices, the Numba kernels, gravity↔air interplay, tests,
+  performance) with mermaid diagrams and figures. `scripts/15_writeup_media.py` regenerates
+  the figures into `media/` (new analytical SVGs: gravity decay, memory budget, admin-2
+  distribution, single-node SEIR validation, global epicurve; plus copied choropleths and an
+  animation still). Note: the COVID-comparison material is intentionally excluded from the
+  write-up.
+
 ### Fixed
 - `WorldSEIR` node-id initialization no longer builds a multi-GB `int64` temporary
   (`np.repeat(np.arange(..., int64), pops)` was ~29 GB at subsample 2 / ~3.66 B agents,

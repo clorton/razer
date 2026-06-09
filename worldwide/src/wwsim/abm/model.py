@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from laser.core import LaserFrame
 from laser.core.random import seed as set_seed
+from tqdm import tqdm
 
 from ..logging import logger
 from .components import Progression, Transmission
@@ -175,9 +176,10 @@ class WorldSEIR:
             arr[tick + 1] = arr[tick]
         return
 
-    def run(self) -> None:
+    def run(self, progress: bool = False) -> None:
         """Run all ticks: carry forward, then progression, then transmission."""
-        for tick in range(self.params.nticks):
+        disabled = not progress if progress is not None else None
+        for tick in tqdm(range(self.params.nticks), disable = disabled):
             self._initialize_flows(tick)
             for c in self.components:
                 c.step(tick)
