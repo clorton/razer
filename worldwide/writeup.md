@@ -484,9 +484,15 @@ outward, the seed country already receding:
 
 ![Prevalence day 200](media/seir_prevalence_day200.png)
 
-▶ **Full animation:** [`media/anim_world540_air_I.mp4`](media/anim_world540_air_I.mp4) — 540
-days of infectious prevalence (one frame per day), seeded in Shanghai, gravity + air. On
-GitHub the file page plays the video inline.
+**Full animation — 540 days of infectious prevalence** (one frame per day; seeded in
+Shanghai; gravity + air):
+
+<video src="https://github.com/user-attachments/assets/6ca3a143-a302-49c6-967b-cccccb1da54a" controls width="100%">
+  <a href="https://github.com/user-attachments/assets/6ca3a143-a302-49c6-967b-cccccb1da54a">▶ Watch the 540-day infectious-prevalence animation (MP4)</a>
+</video>
+
+*(Plays inline on GitHub; the same clip is also committed at
+[`media/anim_world540_air_I.mp4`](media/anim_world540_air_I.mp4).)*
 
 Mechanistically: gravity is the **short-range diffusion** operator (block-diagonal, dense
 within a country, decaying with distance); air is the **long-range jump** operator
