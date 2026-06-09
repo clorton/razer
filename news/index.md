@@ -62,7 +62,15 @@ Changelog page; sub-sections follow the “Keep a Changelog” convention.)
   (`.Rbuildignore`d, so they don’t run during `R CMD check`); the
   previously committed static `.html` renders were removed in favour of
   the site. `_pkgdown.yml` also gained the missing `step_timer_expire` /
-  `step_timer_expire_set` reference entries.
+  `step_timer_expire_set` reference entries. `vignettes/articles` is now
+  `.Rbuildignore`d so the articles are excluded from the package
+  tarball, clearing the `R CMD check` “files in ‘vignettes’ but no files
+  in ‘inst/doc’” WARNING and the companion “no vignettes” NOTE (these
+  are website articles, not package vignettes).
+- **README “Worked examples” section replaced.** It now links to the
+  eight rendered teaching articles on the website instead of inlining
+  static SIR/SEIR figures, pointing readers at the runnable scripts +
+  paired articles.
 - **`CHANGELOG.md` renamed to `NEWS.md`** (the conventional R name) so
   pkgdown renders it as the site’s Changelog page; headed as the
   development version for pkgdown’s news parser.
@@ -279,27 +287,6 @@ Changelog page; sub-sections follow the “Keep a Changelog” convention.)
     (`CLAUDE.md`, READMEs, `_pkgdown.yml`) updated with the menagerie
     table and the return-counts convention.
 
-#### Removed
-
-- **The legacy `LaserFrame` world.** The package now has a single
-  agent-storage and kernel stack — the `Column` typed arrays plus the
-  per-tick Column kernels. Removed: the `LaserFrame` struct
-  (`src/rust/src/laser_frame.rs`, `R/laser_frame.R`), the monolithic
-  `epidemic.rs` step kernels (`step_transmission_si`/`_se`,
-  `step_timer_expire`/`_set`, `step_exposed_ei`,
-  `step_infectious_ir`/`_is`, `step_recovered_rs`, `step_mortality_cdr`,
-  `step_births_cbr`), the `run_sir()` runner (`R/models.R`) and the
-  `model-composition` help topic. `epidemic.rs` now provides only the
-  shared state codes
-  ([`laser_states()`](https://clorton.github.io/razer/reference/laser_states.md)).
-  The monolithic `step_transmission_si` was the one kernel that could
-  not realize the full `beta · D` (see Fixed); retiring it removes the
-  last `beta · (D − 1)` path. `examples/sir_attack_fraction.R` and
-  `seir_attack_fraction.R` were rewritten on the Column kernels (both
-  now validate Kermack–McKendrick with `R0 = beta · D`); SEIR reuses
-  `measles_step` with the maternal state empty. Associated tests
-  removed; `laser_states` keeps its own test.
-
 #### Fixed
 
 - **SIR models now realize the full `R0 = beta · D`, not
@@ -313,11 +300,7 @@ Changelog page; sub-sections follow the “Keep a Changelog” convention.)
   period is the full `D`. The endemic SIR now settles with `S` at `1/R0`
   (was ~`1/(beta·(D−1))`). `calc_foi`’s docstring and the `CLAUDE.md`
   modeling notes are updated to document the ordering and to forbid
-  `beta·(D−1)` models. (The legacy monolithic LaserFrame
-  `step_transmission_si`, used by `run_sir()` and
-  `sir_attack_fraction.R`, still yields `beta·(D−1)` — a structural
-  limitation of computing the tally and infection in one kernel; those
-  are slated to move to the Column kernels.)
+  `beta·(D−1)` models.
 
 #### Changed
 
@@ -698,23 +681,6 @@ Changelog page; sub-sections follow the “Keep a Changelog” convention.)
   diagonal-cancellation checks against the formula, all-zero
   independence, shape validation) plus additional `run_sir()` network
   cases.
-- `run_sir()` — a high-level **model runner** that assembles the
-  per-tick step kernels and their parameters into a single call
-  (`R/models.R`). It takes a node data.frame (one row per node, an
-  integer `population` column), builds an agent `LaserFrame` sized to
-  the total population, assigns each agent to its node, seeds initial
-  infections, and runs the downstream-first SIR loop (recovery I→R
-  before transmission S→I). It records per-node state trajectories (`S`,
-  `I`, `R`) and per-tick flows (`incidence` S→I, `recovery` I→R) into a
-  node-level report `LaserFrame` attached as `attr(model, "report")`,
-  alongside `runtime`, `nticks`, `model`, and `parameters` attributes.
-  `infectious_period` accepts a `Distribution` or a bare number
-  (promoted to `dist_constant`), and `progress` draws a text progress
-  bar. Intended as the reference template for `run_seir()`, `run_si()`,
-  `run_sis()`, … Covered by `tests/testthat/test-run_sir.R` (node
-  assignment, seeding, population conservation, flow-vs-delta
-  identities, cross-node isolation, attribute surface, and argument
-  validation).
 - Two **generalized timer-expiry kernels** (mirroring laser-generic’s
   `nb_timer_update` and `nb_timer_update_timer_set`), parameterized by
   the `from`/`to` state codes so any timer-driven transition can be
