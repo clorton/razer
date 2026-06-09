@@ -33,6 +33,18 @@ annotated teaching notebooks in `notebooks/` each pair with the scripts noted:
 - **`interventions.Rmd`** — extending razer with custom states and callbacks: vaccination
   campaigns (with and without waning) and quarantine (pairs with `sia_campaigns.R`,
   `sia_campaigns_waning.R`, `quarantine.R`).
+- **`spatial_metapopulation.Rmd`** — coupling patches with migration networks
+  (gravity / radiation), how `calc_foi` redistributes the force of infection, and a spatial
+  attack-rate map of England & Wales (pairs with `simple_sir.R`).
+- **`demographics.Rmd`** — building realistic populations: age pyramids via the alias
+  sampler and Kaplan–Meier dates of death conditioned on current age (pairs with
+  `aged_population.R`).
+- **`vital_dynamics_measles.Rmd`** — births, natural mortality, and a maternal-immunity `M`
+  state in a recurrent-epidemic measles model, sized with `calc_capacity()` (pairs with
+  `engwal_measles.R`).
+- **`long_runs_and_memory.Rmd`** — agent-array capacity for open populations:
+  `calc_capacity` vs `calc_capacity_cdr`, and reclaiming dead slots with `squash()` over a
+  century (pairs with `long_run_squash.R`).
 
 All examples are built on the **Column kernels** (`allocate_scalar` / `allocate_vector`
 buffers advanced by `calc_foi`, the `transmission` / `transmission_si` kernels, the

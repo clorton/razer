@@ -24,6 +24,11 @@ All notable changes to this project are documented here.
   scripts: `attack_fraction.Rmd` (R0 = β·D and the Kermack–McKendrick final size),
   `endemic_dynamics.Rmd` (the S*/N = 1/R0 equilibrium, importation, seasonality), and
   `interventions.Rmd` (custom states + callbacks: vaccination ± waning, quarantine).
+  Completed the set with `spatial_metapopulation.Rmd` (migration networks + an England &
+  Wales attack-rate map), `demographics.Rmd` (age pyramids + Kaplan–Meier dates of death),
+  `vital_dynamics_measles.Rmd` (births/mortality + a maternal `M` state), and
+  `long_runs_and_memory.Rmd` (`calc_capacity` vs `calc_capacity_cdr` + `squash()`), so every
+  example now has a paired teaching notebook.
 - **Richer example visuals:** `simple_sir.R` (previously plotless) now plots the national
   S/I/R trajectory and a geographic England & Wales attack-rate map; `quarantine.R` gained a
   2×2 figure (infectious baseline-vs-quarantine, cumulative cases averted, the Q
