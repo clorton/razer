@@ -9,7 +9,7 @@
 ^\.github$
 ^CLAUDE\.md$
 ^examples$
-^CHANGELOG\.md$
+^NEWS\.md$
 ^tmp$
 ^worldwide$
 ^\.claude$

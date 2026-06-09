@@ -36,7 +36,7 @@ it: pick a band in proportion to its population, then a uniform day within that 
 range, returning ages in **days**.
 
 ```{r ages}
-pyramid    <- load_pyramid_csv(file.path("..", "data", "pyramid_example.csv"))  # "Age,M,F" bands
+pyramid    <- load_pyramid_csv(file.path("..", "..", "examples", "data", "pyramid_example.csv"))  # "Age,M,F" bands
 n_agents   <- 1000000L
 ages_days  <- sample_pyramid_ages(pyramid, n_agents)
 ages_years <- ages_days / 365

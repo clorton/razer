@@ -19,8 +19,12 @@ For the **Jupyter-notebook experience** — prose, code, and inline plots in one
 use an **R Notebook / R Markdown** (`.Rmd`) or **Quarto** (`.qmd`) file, R's analog of a
 `.ipynb`. Open one in RStudio and click *Run* on a chunk (*Ctrl/Cmd+Shift+Enter*) to see
 output appear beneath it, or *Preview*/*Knit* to render the whole notebook to HTML.
-(Rendering needs the `rmarkdown` package and pandoc, both bundled with RStudio.) The
-annotated teaching notebooks in `notebooks/` each pair with the scripts noted:
+(Rendering needs the `rmarkdown` package and pandoc, both bundled with RStudio.)
+
+The annotated teaching notebooks live in **`vignettes/articles/`** as **pkgdown articles**
+— rendered into the package website (the *Articles* menu) and viewable online at
+<https://clorton.github.io/razer/>. They are website-only (`.Rbuildignore`d, so they do not
+run during `R CMD check`). Each pairs 1:1 with a script here:
 
 - **`getting_started.Rmd`** — a tour of `run_model()`: a single SEIR run, a model
   comparison, and a callback-based intervention.

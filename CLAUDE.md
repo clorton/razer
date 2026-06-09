@@ -109,6 +109,16 @@ Python** but **not** in Rust or R. Comment for that reader.
 - Distribution constructors use a `dist_` prefix (`dist_normal`, `dist_gamma`, …)
   to avoid masking base/stats functions such as `base::gamma` / `stats::poisson`.
 - Run tests with `Rscript -e 'devtools::test()'`.
+- **Changelog lives in `NEWS.md`, not `CHANGELOG.md`** (a repo-specific exception to
+  the global "note accepted edits in CHANGELOG.md" rule). `NEWS.md` is the conventional
+  R name, so pkgdown renders it as the site's **Changelog** page — record accepted edits
+  there. It is `.Rbuildignore`d (kept out of the tarball so `R CMD check` doesn't apply
+  its R-style NEWS parser to the "Keep a Changelog" format), but pkgdown reads it from the
+  source tree regardless.
+- The example **teaching notebooks are pkgdown articles** under `vignettes/articles/`
+  (website-only — auto-`.Rbuildignore`d, so they don't run during `R CMD check`); each
+  pairs 1:1 with a script in `examples/`. The articles that read data use
+  `file.path("..","..","examples","data", …)` (relative to `vignettes/articles/`).
 
 ## Git workflow
 

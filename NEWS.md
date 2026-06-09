@@ -1,6 +1,8 @@
-# Changelog
+# razer (development version)
 
-All notable changes to this project are documented here.
+All notable changes to this project are documented here. (Headed as the development
+version so pkgdown renders this file as the website's Changelog page; sub-sections follow
+the "Keep a Changelog" convention.)
 
 ## Unreleased
 
@@ -36,6 +38,20 @@ All notable changes to this project are documented here.
 - **`quarantine.R` enhancements:** the testing programme now runs on a configurable schedule
   (`test_period`, default fortnightly) and is **leaky** — each infectious agent is detected
   with probability `sensitivity` (default 0.80; 20% false negatives, no false positives).
+- **Teaching notebooks are now pkgdown articles.** The eight notebooks moved from
+  `examples/notebooks/*.Rmd` to `vignettes/articles/*.Rmd` and are rendered into the package
+  website (the *Articles* menu, grouped *Foundations* / *Building richer models* /
+  *Interventions & scale*) at <https://clorton.github.io/razer/>. They are website-only
+  (`.Rbuildignore`d, so they don't run during `R CMD check`); the previously committed
+  static `.html` renders were removed in favour of the site. `_pkgdown.yml` also gained the
+  missing `step_timer_expire` / `step_timer_expire_set` reference entries.
+- **`CHANGELOG.md` renamed to `NEWS.md`** (the conventional R name) so pkgdown renders it as
+  the site's Changelog page; headed as the development version for pkgdown's news parser.
+
+### Infrastructure
+- **GitHub Actions pinned by commit SHA.** `pkgdown.yaml` now references every action by its
+  full commit hash (with the version tag in a trailing comment) instead of a mutable tag,
+  for supply-chain integrity; `actions/checkout` bumped to v6 to match `R-CMD-check.yaml`.
 
 ### Added
 - **`run_model()` gains `capacity` and `extra_states`** so the callbacks can express

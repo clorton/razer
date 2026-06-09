@@ -43,8 +43,8 @@ emigration so the rows are valid export fractions. Here: the parameter-free **ra
 model** (Simini et al., *Nature* 2012), capped at 10% emigration per patch.
 
 ```{r network}
-# Knitted from examples/notebooks/, so the data lives one directory up.
-scenario <- read.csv(file.path("..", "data", "EnglandWalesMeasles_places.csv"))
+# A pkgdown article under vignettes/articles/, so the shared example data is two up.
+scenario <- read.csv(file.path("..", "..", "examples", "data", "EnglandWalesMeasles_places.csv"))
 D  <- distances(scenario$latitude, scenario$longitude)            # pairwise great-circle km
 W  <- radiation(scenario$population, D, k = 1, include_home = FALSE)
 W  <- row_normalizer(W, max_rowsum = 0.1)                         # cap total emigration at 10%

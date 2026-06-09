@@ -21,6 +21,7 @@ examples/data/EnglandWalesMeasles.py
 # Local vendored clones (not part of the package)
 worldwide/
 
-# RStudio R Notebook previews (regenerated on Preview); the committed .html renders
-# (knitted via rmarkdown::render, for GitHub viewing) are the canonical ones.
-examples/notebooks/*.nb.html
+# Local RStudio knit/preview artifacts of the teaching articles. The canonical
+# rendered view is the pkgdown site (built into docs/, above, and deployed to gh-pages).
+vignettes/articles/*.html
+vignettes/articles/*.nb.html
