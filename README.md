@@ -64,7 +64,7 @@ inf_period <- dist_gamma(2, 4)               # mean 8 ticks
 inf_period$sample_n(5L)
 ```
 
-Full models are assembled by `run_model()` (below) — or composed by hand from the per-tick kernels. See the [worked articles](https://clorton.github.io/razer/articles/) and [`examples/`](examples/).
+Full models are assembled by `run_model()` (below) — or composed by hand from the per-tick kernels. See the [worked articles](https://clorton.github.io/razer/articles/) and [`examples/`](https://github.com/clorton/razer/tree/main/examples).
 
 ## Architecture
 
@@ -90,7 +90,7 @@ For the closed-population menagerie you usually don't wire this by hand: **`run_
 
 ## Examples and articles
 
-Every model ships as both a **runnable script** in [`examples/`](examples/)
+Every model ships as both a **runnable script** in [`examples/`](https://github.com/clorton/razer/tree/main/examples)
 (`Rscript examples/<name>.R`; plots written to `examples/output/`) and a paired,
 annotated **teaching article** on the [package website](https://clorton.github.io/razer/articles/).
 Each article walks through the epidemiology, the razer code that builds the model, and
@@ -105,7 +105,7 @@ how to customize or extend it:
 - **[Interventions](https://clorton.github.io/razer/articles/interventions.html)** — custom states and callbacks: vaccination campaigns (± waning) and quarantine.
 - **[Long runs & memory](https://clorton.github.io/razer/articles/long_runs_and_memory.html)** — capacity sizing and reclaiming dead slots with `squash()` over a century.
 
-See [`examples/README.md`](examples/README.md) for the full script list and tips on running them in RStudio.
+See [`examples/README.md`](https://github.com/clorton/razer/blob/main/examples/README.md) for the full script list and tips on running them in RStudio.
 
 ## Development
 
