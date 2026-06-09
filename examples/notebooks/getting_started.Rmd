@@ -75,26 +75,29 @@ legend("right", names(lty_model), col = "grey30", lwd = 2, lty = lty_model, bty 
 
 `run_model()` takes `init` / `step_enter` / `step_update` / `step_exit` callbacks and an
 `extra_states` argument for user-defined states. Here a one-off vaccination moves 40% of
-susceptibles to a new `"V"` state at day 60 (see `examples/sia_campaigns.R` and
-`examples/quarantine.R` for scheduled / leaky versions).
+the still-susceptible population to a new `"V"` state on day 10 — early, *before* the wave
+takes off — so it has something to prevent (see `examples/sia_campaigns.R` and
+`examples/quarantine.R` for scheduled / leaky versions). We compare the *same* SIR model
+with and without that pulse, so the difference is the intervention alone.
 
 ```{r vaccinate}
-vacc <- run_model(scenario, "SIR", nticks = 200L, r0 = 2.5, infectious_period = 8,
-                  seed = 1L, extra_states = "V",
+sir_args <- list(scenario, "SIR", nticks = 200L, r0 = 2.5, infectious_period = 8, seed = 1L)
+base <- do.call(run_model, sir_args)                       # no intervention
+vacc <- do.call(run_model, c(sir_args, list(extra_states = "V",
                   step_exit = function(model) {
-                    if (model$tick != 60L) return(invisible())
+                    if (model$tick != 10L) return(invisible())
                     V <- model$states[["V"]]; S <- model$states[["S"]]
                     s <- model$people$state$values()
                     take <- which(s == S); take <- take[runif(length(take)) < 0.4]
                     s[take] <- V; model$people$state$set(s)
                     move_count(model$nodes$S, model$nodes$V, length(take), model$tick)
-                  })
-matplot(0:199, cbind(baseline = rowSums(m$nodes$I$values()),
+                  })))
+matplot(0:199, cbind(`no intervention` = rowSums(base$nodes$I$values()),
                      vaccinated = rowSums(vacc$nodes$I$values())) / 1e3,
         type = "l", lty = 1, lwd = 2, col = c("#e31a1c", "#1f78b4"),
         xlab = "day", ylab = "infectious (thousands)",
-        main = "Infectious: no intervention vs a day-60 vaccination pulse")
-legend("topright", c("baseline", "day-60 pulse (40% of S -> V)"),
+        main = "Same SIR, with vs without a day-10 vaccination pulse")
+legend("topright", c("no intervention", "day-10 pulse (40% of S -> V)"),
        col = c("#e31a1c", "#1f78b4"), lwd = 2, bty = "n")
 ```
 
