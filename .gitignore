@@ -18,9 +18,6 @@ tmp/
 # EnglandWalesMeasles_places.csv (built by convert_measles.py) is committed instead
 examples/data/EnglandWalesMeasles.py
 
-# Local vendored clones (not part of the package)
-worldwide/
-
 # Local RStudio knit/preview artifacts of the teaching articles. The canonical
 # rendered view is the pkgdown site (built into docs/, above, and deployed to gh-pages).
 vignettes/articles/*.html

@@ -14,7 +14,6 @@
 ^vignettes/articles$
 ^NEWS\.md$
 ^tmp$
-^worldwide$
 ^\.claude$
 ^razer_.*\.tar\.gz$
 ^.*\.Rcheck$
