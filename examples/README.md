@@ -17,10 +17,22 @@ with *Ctrl/Cmd+Alt+T*.)
 
 For the **Jupyter-notebook experience** — prose, code, and inline plots in one document —
 use an **R Notebook / R Markdown** (`.Rmd`) or **Quarto** (`.qmd`) file, R's analog of a
-`.ipynb`. `notebooks/getting_started.Rmd` is a runnable example: open it in RStudio and
-click *Run* on a chunk (*Ctrl/Cmd+Shift+Enter*) to see output appear beneath it, or
-*Preview*/*Knit* to render the whole notebook to HTML. (Rendering needs the `rmarkdown`
-package and pandoc, both bundled with RStudio.)
+`.ipynb`. Open one in RStudio and click *Run* on a chunk (*Ctrl/Cmd+Shift+Enter*) to see
+output appear beneath it, or *Preview*/*Knit* to render the whole notebook to HTML.
+(Rendering needs the `rmarkdown` package and pandoc, both bundled with RStudio.) The
+annotated teaching notebooks in `notebooks/` each pair with the scripts noted:
+
+- **`getting_started.Rmd`** — a tour of `run_model()`: a single SEIR run, a model
+  comparison, and a callback-based intervention.
+- **`attack_fraction.Rmd`** — epidemic final size: deriving $R_0 = \beta D$ and the
+  Kermack–McKendrick relation $A = 1 - e^{-R_0 A}$, and validating razer against it
+  (pairs with `sir_attack_fraction.R` / `seir_attack_fraction.R`).
+- **`endemic_dynamics.Rmd`** — the endemic equilibrium $S^\*/N = 1/R_0$ via vital turnover
+  and importation, plus seasonal forcing → phase-locked annual waves (pairs with
+  `endemic_sir.R` / `endemic_sir_seasonal.R`).
+- **`interventions.Rmd`** — extending razer with custom states and callbacks: vaccination
+  campaigns (with and without waning) and quarantine (pairs with `sia_campaigns.R`,
+  `sia_campaigns_waning.R`, `quarantine.R`).
 
 All examples are built on the **Column kernels** (`allocate_scalar` / `allocate_vector`
 buffers advanced by `calc_foi`, the `transmission` / `transmission_si` kernels, the

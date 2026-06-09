@@ -11,7 +11,10 @@ All notable changes to this project are documented here.
   `to_png`/`open_png`/`close_png` helper). Added `examples/notebooks/getting_started.Rmd`,
   an R Notebook (R's Jupyter analog) walking through `run_model()`, a model comparison, and
   a callback-based intervention with inline plots; and an "Running in RStudio" section in
-  the examples README.
+  the examples README. Added three more annotated teaching notebooks pairing with the
+  scripts: `attack_fraction.Rmd` (R0 = β·D and the Kermack–McKendrick final size),
+  `endemic_dynamics.Rmd` (the S*/N = 1/R0 equilibrium, importation, seasonality), and
+  `interventions.Rmd` (custom states + callbacks: vaccination ± waning, quarantine).
 - **Richer example visuals:** `simple_sir.R` (previously plotless) now plots the national
   S/I/R trajectory and a geographic England & Wales attack-rate map; `quarantine.R` gained a
   2×2 figure (infectious baseline-vs-quarantine, cumulative cases averted, the Q

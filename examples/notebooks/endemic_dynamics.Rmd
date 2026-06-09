@@ -1,0 +1,135 @@
+---
+title: "Endemic dynamics: vital turnover, importation, and seasonality"
+output:
+  html_notebook:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 8, fig.height = 5, message = FALSE, warning = FALSE)
+library(razer)
+```
+
+> Companion to `examples/endemic_sir.R` and `examples/endemic_sir_seasonal.R`.
+
+## From a single epidemic to a persistent one
+
+The final-size notebook showed a *closed* SIR burning through its susceptibles once and
+stopping. Real endemic diseases persist because the susceptible pool is continually
+**replenished** — by births, by loss of immunity, by migration. Add demographic turnover
+(birth/death rate $\mu$) to SIR and the system has a non-trivial **endemic equilibrium**:
+
+$$\frac{S^\*}{N} = \frac{1}{R_0}, \qquad \frac{I^\*}{N} = \frac{\mu}{\beta}\,(R_0 - 1).$$
+
+The susceptible fraction settles at $1/R_0$ — the **herd-immunity threshold** — because
+that is exactly the level at which the *effective* reproduction number
+$R_\text{eff} = R_0\,S/N$ equals 1: each case replaces itself, no more. Push $S$ above
+$1/R_0$ and the epidemic grows; below, it shrinks. The approach to $S^\*$ is a series of
+damped epidemic waves.
+
+## How razer builds it
+
+`run_model()` itself is **closed-population** (it allocates exactly the initial agents).
+Vital dynamics and importation are layered on through its callbacks and the `capacity`
+argument:
+
+- **`capacity`** reserves agent slots *above* the initial count, so `import_infections()`
+  has somewhere to put newly-introduced cases (a closed run could not grow).
+- a **`step_exit` callback** runs each tick *after* transmission: `constant_pop_vitals_sir`
+  applies births = deaths (each death reborn susceptible, so $N$ is constant), then
+  `import_infections` seeds a few cases on a schedule.
+
+Why importation? A finite stochastic population can have its last infectious agent recover
+by chance — *fade-out* — below the **critical community size**. A trickle of imports keeps
+the chain alive so we observe the equilibrium rather than extinction.
+
+```{r endemic}
+n_nodes  <- 2L
+scenario <- data.frame(population = rep(5e5L, n_nodes))
+scenario$R <- scenario$population - round(scenario$population / 3)   # seed S = N/R0, rest immune, I = 0
+network  <- matrix(c(0, 0.01, 0.01, 0), n_nodes, byrow = TRUE)       # 1% cross-coupling
+nticks   <- 3650L; cdr <- 20                                         # 10 years, crude death rate
+sched    <- expand.grid(tick = seq(0L, nticks - 2L, 30L), node = 0:1); sched$count <- 10L
+st <- as.integer(sched$tick); sn <- as.integer(sched$node); sc <- as.integer(sched$count)
+
+m <- run_model(scenario, "SIR", nticks = nticks, r0 = 3, infectious_period = dist_gamma(2, 4),
+               network = network, capacity = sum(scenario$population) + sum(sched$count), seed = 1L,
+               init = function(model) {
+                 model$nodes$death_rate <- values_map(cdr / 1000 / 365, nticks, model$nodes$count)
+                 model$nodes$births       <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+                 model$nodes$deaths       <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+                 model$nodes$importations <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+               },
+               step_exit = function(model) {
+                 constant_pop_vitals_sir(model$people$state, model$people$timer, model$people$nodeid,
+                   model$people$count, model$nodes$death_rate, model$nodes$S, model$nodes$I,
+                   model$nodes$R, model$nodes$births, model$nodes$deaths, model$tick)
+                 model$people$count <- import_infections(model$people$state, model$people$timer,
+                   model$people$nodeid, model$people$count, model$nodes$I, model$nodes$importations,
+                   st, sn, sc, dist_gamma(2, 4), model$tick)
+               })
+
+yr <- (seq_len(nticks) - 1L) / 365
+S <- rowSums(m$nodes$S$values()); I <- rowSums(m$nodes$I$values())
+par(mfrow = c(2, 1), mar = c(4, 4.5, 2.5, 1))
+plot(yr, S / 1e6, type = "l", lwd = 2, col = "#2c7fb8", ylim = c(0, 1),
+     xlab = "year", ylab = "susceptible (millions)", main = "Susceptibles settle at S* = N / R0")
+abline(h = sum(scenario$population) / 3 / 1e6, lty = 3, col = "#2c7fb8")   # N/R0
+plot(yr, I / 1e3, type = "l", lwd = 2, col = "#d7301f",
+     xlab = "year", ylab = "infectious (thousands)", main = "Damped waves to an endemic level")
+```
+
+The susceptibles relax to $N/R_0$ (dotted line) through damped oscillations, and infections
+persist at a low endemic level instead of going extinct — exactly the equilibrium above.
+
+## Seasonal forcing: a small wobble, a big response
+
+Make transmission seasonal by passing `run_model` a time-varying `seasonality` multiplier
+(any `values_map`-broadcastable shape). Because the endemic system sits **critically poised**
+at $R_\text{eff}\approx 1$, even a gentle annual sinusoid ($\pm 10\%$ on $\beta$) drives
+pronounced, phase-locked **annual epidemic waves** — a resonance phenomenon central to the
+dynamics of childhood infections like measles.
+
+```{r seasonal}
+amp  <- 0.10
+seas <- 1 + amp * sin(2 * pi * (seq_len(nticks) - 1L) / 365)   # length-nticks per-day multiplier
+ms <- run_model(scenario, "SIR", nticks = nticks, r0 = 3, infectious_period = dist_gamma(2, 4),
+                network = network, seasonality = seas,
+                capacity = sum(scenario$population) + sum(sched$count), seed = 1L,
+                init = function(model) {
+                  model$nodes$death_rate   <- values_map(cdr / 1000 / 365, nticks, model$nodes$count)
+                  model$nodes$births       <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+                  model$nodes$deaths       <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+                  model$nodes$importations <- allocate_vector("i32", nticks - 1L, model$nodes$count)
+                },
+                step_exit = function(model) {
+                  constant_pop_vitals_sir(model$people$state, model$people$timer, model$people$nodeid,
+                    model$people$count, model$nodes$death_rate, model$nodes$S, model$nodes$I,
+                    model$nodes$R, model$nodes$births, model$nodes$deaths, model$tick)
+                  model$people$count <- import_infections(model$people$state, model$people$timer,
+                    model$people$nodeid, model$people$count, model$nodes$I, model$nodes$importations,
+                    st, sn, sc, dist_gamma(2, 4), model$tick)
+                })
+par(mfrow = c(2, 1), mar = c(4, 4.5, 2.5, 1))
+plot(yr, seas, type = "l", lwd = 2, col = "#e6a000", xlab = "year", ylab = "beta multiplier",
+     main = sprintf("Seasonal forcing (+/-%.0f%%)", 100 * amp)); abline(h = 1, lty = 3, col = "grey")
+plot(yr, rowSums(ms$nodes$I$values()) / 1e3, type = "l", lwd = 2, col = "#d7301f",
+     xlab = "year", ylab = "infectious (thousands)", main = "Phase-locked annual epidemic waves")
+abline(v = 0:10, col = "grey92")
+```
+
+## Customize and extend
+
+- **Mortality / turnover.** Raise `cdr` (here 20/1000/yr) to replenish susceptibles
+  faster — larger $\mu$ raises the endemic $I^\*$ and damps the approach faster.
+- **Importation.** Edit the `sched` data frame (which ticks, which nodes, how many) — set
+  it to zero and watch a small population fade out (cross the critical community size).
+- **Forcing.** Change `amp`, or replace the sinusoid with school-term square waves; try the
+  $R_0$ that makes the inter-epidemic period resonate with the annual drive.
+- **Growing populations.** For true births (population growth, newborns into a maternal `M`
+  compartment) rather than constant-population turnover, see `examples/engwal_measles.R`
+  and the interventions notebook — `run_model(extra_states = "M", capacity = …)` plus the
+  `births` / `mortality` kernels.
+- **Space.** Add patches to `scenario` and entries to `network` to study spatial coupling,
+  travelling waves, and metapopulation persistence.
