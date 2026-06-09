@@ -72,7 +72,7 @@ where newborns enter susceptible and the old die. That requires two
 ingredients at initialization — a realistic <strong>age
 structure</strong>, and a <strong>date of death</strong> for every agent
 (so natural mortality can simply retire agents when their clock
-arrives). razer provides both, ported from <code>laser.core</code>. No
+arrives). Razer provides both, ported from <code>laser.core</code>. No
 disease here; this is the population-building step that the
 vital-dynamics and measles models build on.</p>
 </div>
@@ -81,7 +81,7 @@ vital-dynamics and measles models build on.</p>
 </h2>
 <p>A <em>population pyramid</em> is the count of people in each age band
 (often by sex). To sample a million agents’ ages in proportion to it,
-razer builds an <strong><code>AliasedDistribution</code></strong> —
+Razer builds an <strong><code>AliasedDistribution</code></strong> —
 Walker’s alias method, which draws from an arbitrary discrete
 distribution in <strong>O(1)</strong> per sample after an O(k) setup,
 far faster than a cumulative-sum search.
@@ -100,7 +100,7 @@ returning ages in <strong>days</strong>.</p>
 <div class="section level2">
 <h2 id="a-date-of-death-kaplanmeier-conditioned-on-current-age">A date of death (Kaplan–Meier, conditioned on current age)<a class="anchor" aria-label="anchor" href="#a-date-of-death-kaplanmeier-conditioned-on-current-age"></a>
 </h2>
-<p>We want each agent’s <em>age at death</em>. razer’s
+<p>We want each agent’s <em>age at death</em>. Razer’s
 <strong><code>KaplanMeierEstimator</code></strong> takes a life table —
 <strong>cumulative deaths by year</strong> for a synthetic cohort — and
 samples an age at death for each agent <strong>conditioned on the age it
@@ -140,7 +140,7 @@ rate — by running a cohort through it.</p>
 <div class="section level2">
 <h2 id="how-this-feeds-a-model">How this feeds a model<a class="anchor" aria-label="anchor" href="#how-this-feeds-a-model"></a>
 </h2>
-<p>Store the results as per-agent Columns and the rest of razer can use
+<p>Store the results as per-agent Columns and the rest of Razer can use
 them:</p>
 <ul>
 <li>

@@ -34,10 +34,10 @@ the transcendental relation
 derivation divides $`dS/dR`$ to get $`S = S_0 e^{-R_0 R/N}`$, then sets
 $`t\to\infty`$ with $`I_\infty = 0`$. Notice $`A`$ depends on
 $`R_0`$*only* — not on $`\beta`$ and $`D`$ separately, and not on any
-latent period. We’ll test all of that against razer’s stochastic,
+latent period. We’ll test all of that against Razer’s stochastic,
 agent-based simulation.
 
-## How razer builds an SIR — and why R₀ = β·D exactly
+## How Razer builds an SIR — and why R₀ = β·D exactly
 
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 advances an **agent-based** SIR: every individual is a row in Rust-owned
@@ -100,7 +100,7 @@ km  <- vapply(R0_grid, km_attack,  numeric(1))
 
 plot(R0_grid, km, type = "l", lwd = 2.5, ylim = c(0, 1),
      xlab = expression(R[0]), ylab = "attack fraction",
-     main = "razer SIR (points) vs Kermack–McKendrick (line)")
+     main = "Razer SIR (points) vs Kermack–McKendrick (line)")
 points(R0_grid, sim, pch = 19, col = "#d7301f"); abline(v = 1, lty = 3, col = "grey")
 ```
 
@@ -139,7 +139,7 @@ sim_se <- vapply(R0_grid, sim_attack_seir, numeric(1))
 plot(R0_grid, km, type = "l", lwd = 2.5, ylim = c(0, 1), xlab = expression(R[0]),
      ylab = "attack fraction", main = "SEIR matches the same final-size curve")
 points(R0_grid, sim_se, pch = 17, col = "#7570b3"); abline(v = 1, lty = 3, col = "grey")
-legend("bottomright", c("Kermack–McKendrick", "razer SEIR"), pch = c(NA, 17),
+legend("bottomright", c("Kermack–McKendrick", "Razer SEIR"), pch = c(NA, 17),
        lwd = c(2.5, NA), col = c("black", "#7570b3"), bty = "n")
 ```
 
@@ -148,7 +148,7 @@ legend("bottomright", c("Kermack–McKendrick", "razer SEIR"), pch = c(NA, 17),
 ## Customize and extend
 
 - **Different periods.** `infectious_period` / `incubation_period`
-  accept a number (a constant) or any razer `Distribution`,
+  accept a number (a constant) or any Razer `Distribution`,
   e.g. `dist_gamma(2, 4)` or `dist_normal(7, 1.5)`. Try a fat-tailed
   infectious period and confirm the final size is unchanged (it depends
   on the *mean* via $`R_0`$, not the shape).

@@ -48,15 +48,15 @@
 </nav><div class="container template-home">
 <div class="row">
   <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="razer">razer<a class="anchor" aria-label="anchor" href="#razer"></a>
+<div class="page-header"><h1 id="razer">Razer<a class="anchor" aria-label="anchor" href="#razer"></a>
 </h1></div>
 <p><strong>R</strong>ust-backed <strong>A</strong>gent modeling with <strong>Z</strong>ero-copy typed arrays for <strong>E</strong>radication <strong>R</strong>esearch</p>
-<p><code>razer</code> is an R interface to the <a href="https://github.com/laser-base" class="external-link">LASER</a> (Light Agent Spatial modeling for ERadication) toolkit. It provides high-performance, Rust-backed data structures and composable kernels for large-scale spatial agent-based disease models. The name is a deliberate pun: “raze” means to eradicate completely, “razor” echoes LASER, and the trailing R anchors it to R.</p>
+<p><code>Razer</code> is an R interface to the <a href="https://github.com/laser-base" class="external-link">LASER</a> (Light Agent Spatial modeling for ERadication) toolkit. It provides high-performance, Rust-backed data structures and composable kernels for large-scale spatial agent-based disease models. The name is a deliberate pun: “raze” means to eradicate completely, “razor” echoes LASER, and the trailing R anchors it to R.</p>
 <div class="section level2">
 <h2 id="background-the-python-laser-project">Background: the Python LASER project<a class="anchor" aria-label="anchor" href="#background-the-python-laser-project"></a>
 </h2>
 <p><a href="https://github.com/laser-base" class="external-link">LASER</a> is a Python framework developed at the Institute for Disease Modeling for building fast, composable agent-based disease models at national and global scale. Its core design insight is the <strong>struct-of-arrays (SoA)</strong> memory layout: instead of one object per agent, each agent <em>property</em> is a flat array, and all active agents are a contiguous slice of that array — cache-friendly for the vectorized, Numba-JIT-compiled kernels that drive LASER’s performance.</p>
-<p><code>razer</code> ports this memory model to R. Each agent property is a Rust-owned, dtype-tagged array — a <code>Column</code> — that R holds only as an opaque external-pointer handle (via the <a href="https://extendr.github.io/" class="external-link">extendr</a> framework). The per-tick simulation kernels borrow these arrays directly and mutate them in place with no copies, splitting the per-agent work across CPU cores with <a href="https://github.com/rayon-rs/rayon" class="external-link">Rayon</a>. Data crosses back into R only on explicit inspection (<code>$values()</code>).</p>
+<p><code>Razer</code> ports this memory model to R. Each agent property is a Rust-owned, dtype-tagged array — a <code>Column</code> — that R holds only as an opaque external-pointer handle (via the <a href="https://extendr.github.io/" class="external-link">extendr</a> framework). The per-tick simulation kernels borrow these arrays directly and mutate them in place with no copies, splitting the per-agent work across CPU cores with <a href="https://github.com/rayon-rs/rayon" class="external-link">Rayon</a>. Data crosses back into R only on explicit inspection (<code>$values()</code>).</p>
 </div>
 <div class="section level2">
 <h2 id="requirements">Requirements<a class="anchor" aria-label="anchor" href="#requirements"></a>
@@ -152,7 +152,7 @@
 <div class="section level2">
 <h2 id="examples-and-articles">Examples and articles<a class="anchor" aria-label="anchor" href="#examples-and-articles"></a>
 </h2>
-<p>Every model ships as both a <strong>runnable script</strong> in <a href="https://github.com/clorton/razer/tree/main/examples" class="external-link"><code>examples/</code></a> (<code>Rscript examples/&lt;name&gt;.R</code>; plots written to <code>examples/output/</code>) and a paired, annotated <strong>teaching article</strong> on the <a href="https://clorton.github.io/razer/articles/">package website</a>. Each article walks through the epidemiology, the razer code that builds the model, and how to customize or extend it:</p>
+<p>Every model ships as both a <strong>runnable script</strong> in <a href="https://github.com/clorton/razer/tree/main/examples" class="external-link"><code>examples/</code></a> (<code>Rscript examples/&lt;name&gt;.R</code>; plots written to <code>examples/output/</code>) and a paired, annotated <strong>teaching article</strong> on the <a href="https://clorton.github.io/razer/articles/">package website</a>. Each article walks through the epidemiology, the Razer code that builds the model, and how to customize or extend it:</p>
 <ul>
 <li>
 <strong><a href="https://clorton.github.io/razer/articles/getting_started.html">Getting started</a></strong> — the <code><a href="reference/run_model.html">run_model()</a></code> workflow, a model comparison, and a callback-based intervention.</li>

@@ -2,7 +2,7 @@
 
 ## razer (development version)
 
-razer is in active pre-release development. This page summarizes the
+Razer is in active pre-release development. This page summarizes the
 capabilities of the current development version rather than every
 intermediate change; the detailed, commit-by-commit history leading to
 the first release lives in the git log. (The file is headed as the

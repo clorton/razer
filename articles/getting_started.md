@@ -1,4 +1,4 @@
-# razer — getting started (R Notebook)
+# Razer — getting started (R Notebook)
 
 This is an **R Notebook** — R’s equivalent of a Jupyter notebook. In
 RStudio, click *Run* on a chunk (or press *Ctrl/Cmd+Shift+Enter*) and

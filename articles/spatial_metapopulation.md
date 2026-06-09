@@ -12,7 +12,7 @@ the movement of people. Coupling drives the phenomena a single-patch
 model can’t show: spatial **invasion waves**, **rescue** of a faded-out
 patch by its neighbours, and partial **synchrony** between patches.
 
-razer models a metapopulation as $`n`$ patches each running the usual
+Razer models a metapopulation as $`n`$ patches each running the usual
 SIR transmission, plus a coupling matrix $`W`$ where $`W_{ij}`$ is the
 fraction of patch $`i`$’s force of infection that is *exported* to patch
 $`j`$. The kernel `calc_foi` redistributes each tick:
@@ -27,7 +27,7 @@ imports a share of every other patch’s.
 ## Building a coupling network
 
 We use the England & Wales measles patches (954 registration districts,
-each with a 1944 population and a latitude/longitude). razer ships
+each with a 1944 population and a latitude/longitude). Razer ships
 several **migration models** that turn pairwise distances + populations
 into a weight matrix —
 [`gravity()`](https://clorton.github.io/razer/reference/gravity.md),

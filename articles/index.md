@@ -5,7 +5,7 @@
 Start here: the run_model() workflow, epidemic final size, and the
 endemic equilibrium.
 
-- [razer — getting started (R
+- [Razer — getting started (R
   Notebook)](https://clorton.github.io/razer/articles/getting_started.md):
 - [Epidemic final size: R₀, the attack fraction, and
   Kermack–McKendrick](https://clorton.github.io/razer/articles/attack_fraction.md):

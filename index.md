@@ -1,9 +1,9 @@
-# razer
+# Razer
 
 **R**ust-backed **A**gent modeling with **Z**ero-copy typed arrays for
 **E**radication **R**esearch
 
-`razer` is an R interface to the [LASER](https://github.com/laser-base)
+`Razer` is an R interface to the [LASER](https://github.com/laser-base)
 (Light Agent Spatial modeling for ERadication) toolkit. It provides
 high-performance, Rust-backed data structures and composable kernels for
 large-scale spatial agent-based disease models. The name is a deliberate
@@ -20,7 +20,7 @@ object per agent, each agent *property* is a flat array, and all active
 agents are a contiguous slice of that array — cache-friendly for the
 vectorized, Numba-JIT-compiled kernels that drive LASER’s performance.
 
-`razer` ports this memory model to R. Each agent property is a
+`Razer` ports this memory model to R. Each agent property is a
 Rust-owned, dtype-tagged array — a `Column` — that R holds only as an
 opaque external-pointer handle (via the
 [extendr](https://extendr.github.io/) framework). The per-tick
@@ -189,7 +189,7 @@ Every model ships as both a **runnable script** in
 (`Rscript examples/<name>.R`; plots written to `examples/output/`) and a
 paired, annotated **teaching article** on the [package
 website](https://clorton.github.io/razer/articles/). Each article walks
-through the epidemiology, the razer code that builds the model, and how
+through the epidemiology, the Razer code that builds the model, and how
 to customize or extend it:
 
 - **[Getting

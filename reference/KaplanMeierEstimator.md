@@ -81,11 +81,11 @@ A numeric vector of length equal to the number of years.
 ## ---- Method `predict_year_of_death` ---- ##
 km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
 km$predict_year_of_death(c(40L, 50L, 60L), -1L)
-#> [1] 80 98 63
+#> [1] 82 95 99
 
 ## ---- Method `predict_age_at_death` ---- ##
 km <- kaplan_meier_estimator(cumsum(c(rep(10, 80), rep(100, 21))))
 km$predict_age_at_death(c(40L, 50L, 60L) * 365L, -1L)
-#> [1] 30601 29766 33850
+#> [1] 30831 31785 34814
 
 ```

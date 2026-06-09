@@ -109,10 +109,10 @@ depends on
 and
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>D</mi><annotation encoding="application/x-tex">D</annotation></semantics></math>
 separately, and not on any latent period. We’ll test all of that against
-razer’s stochastic, agent-based simulation.</p>
+Razer’s stochastic, agent-based simulation.</p>
 </div>
 <div class="section level2">
-<h2 id="how-razer-builds-an-sir-and-why-r₀-βd-exactly">How razer builds an SIR — and why R₀ = β·D exactly<a class="anchor" aria-label="anchor" href="#how-razer-builds-an-sir-and-why-r%E2%82%80-%CE%B2d-exactly"></a>
+<h2 id="how-razer-builds-an-sir-and-why-r₀-βd-exactly">How Razer builds an SIR — and why R₀ = β·D exactly<a class="anchor" aria-label="anchor" href="#how-razer-builds-an-sir-and-why-r%E2%82%80-%CE%B2d-exactly"></a>
 </h2>
 <p><code><a href="../reference/run_model.html">run_model()</a></code> advances an <strong>agent-based</strong>
 SIR: every individual is a row in Rust-owned <code>Column</code> arrays
@@ -178,7 +178,7 @@ Kermack–McKendrick curve.</p>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">R0_grid</span>, <span class="va">km</span>, type <span class="op">=</span> <span class="st">"l"</span>, lwd <span class="op">=</span> <span class="fl">2.5</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span>
 <span>     xlab <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/expression.html" class="external-link">expression</a></span><span class="op">(</span><span class="va">R</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span>, ylab <span class="op">=</span> <span class="st">"attack fraction"</span>,</span>
-<span>     main <span class="op">=</span> <span class="st">"razer SIR (points) vs Kermack–McKendrick (line)"</span><span class="op">)</span></span>
+<span>     main <span class="op">=</span> <span class="st">"Razer SIR (points) vs Kermack–McKendrick (line)"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/points.html" class="external-link">points</a></span><span class="op">(</span><span class="va">R0_grid</span>, <span class="va">sim</span>, pch <span class="op">=</span> <span class="fl">19</span>, col <span class="op">=</span> <span class="st">"#d7301f"</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>v <span class="op">=</span> <span class="fl">1</span>, lty <span class="op">=</span> <span class="fl">3</span>, col <span class="op">=</span> <span class="st">"grey"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="attack_fraction_files/figure-html/km-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
@@ -215,7 +215,7 @@ obeying the <em>same</em> relation in
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">R0_grid</span>, <span class="va">km</span>, type <span class="op">=</span> <span class="st">"l"</span>, lwd <span class="op">=</span> <span class="fl">2.5</span>, ylim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, xlab <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/expression.html" class="external-link">expression</a></span><span class="op">(</span><span class="va">R</span><span class="op">[</span><span class="fl">0</span><span class="op">]</span><span class="op">)</span>,</span>
 <span>     ylab <span class="op">=</span> <span class="st">"attack fraction"</span>, main <span class="op">=</span> <span class="st">"SEIR matches the same final-size curve"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/points.html" class="external-link">points</a></span><span class="op">(</span><span class="va">R0_grid</span>, <span class="va">sim_se</span>, pch <span class="op">=</span> <span class="fl">17</span>, col <span class="op">=</span> <span class="st">"#7570b3"</span><span class="op">)</span>; <span class="fu"><a href="https://rdrr.io/r/graphics/abline.html" class="external-link">abline</a></span><span class="op">(</span>v <span class="op">=</span> <span class="fl">1</span>, lty <span class="op">=</span> <span class="fl">3</span>, col <span class="op">=</span> <span class="st">"grey"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"bottomright"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Kermack–McKendrick"</span>, <span class="st">"razer SEIR"</span><span class="op">)</span>, pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fl">17</span><span class="op">)</span>,</span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"bottomright"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Kermack–McKendrick"</span>, <span class="st">"Razer SEIR"</span><span class="op">)</span>, pch <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="cn">NA</span>, <span class="fl">17</span><span class="op">)</span>,</span>
 <span>       lwd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2.5</span>, <span class="cn">NA</span><span class="op">)</span>, col <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"black"</span>, <span class="st">"#7570b3"</span><span class="op">)</span>, bty <span class="op">=</span> <span class="st">"n"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="attack_fraction_files/figure-html/seir-1.png" class="r-plt" alt="" width="768"></p>
 </div>
@@ -225,7 +225,7 @@ obeying the <em>same</em> relation in
 <ul>
 <li>
 <strong>Different periods.</strong> <code>infectious_period</code> /
-<code>incubation_period</code> accept a number (a constant) or any razer
+<code>incubation_period</code> accept a number (a constant) or any Razer
 <code>Distribution</code>, e.g. <code>dist_gamma(2, 4)</code> or
 <code>dist_normal(7, 1.5)</code>. Try a fat-tailed infectious period and
 confirm the final size is unchanged (it depends on the <em>mean</em> via

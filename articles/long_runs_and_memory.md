@@ -6,7 +6,7 @@
 
 ## The problem: agents accumulate
 
-razer is **agent-based** — every individual occupies a slot in
+Razer is **agent-based** — every individual occupies a slot in
 fixed-size `Column` arrays. A closed population is easy: allocate
 exactly $`N`$ slots. But once you add **births**, the array must hold
 every agent that will *ever exist*. Over a century at a crude birth rate

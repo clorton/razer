@@ -5,13 +5,13 @@
 > [`examples/sia_campaigns_waning.R`](https://github.com/clorton/razer/blob/main/examples/sia_campaigns_waning.R),
 > and
 > [`examples/quarantine.R`](https://github.com/clorton/razer/blob/main/examples/quarantine.R).
-> This notebook is about **extending** razer.
+> This notebook is about **extending** Razer.
 
 ## The extension toolkit
 
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 runs the built-in S/E/I/R disease step, but most public-health questions
-need *extra* states and *interventions*. razer exposes four hooks so you
+need *extra* states and *interventions*. Razer exposes four hooks so you
 never have to fork the runner or write a Rust kernel:
 
 | Tool | What it does |

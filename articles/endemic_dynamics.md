@@ -26,7 +26,7 @@ replaces itself, no more. Push $`S`$ above $`1/R_0`$ and the epidemic
 grows; below, it shrinks. The approach to $`S^*`$ is a series of damped
 epidemic waves.
 
-## How razer builds it
+## How Razer builds it
 
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 itself is **closed-population** (it allocates exactly the initial

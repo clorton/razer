@@ -10,14 +10,14 @@ targets under-fives, age-dependent severity, vital dynamics where
 newborns enter susceptible and the old die. That requires two
 ingredients at initialization — a realistic **age structure**, and a
 **date of death** for every agent (so natural mortality can simply
-retire agents when their clock arrives). razer provides both, ported
+retire agents when their clock arrives). Razer provides both, ported
 from `laser.core`. No disease here; this is the population-building step
 that the vital-dynamics and measles models build on.
 
 ## Ages from a population pyramid (the alias method)
 
 A *population pyramid* is the count of people in each age band (often by
-sex). To sample a million agents’ ages in proportion to it, razer builds
+sex). To sample a million agents’ ages in proportion to it, Razer builds
 an **`AliasedDistribution`** — Walker’s alias method, which draws from
 an arbitrary discrete distribution in **O(1)** per sample after an O(k)
 setup, far faster than a cumulative-sum search.
@@ -39,7 +39,7 @@ cat(sprintf("%s agents; ages %.1f–%.1f yr (mean %.1f)\n",
 
 ## A date of death (Kaplan–Meier, conditioned on current age)
 
-We want each agent’s *age at death*. razer’s **`KaplanMeierEstimator`**
+We want each agent’s *age at death*. Razer’s **`KaplanMeierEstimator`**
 takes a life table — **cumulative deaths by year** for a synthetic
 cohort — and samples an age at death for each agent **conditioned on the
 age it is alive at now**, so the draw is never in the past (the essence
@@ -84,7 +84,7 @@ abline(v = e0, lty = 2, col = "grey30"); legend("topleft", sprintf("e0 = %.1f yr
 
 ## How this feeds a model
 
-Store the results as per-agent Columns and the rest of razer can use
+Store the results as per-agent Columns and the rest of Razer can use
 them:
 
 - **`dob` (date of birth) = −age in days**, an `i32` Column (negative =

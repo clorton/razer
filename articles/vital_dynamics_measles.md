@@ -26,9 +26,9 @@ The susceptible supply (births) makes the system endemic, with the
 damped/forced **recurrent epidemics** familiar from pre-vaccination
 measles.
 
-## How razer assembles it
+## How Razer assembles it
 
-This is where razer’s extensibility pays off — no kernel changes, just
+This is where Razer’s extensibility pays off — no kernel changes, just
 [`run_model()`](https://clorton.github.io/razer/reference/run_model.md)
 knobs:
 
