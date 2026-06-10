@@ -166,12 +166,12 @@ so a just-entered timed state is never decremented again the same tick.
 See `CLAUDE.md` for the full rationale and the per-model table.
 
 For the closed-population menagerie you usually don’t wire this by hand:
-**`run_model(scenario, model, nticks, r0, …)`** builds the population,
+**`run_model(scenario, model, nticks, beta, …)`** builds the population,
 runs the correct per-tick loop and applies all census deltas, and
 returns a **`model` environment** (bundling `$people`, `$nodes`,
 `$network`, `$carry`) with per-node census and the `incidence` / `onset`
 / `recovery` / `waning` flows —
-e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, r0 = 2.5, infectious_period = 8, incubation_period = 5, seed = 1)`.
+e.g. `run_model(data.frame(population = 1e5, I = 100), "SEIR", nticks = 200, beta = 2.5 / 8, infectious_period = 8, incubation_period = 5, seed = 1)`.
 It seeds any of the model’s `E`/`I`/`R` states the scenario supplies,
 and takes optional `init` plus the per-tick callbacks `step_enter`
 (start) / `step_update` (between the step kernel and `calc_foi`) /

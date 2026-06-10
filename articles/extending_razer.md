@@ -38,7 +38,7 @@ per-tick order, and returns a **`model` environment**.
 
 m <- run_model(
   data.frame(population = 1e5, I = 100L),   # one node; seed 100 infectious
-  model = "SIR", nticks = 120L, r0 = 2.5,
+  model = "SIR", nticks = 120L, beta = 2.5 / 8,   # R0 = beta * 8 = 2.5
   infectious_period = 8, seed = 1L
 )
 S <- m$nodes$S$values()[, 1]; I <- m$nodes$I$values()[, 1]; R <- m$nodes$R$values()[, 1]
@@ -113,7 +113,7 @@ per-tick callbacks. The per-tick order is fixed:
 ``` r
 
 # A vaccinated state, driven entirely from R — no Rust needed.
-m <- run_model(scenario, "SIR", nticks = 365L, r0 = 2,
+m <- run_model(scenario, "SIR", nticks = 365L, beta = 2 / 8,
                infectious_period = 8, extra_states = "V", seed = 1L,
                step_exit = function(model) {
                  if (model$tick == 30L) {                       # one-time campaign on day 30

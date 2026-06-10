@@ -108,11 +108,11 @@ returning the new live count — so the active count tracks the
 <div class="section level2">
 <h2 id="a-century-with-annual-squash">A century with annual squash<a class="anchor" aria-label="anchor" href="#a-century-with-annual-squash"></a>
 </h2>
-<p>No disease here (model <code>"SI"</code> with <code>r0 = 0</code>, so
-nothing transmits) — just demography. Crude, age-independent mortality
-is an exponential lifespan at the CDR hazard (a Kaplan–Meier table built
-from an exponential survival curve). Newborns enter the maternal state
-<code>M</code> (registered via <code>extra_states</code>;
+<p>No disease here (model <code>"SI"</code> with <code>beta = 0</code>,
+so nothing transmits) — just demography. Crude, age-independent
+mortality is an exponential lifespan at the CDR hazard (a Kaplan–Meier
+table built from an exponential survival curve). Newborns enter the
+maternal state <code>M</code> (registered via <code>extra_states</code>;
 <code>run_model</code> wanes M→S for us). The <code>step_exit</code>
 callback runs <code>births</code> and <code>mortality</code> each tick
 and <code><a href="../reference/squash.html">squash()</a></code>es once a year, recording the living and active
@@ -126,8 +126,8 @@ counts for the plots.</p>
 <span><span class="va">track</span><span class="op">$</span><span class="va">live</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="va">nticks</span><span class="op">)</span>; <span class="va">track</span><span class="op">$</span><span class="va">live</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">N0</span></span>
 <span><span class="va">track</span><span class="op">$</span><span class="va">active</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="va">nticks</span><span class="op">)</span>; <span class="va">track</span><span class="op">$</span><span class="va">active</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="va">N0</span></span>
 <span></span>
-<span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_model.html">run_model</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>population <span class="op">=</span> <span class="va">N0</span><span class="op">)</span>, <span class="st">"SI"</span>, nticks <span class="op">=</span> <span class="va">nticks</span>, r0 <span class="op">=</span> <span class="fl">0</span>,</span>
-<span>               infectious_period <span class="op">=</span> <span class="fu"><a href="../reference/dist_constant.html">dist_constant</a></span><span class="op">(</span><span class="fl">7</span><span class="op">)</span>,            <span class="co"># unused (r0 = 0)</span></span>
+<span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/run_model.html">run_model</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>population <span class="op">=</span> <span class="va">N0</span><span class="op">)</span>, <span class="st">"SI"</span>, nticks <span class="op">=</span> <span class="va">nticks</span>, beta <span class="op">=</span> <span class="fl">0</span>,</span>
+<span>               infectious_period <span class="op">=</span> <span class="fu"><a href="../reference/dist_constant.html">dist_constant</a></span><span class="op">(</span><span class="fl">7</span><span class="op">)</span>,            <span class="co"># unused (beta = 0)</span></span>
 <span>               capacity <span class="op">=</span> <span class="va">cap_cdr</span>, extra_states <span class="op">=</span> <span class="st">"M"</span>, seed <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>               init <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">model</span><span class="op">)</span> <span class="op">{</span></span>
 <span>                 <span class="va">cap</span> <span class="op">&lt;-</span> <span class="va">model</span><span class="op">$</span><span class="va">people</span><span class="op">$</span><span class="va">capacity</span></span>
@@ -156,7 +156,7 @@ counts for the plots.</p>
 <span>            <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">N0</span>, big.mark <span class="op">=</span> <span class="st">","</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">track</span><span class="op">$</span><span class="va">live</span><span class="op">[</span><span class="va">nticks</span><span class="op">]</span><span class="op">)</span>, big.mark <span class="op">=</span> <span class="st">","</span><span class="op">)</span>,</span>
 <span>            <span class="va">track</span><span class="op">$</span><span class="va">live</span><span class="op">[</span><span class="va">nticks</span><span class="op">]</span> <span class="op">/</span> <span class="va">N0</span>, <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">track</span><span class="op">$</span><span class="va">active</span><span class="op">)</span><span class="op">)</span>, big.mark <span class="op">=</span> <span class="st">","</span><span class="op">)</span>,</span>
 <span>            <span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="va">cap_cdr</span>, big.mark <span class="op">=</span> <span class="st">","</span><span class="op">)</span>, <span class="fl">100</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">track</span><span class="op">$</span><span class="va">active</span><span class="op">)</span> <span class="op">/</span> <span class="va">cap_cdr</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## living 500,000 -&gt; 1,915,754 (3.8x growth); peak active = 1,947,029 of 4,564,671 capacity (43% used)</span></span></code></pre>
+<pre><code><span><span class="co">## living 500,000 -&gt; 1,922,710 (3.8x growth); peak active = 1,953,987 of 4,564,671 capacity (43% used)</span></span></code></pre>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">yr</span> <span class="op">&lt;-</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">nticks</span><span class="op">)</span> <span class="op">-</span> <span class="fl">1L</span><span class="op">)</span> <span class="op">/</span> <span class="fl">365</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/par.html" class="external-link">par</a></span><span class="op">(</span>mfrow <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">1</span><span class="op">)</span>, mar <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">4.5</span>, <span class="fl">2.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
@@ -197,7 +197,7 @@ peak.</li>
 more slack against a lower-mortality (faster-growing) realization;
 <code>s = 0</code> is the bare net-growth bound.</li>
 <li>
-<strong>Add disease.</strong> Swap <code>"SI", r0 = 0</code> for a
+<strong>Add disease.</strong> Swap <code>"SI", beta = 0</code> for a
 real model with <code>incubation_period</code> / transmission and you
 have an endemic, demographically open simulation that can run for
 centuries within a bounded array (this is exactly what a long measles or

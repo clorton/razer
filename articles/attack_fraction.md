@@ -52,14 +52,15 @@ $`I[t]`$ (not the half-updated working column), so an agent contributes
 to transmission on exactly the $`D`$ ticks it is infectious. That makes
 the realized reproduction number the *full* $`R_0 = \beta D`$ — not
 $`\beta(D-1)`$, the off-by-one a naive “decrement-then-count” loop would
-produce. `run_model` derives $`\beta = R_0 / \overline{D}`$ for us, so
-we pass $`R_0`$ directly.
+produce. `run_model` takes the transmission coefficient $`\beta`$
+directly (its force of infection scales as $`\beta`$), so we set
+$`\beta = R_0 / \overline{D}`$ and pass that.
 
 ``` r
 
 N <- 1e5L; D <- 10L
 m <- run_model(data.frame(population = N, I = 100L), "SIR", nticks = 160L,
-               r0 = 2.5, infectious_period = D, seed = 1L)   # beta = 2.5 / 10 = 0.25
+               beta = 2.5 / D, infectious_period = D, seed = 1L)   # beta = 2.5 / 10 = 0.25
 traj <- cbind(S = m$nodes$S$values()[, 1], I = m$nodes$I$values()[, 1], R = m$nodes$R$values()[, 1])
 matplot(0:159, traj, type = "l", lty = 1, lwd = 2, col = c("#2c7fb8", "#d7301f", "#238b45"),
         xlab = "day", ylab = "agents", main = sprintf("SIR, R0 = beta*D = %.1f", 2.5))
@@ -74,7 +75,7 @@ cat(sprintf("attack fraction here = 1 - S_inf/N = %.3f  (K-M predicts ~0.89)\n",
             1 - tail(traj[, "S"], 1) / N))
 ```
 
-    ## attack fraction here = 1 - S_inf/N = 0.892  (K-M predicts ~0.89)
+    ## attack fraction here = 1 - S_inf/N = 0.893  (K-M predicts ~0.89)
 
 ## The final-size test
 
@@ -90,7 +91,7 @@ km_attack <- function(R0) if (R0 <= 1) 0 else
 
 sim_attack <- function(R0, n = 1e5L, D = 10L, horizon = 1500L) {
   mm <- run_model(data.frame(population = n, I = 50L), "SIR", nticks = horizon,
-                  r0 = R0, infectious_period = D, seed = 1L)
+                  beta = R0 / D, infectious_period = D, seed = 1L)
   S <- mm$nodes$S$values()[, 1]; 1 - S[length(S)] / n
 }
 
@@ -111,7 +112,7 @@ points(R0_grid, sim, pch = 19, col = "#d7301f"); abline(v = 1, lty = 3, col = "g
 cat(sprintf("max |sim - theory| for R0 >= 1.5: %.4f\n", max(abs(sim - km)[R0_grid >= 1.5])))
 ```
 
-    ## max |sim - theory| for R0 >= 1.5: 0.0035
+    ## max |sim - theory| for R0 >= 1.5: 0.0058
 
 The agreement is to a few thousandths across the supercritical range — a
 strong validation that the agent model realizes $`R_0 = \beta D`$. Just
@@ -131,7 +132,7 @@ $`R_0 = \beta D`$ (the infectious period alone).
 ``` r
 
 sim_attack_seir <- function(R0, n = 1e5L, D = 10L, De = 5L, horizon = 2000L) {
-  mm <- run_model(data.frame(population = n, I = 50L), "SEIR", nticks = horizon, r0 = R0,
+  mm <- run_model(data.frame(population = n, I = 50L), "SEIR", nticks = horizon, beta = R0 / D,
                   infectious_period = D, incubation_period = De, seed = 1L)
   S <- mm$nodes$S$values()[, 1]; 1 - S[length(S)] / n
 }

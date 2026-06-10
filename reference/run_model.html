@@ -62,7 +62,7 @@ delta for you.</p>
 <span>  <span class="va">scenario</span>,</span>
 <span>  <span class="va">model</span>,</span>
 <span>  <span class="va">nticks</span>,</span>
-<span>  <span class="va">r0</span>,</span>
+<span>  <span class="va">beta</span>,</span>
 <span>  <span class="va">infectious_period</span>,</span>
 <span>  incubation_period <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  immunity_period <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -99,8 +99,11 @@ remainder. The seeded <code>E + I + R</code> must not exceed a node's population
 <dd><p>Number of recorded daily states (dynamics run <code>nticks - 1</code> times).</p></dd>
 
 
-<dt id="arg-r-">r0<a class="anchor" aria-label="anchor" href="#arg-r-"></a></dt>
-<dd><p>Basic reproduction number; <code>beta = r0 / mean(infectious_period)</code>.</p></dd>
+<dt id="arg-beta">beta<a class="anchor" aria-label="anchor" href="#arg-beta"></a></dt>
+<dd><p>Per-tick transmission coefficient: the per-node force of infection is
+<code>beta * I / N</code> (modified by <code>seasonality</code> and the <code>network</code> coupling). The realized
+basic reproduction number is <code>R0 = beta * mean(infectious_period)</code>, so to target a
+given <code>R0</code> pass <code>beta = R0 / mean(infectious_period)</code>.</p></dd>
 
 
 <dt id="arg-infectious-period">infectious_period<a class="anchor" aria-label="anchor" href="#arg-infectious-period"></a></dt>
@@ -206,7 +209,7 @@ environment, which is also what the optional callbacks receive and what is retur
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
 <span class="r-in"><span><span class="va">scenario</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>population <span class="op">=</span> <span class="fl">1e5L</span>, I <span class="op">=</span> <span class="fl">100L</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu">run_model</span><span class="op">(</span><span class="va">scenario</span>, <span class="st">"SEIR"</span>, nticks <span class="op">=</span> <span class="fl">200L</span>, r0 <span class="op">=</span> <span class="fl">2.5</span>,</span></span>
+<span class="r-in"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu">run_model</span><span class="op">(</span><span class="va">scenario</span>, <span class="st">"SEIR"</span>, nticks <span class="op">=</span> <span class="fl">200L</span>, beta <span class="op">=</span> <span class="fl">2.5</span> <span class="op">/</span> <span class="fl">8</span>,  <span class="co"># R0 = beta * 8 = 2.5</span></span></span>
 <span class="r-in"><span>               infectious_period <span class="op">=</span> <span class="fl">8</span>, incubation_period <span class="op">=</span> <span class="fl">5</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="va">m</span><span class="op">$</span><span class="va">nodes</span><span class="op">$</span><span class="va">I</span><span class="op">$</span><span class="fu">values</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>

@@ -51,7 +51,7 @@ cat(sprintf("calc_capacity     (cumulative, no reclaim)   = %s slots  (%.1fx mor
 
 ## A century with annual squash
 
-No disease here (model `"SI"` with `r0 = 0`, so nothing transmits) —
+No disease here (model `"SI"` with `beta = 0`, so nothing transmits) —
 just demography. Crude, age-independent mortality is an exponential
 lifespan at the CDR hazard (a Kaplan–Meier table built from an
 exponential survival curve). Newborns enter the maternal state `M`
@@ -70,8 +70,8 @@ track <- new.env()
 track$live <- numeric(nticks); track$live[1] <- N0
 track$active <- numeric(nticks); track$active[1] <- N0
 
-m <- run_model(data.frame(population = N0), "SI", nticks = nticks, r0 = 0,
-               infectious_period = dist_constant(7),            # unused (r0 = 0)
+m <- run_model(data.frame(population = N0), "SI", nticks = nticks, beta = 0,
+               infectious_period = dist_constant(7),            # unused (beta = 0)
                capacity = cap_cdr, extra_states = "M", seed = 1L,
                init = function(model) {
                  cap <- model$people$capacity
@@ -102,7 +102,7 @@ cat(sprintf("living %s -> %s (%.1fx growth); peak active = %s of %s capacity (%.
             format(cap_cdr, big.mark = ","), 100 * max(track$active) / cap_cdr))
 ```
 
-    ## living 500,000 -> 1,915,754 (3.8x growth); peak active = 1,947,029 of 4,564,671 capacity (43% used)
+    ## living 500,000 -> 1,922,710 (3.8x growth); peak active = 1,953,987 of 4,564,671 capacity (43% used)
 
 ``` r
 
@@ -140,7 +140,7 @@ saves: without it you would have to allocate for every agent ever born.
   only `1/(1+s)` of the deaths, so larger `s` reserves more slack
   against a lower-mortality (faster-growing) realization; `s = 0` is the
   bare net-growth bound.
-- **Add disease.** Swap `"SI", r0 = 0` for a real model with
+- **Add disease.** Swap `"SI", beta = 0` for a real model with
   `incubation_period` / transmission and you have an endemic,
   demographically open simulation that can run for centuries within a
   bounded array (this is exactly what a long measles or polio run

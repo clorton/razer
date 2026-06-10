@@ -53,7 +53,7 @@ campaign <- function(model) {
 }
 
 vax <- run_model(data.frame(population = rep(pop, n_nodes), I = rep(50L, n_nodes)),
-                 "SIR", nticks = nticks, r0 = 2, infectious_period = dist_gamma(2, 4),
+                 "SIR", nticks = nticks, beta = 2 / 8, infectious_period = dist_gamma(2, 4),
                  network = matrix(0, n_nodes, n_nodes), seed = 1L,
                  extra_states = "V", step_exit = campaign)
 
@@ -98,7 +98,7 @@ wane <- function(model) {                  # the new piece: V -> S on timer expi
   move_count(model$nodes$V, model$nodes$S, w, model$tick)
 }
 vaxw <- run_model(data.frame(population = rep(pop, n_nodes), I = rep(50L, n_nodes)),
-                  "SIR", nticks = nticks, r0 = 2, infectious_period = dist_gamma(2, 4),
+                  "SIR", nticks = nticks, beta = 2 / 8, infectious_period = dist_gamma(2, 4),
                   network = matrix(0, n_nodes, n_nodes), seed = 1L, extra_states = "V",
                   step_update = wane, step_exit = campaign_timed)
 par(mfrow = c(1, 1), mar = c(4, 4.5, 2.5, 1))
@@ -142,9 +142,9 @@ release <- function(model) {
   move_count(model$nodes$Q, model$nodes$R, r, model$tick)
 }
 base <- run_model(data.frame(population = 5e5L, I = 100L), "SIR", nticks = 200L,
-                  r0 = 2.5, infectious_period = dist_gamma(2, 4), seed = 1L)
+                  beta = 2.5 / 8, infectious_period = dist_gamma(2, 4), seed = 1L)
 quar <- run_model(data.frame(population = 5e5L, I = 100L), "SIR", nticks = 200L,
-                  r0 = 2.5, infectious_period = dist_gamma(2, 4), seed = 1L,
+                  beta = 2.5 / 8, infectious_period = dist_gamma(2, 4), seed = 1L,
                   extra_states = "Q", step_update = release, step_exit = detect)
 matplot(0:199, cbind(baseline = rowSums(base$nodes$I$values()),
                      quarantine = rowSums(quar$nodes$I$values())) / 1e3,

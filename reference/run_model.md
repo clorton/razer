@@ -16,7 +16,7 @@ run_model(
   scenario,
   model,
   nticks,
-  r0,
+  beta,
   infectious_period,
   incubation_period = NULL,
   immunity_period = NULL,
@@ -52,9 +52,13 @@ run_model(
 
   Number of recorded daily states (dynamics run `nticks - 1` times).
 
-- r0:
+- beta:
 
-  Basic reproduction number; `beta = r0 / mean(infectious_period)`.
+  Per-tick transmission coefficient: the per-node force of infection is
+  `beta * I / N` (modified by `seasonality` and the `network` coupling).
+  The realized basic reproduction number is
+  `R0 = beta * mean(infectious_period)`, so to target a given `R0` pass
+  `beta = R0 / mean(infectious_period)`.
 
 - infectious_period:
 
@@ -189,7 +193,7 @@ receive and what is returned.
 ``` r
 if (FALSE) { # \dontrun{
 scenario <- data.frame(population = 1e5L, I = 100L)
-m <- run_model(scenario, "SEIR", nticks = 200L, r0 = 2.5,
+m <- run_model(scenario, "SEIR", nticks = 200L, beta = 2.5 / 8,  # R0 = beta * 8 = 2.5
                infectious_period = 8, incubation_period = 5, seed = 1)
 tail(m$nodes$I$values())
 } # }

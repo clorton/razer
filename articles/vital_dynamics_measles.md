@@ -71,7 +71,7 @@ capacity <- as.integer(calc_capacity(matrix(cbr, nticks - 1L, 1L), pop, safety_f
 # Seed near the herd-immunity threshold: immune fraction 1 - 1/R0, a small infectious spark.
 scenario <- data.frame(population = pop, R = round((1 - 1 / r0) * pop), I = 100L)
 
-m <- run_model(scenario, "SEIR", nticks = nticks, r0 = r0, infectious_period = inf_dur,
+m <- run_model(scenario, "SEIR", nticks = nticks, beta = r0 / 7, infectious_period = inf_dur,
                incubation_period = inc_dur, capacity = capacity, extra_states = "M",
                seed = 1L, progress = FALSE,
                init = function(model) {
@@ -107,7 +107,7 @@ cat(sprintf("living %s -> %s over 20 yr; cases %s; births %s; deaths %s\n",
             format(sum(m$nodes$deaths$values()), big.mark = ",")))
 ```
 
-    ## living 1,000,000 -> 1,430,070 over 20 yr; cases 641,290; births 715,584; deaths 285,514
+    ## living 1,000,000 -> 1,427,928 over 20 yr; cases 633,256; births 713,905; deaths 285,977
 
 ``` r
 

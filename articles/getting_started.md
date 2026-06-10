@@ -24,7 +24,7 @@ Here: a single well-mixed SEIR epidemic.
 ``` r
 
 scenario <- data.frame(population = 1e5L, I = 100L)
-m <- run_model(scenario, "SEIR", nticks = 200L, r0 = 2.5,
+m <- run_model(scenario, "SEIR", nticks = 200L, beta = 2.5 / 8,   # R0 = beta * 8 = 2.5
                infectious_period = 8, incubation_period = 5, seed = 1L)
 
 # $values() copies a census Column back as an (nticks x n_nodes) matrix; [, 1] is the node.
@@ -51,7 +51,7 @@ condensed).
 N <- 1e6L; nticks <- 365L; D <- dist_gamma(140, 0.05)   # mean 7-day periods
 runs <- lapply(c("SIR", "SIRS", "SEIR", "SEIRS"), function(mod) {
   args <- list(scenario = data.frame(population = N, I = 100L), model = mod,
-               nticks = nticks, r0 = 2.5, infectious_period = D, seed = 1L)
+               nticks = nticks, beta = 2.5 / 7, infectious_period = D, seed = 1L)
   if (grepl("E", mod))            args$incubation_period <- D
   if (mod %in% c("SIRS", "SEIRS")) args$immunity_period  <- 60
   do.call(run_model, args)
@@ -89,7 +89,7 @@ and without that pulse, so the difference is the intervention alone.
 
 ``` r
 
-sir_args <- list(scenario, "SIR", nticks = 200L, r0 = 2.5, infectious_period = 8, seed = 1L)
+sir_args <- list(scenario, "SIR", nticks = 200L, beta = 2.5 / 8, infectious_period = 8, seed = 1L)
 base <- do.call(run_model, sir_args)                       # no intervention
 vacc <- do.call(run_model, c(sir_args, list(extra_states = "V",
                   step_exit = function(model) {

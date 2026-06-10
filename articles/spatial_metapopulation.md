@@ -66,7 +66,7 @@ a few infectious and ~5% immune in every patch and run a daily SIR for
 
 scenario$I <- pmin(5L, scenario$population)                       # 5 infectious / patch
 scenario$R <- pmin(as.integer(0.05 * scenario$population), scenario$population - scenario$I)
-m <- run_model(scenario, "SIR", nticks = 120L, r0 = 2,
+m <- run_model(scenario, "SIR", nticks = 120L, beta = 2 / 4,   # R0 = beta * mean(gamma(2,2) = 4) = 2
                infectious_period = dist_gamma(2, 2), network = W, seed = 1L)
 
 days <- 0:119
