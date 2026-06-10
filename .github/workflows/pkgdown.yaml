@@ -48,9 +48,9 @@ jobs:
 
       - name: Drop internal pages from the published site
         # pkgdown renders every root-level .md (the internal CLAUDE.md / AGENTS.md dev
-        # notes and the writeup.md assessment) and ignores .Rbuildignore for these, so
-        # remove them before deploy.
-        run: rm -f docs/CLAUDE.html docs/AGENTS.html docs/writeup.html
+        # notes and the writeup.md / compartments.md design notes) and ignores
+        # .Rbuildignore for these, so remove them before deploy.
+        run: rm -f docs/CLAUDE.html docs/AGENTS.html docs/writeup.html docs/compartments.html
         shell: bash
 
       - name: Deploy to GitHub pages 🚀

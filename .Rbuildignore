@@ -10,6 +10,7 @@
 ^CLAUDE\.md$
 ^AGENTS\.md$
 ^writeup\.md$
+^compartments\.md$
 ^examples$
 ^vignettes/articles$
 ^NEWS\.md$
