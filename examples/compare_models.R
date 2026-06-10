@@ -6,7 +6,7 @@
 #
 #   * population     1,000,000 (single well-mixed node), 100 initially infectious
 #   * duration       365 ticks (days)
-#   * R0 / beta       2.5 / ~0.35  (run_model derives beta = R0 / mean(infectious_period))
+#   * R0 / beta       2.5 / ~0.35  (we pass beta = R0 / mean(infectious_period) directly; R0 = beta * D)
 #   * infectious      gamma(shape = 140, scale = 0.05)  -> mean 7 days (so beta*D ~= 2.5)
 #   * incubation      gamma(shape = 140, scale = 0.05)  -> mean 7 days (SEIR/SEIRS only)
 #   * immunity        60 days (SIRS/SEIRS only; not part of the shared comparison, chosen
@@ -36,7 +36,7 @@ models   <- c("SIR", "SIRS", "SEIR", "SEIRS")
 # Passing only the relevant durations avoids run_model's "ignored parameter" warnings:
 # E models get an incubation period; waning models (SIRS/SEIRS) get an immunity period.
 run_one <- function(model) {
-  args <- list(scenario = scenario, model = model, nticks = nticks, r0 = R0,
+  args <- list(scenario = scenario, model = model, nticks = nticks, beta = R0 / 7,  # beta = R0 / mean(inf_dist); dist_gamma(140, 0.05) has mean 7
                infectious_period = inf_dist, seed = 1L)
   if (grepl("E", model))             args$incubation_period <- inc_dist
   if (model %in% c("SIRS", "SEIRS")) args$immunity_period   <- imm_days

@@ -83,7 +83,7 @@ make_pulse <- function(pulse_tick, coverage) {
 }
 
 # ── run twice: baseline and with the pulse ────────────────────────────────────────
-common <- list(scenario = scenario, model = "SEIR", nticks = nticks, r0 = 2.2,
+common <- list(scenario = scenario, model = "SEIR", nticks = nticks, beta = 2.2 / 6,
                infectious_period = 6, incubation_period = 4)
 
 cat("baseline SEIR run...\n")

@@ -86,7 +86,7 @@ final-size relation `A = 1 − exp(−R0·A)` (SIR and SEIR attack fractions mat
 
 ## The `run_model()` runner
 
-- **`run_model(scenario, model, nticks, r0, …)`** wires the whole eight-model menagerie
+- **`run_model(scenario, model, nticks, beta, …)`** wires the whole eight-model menagerie
   (SI / SEI / SIS / SEIS / SIR / SEIR / SIRS / SEIRS) in the correct per-tick order, applies
   every `move_count` census delta, and returns a **`model` environment** bundling `$people`,
   `$nodes`, `$network`, `$carry`, `$states`, and the current `$tick`. It seeds any of the
@@ -101,7 +101,7 @@ final-size relation `A = 1 − exp(−R0·A)` (SIR and SEIR attack fractions mat
   `step_update` (between the step kernel and `calc_foi`) / `step_exit`. These express
   constant-population vitals, importation, growth, vaccination, and quarantine without a
   hand-wired loop.
-- **Validation & honesty** — rejects a non-finite/negative `r0` and `NA`/`Inf`/fractional/
+- **Validation & honesty** — rejects a non-finite/negative `beta` and `NA`/`Inf`/fractional/
   negative population and seed columns with clear messages, and warns when a scenario column
   or period argument is supplied that the chosen model does not use.
 

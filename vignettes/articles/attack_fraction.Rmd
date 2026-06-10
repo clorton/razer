@@ -53,13 +53,14 @@ The subtle part is discrete time. `calc_foi` computes the per-node force of infe
 the **settled** start-of-interval infectious census $I[t]$ (not the half-updated working
 column), so an agent contributes to transmission on exactly the $D$ ticks it is infectious.
 That makes the realized reproduction number the *full* $R_0 = \beta D$ — not $\beta(D-1)$,
-the off-by-one a naive "decrement-then-count" loop would produce. `run_model` derives
-$\beta = R_0 / \overline{D}$ for us, so we pass $R_0$ directly.
+the off-by-one a naive "decrement-then-count" loop would produce. `run_model` takes the
+transmission coefficient $\beta$ directly (its force of infection scales as $\beta$), so we
+set $\beta = R_0 / \overline{D}$ and pass that.
 
 ```{r one-run}
 N <- 1e5L; D <- 10L
 m <- run_model(data.frame(population = N, I = 100L), "SIR", nticks = 160L,
-               r0 = 2.5, infectious_period = D, seed = 1L)   # beta = 2.5 / 10 = 0.25
+               beta = 2.5 / D, infectious_period = D, seed = 1L)   # beta = 2.5 / 10 = 0.25
 traj <- cbind(S = m$nodes$S$values()[, 1], I = m$nodes$I$values()[, 1], R = m$nodes$R$values()[, 1])
 matplot(0:159, traj, type = "l", lty = 1, lwd = 2, col = c("#2c7fb8", "#d7301f", "#238b45"),
         xlab = "day", ylab = "agents", main = sprintf("SIR, R0 = beta*D = %.1f", 2.5))
@@ -80,7 +81,7 @@ km_attack <- function(R0) if (R0 <= 1) 0 else
 
 sim_attack <- function(R0, n = 1e5L, D = 10L, horizon = 1500L) {
   mm <- run_model(data.frame(population = n, I = 50L), "SIR", nticks = horizon,
-                  r0 = R0, infectious_period = D, seed = 1L)
+                  beta = R0 / D, infectious_period = D, seed = 1L)
   S <- mm$nodes$S$values()[, 1]; 1 - S[length(S)] / n
 }
 
@@ -109,7 +110,7 @@ final size obeying the *same* relation in $R_0 = \beta D$ (the infectious period
 
 ```{r seir}
 sim_attack_seir <- function(R0, n = 1e5L, D = 10L, De = 5L, horizon = 2000L) {
-  mm <- run_model(data.frame(population = n, I = 50L), "SEIR", nticks = horizon, r0 = R0,
+  mm <- run_model(data.frame(population = n, I = 50L), "SEIR", nticks = horizon, beta = R0 / D,
                   infectious_period = D, incubation_period = De, seed = 1L)
   S <- mm$nodes$S$values()[, 1]; 1 - S[length(S)] / n
 }

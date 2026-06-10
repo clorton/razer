@@ -66,7 +66,7 @@ capacity <- as.integer(calc_capacity(matrix(cbr, nticks - 1L, 1L), pop, safety_f
 # Seed near the herd-immunity threshold: immune fraction 1 - 1/R0, a small infectious spark.
 scenario <- data.frame(population = pop, R = round((1 - 1 / r0) * pop), I = 100L)
 
-m <- run_model(scenario, "SEIR", nticks = nticks, r0 = r0, infectious_period = inf_dur,
+m <- run_model(scenario, "SEIR", nticks = nticks, beta = r0 / 7, infectious_period = inf_dur,
                incubation_period = inc_dur, capacity = capacity, extra_states = "M",
                seed = 1L, progress = FALSE,
                init = function(model) {

@@ -32,7 +32,7 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   sched_count <- as.integer(schedule$count)
 
   m <- run_model(
-    scenario = scenario, model = "SIR", nticks = nticks, r0 = r0,
+    scenario = scenario, model = "SIR", nticks = nticks, beta = r0 / 8,  # beta = R0 / mean(inf_duration); dist_gamma(2, 4) has mean 8
     infectious_period = inf_duration, network = network, seasonality = seasonality,
     capacity = n + total_imports, seed = 1L, progress = progress,
     init = function(model) {

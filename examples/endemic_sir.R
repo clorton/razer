@@ -47,7 +47,7 @@ run_endemic_sir <- function(scenario, network, nticks, inf_duration, r0, cdr, sc
   # import_infections activates. Vital dynamics are constant-population (no growth), so only
   # the imports need the headroom.
   m <- run_model(
-    scenario = scenario, model = "SIR", nticks = nticks, r0 = r0,
+    scenario = scenario, model = "SIR", nticks = nticks, beta = r0 / 8,  # beta = R0 / mean(inf_duration); dist_gamma(2, 4) has mean 8
     infectious_period = inf_duration, network = network,
     capacity = n + total_imports, seed = 1L, progress = progress,
     init = function(model) {

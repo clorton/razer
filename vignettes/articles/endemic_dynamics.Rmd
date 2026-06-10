@@ -85,7 +85,7 @@ sched    <- expand.grid(tick = seq(0L, nticks - 2L, 30L), node = 0:1); sched$cou
 scenario <- data.frame(population = rep(pop, n_nodes), I = rep(100L, n_nodes),
                        R = rep(round(0.5 * pop), n_nodes))
 cb <- endemic_callbacks(nticks, sched)
-m <- run_model(scenario, "SIR", nticks = nticks, r0 = R0, infectious_period = dist_gamma(2, 4),
+m <- run_model(scenario, "SIR", nticks = nticks, beta = R0 / 8, infectious_period = dist_gamma(2, 4),
                network = network, capacity = sum(scenario$population) + sum(sched$count),
                seed = 1L, init = cb$init, step_exit = cb$step_exit)
 
@@ -124,7 +124,7 @@ scenario <- data.frame(population = rep(pop, n_nodes), I = rep(100L, n_nodes),
 amp  <- 0.10
 seas <- 1 + amp * sin(2 * pi * (seq_len(nticks) - 1L) / 365)        # length-nticks per-day multiplier
 cb <- endemic_callbacks(nticks, sched)
-ms <- run_model(scenario, "SIR", nticks = nticks, r0 = R0, infectious_period = dist_gamma(2, 4),
+ms <- run_model(scenario, "SIR", nticks = nticks, beta = R0 / 8, infectious_period = dist_gamma(2, 4),
                 network = network, seasonality = seas,
                 capacity = sum(scenario$population) + sum(sched$count),
                 seed = 1L, init = cb$init, step_exit = cb$step_exit)

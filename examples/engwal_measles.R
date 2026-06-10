@@ -62,7 +62,7 @@ run_measles_model <- function(scenario, network, nticks,
   # the S->E transmission (drawing the incubation timer); M->S is applied because "M" is a
   # registered extra state. Births-into-M and natural mortality are the step_exit callback.
   m <- run_model(
-    scenario = scenario, model = "SEIR", nticks = nticks, r0 = r0,
+    scenario = scenario, model = "SEIR", nticks = nticks, beta = r0 / 7,  # beta = R0 / mean(inf_duration); dist_normal(7, 1.5) has mean 7
     infectious_period = inf_duration, incubation_period = incubation_duration,
     network = network, capacity = capacity, extra_states = "M", seed = 1L, progress = progress,
     init = function(model) {

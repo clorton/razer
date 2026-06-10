@@ -22,7 +22,7 @@
 #
 #     R0 = beta * D
 #
-# (run_model derives beta = R0 / mean(infectious_period)). The deterministic final size
+# (we pass beta = R0 / mean(infectious_period) to run_model directly; R0 = beta * D). The deterministic final size
 # then satisfies the equation above; the sweep below confirms it. See simple_sir.R /
 # endemic_sir.R / engwal_measles.R for hand-wired loops that go BEYOND run_model's closed-
 # population menagerie (vital dynamics, importation, a maternal state).
@@ -42,7 +42,7 @@ D <- 10L                  # infectious period (ticks); run_model takes it as a c
 # reproducible. `$values()[, 1]` copies a census Column back as the single node's column.
 run_sir_traj <- function(n, n_seed, r0, D, nticks) {
   m <- run_model(data.frame(population = n, I = n_seed), "SIR",
-                 nticks = nticks, r0 = r0, infectious_period = D, seed = 1L)
+                 nticks = nticks, beta = r0 / D, infectious_period = D, seed = 1L)
   cbind(S = m$nodes$S$values()[, 1], I = m$nodes$I$values()[, 1], R = m$nodes$R$values()[, 1])
 }
 
@@ -52,7 +52,7 @@ run_sir_traj <- function(n, n_seed, r0, D, nticks) {
 run_to_completion_ticks <- 1500L
 final_attack_fraction <- function(n, n_seed, r0, D, nticks = run_to_completion_ticks) {
   m <- run_model(data.frame(population = n, I = n_seed), "SIR",
-                 nticks = nticks, r0 = r0, infectious_period = D, seed = 1L)
+                 nticks = nticks, beta = r0 / D, infectious_period = D, seed = 1L)
   S <- m$nodes$S$values()[, 1]
   (n - S[length(S)]) / n                  # final S is the last recorded tick
 }

@@ -9,7 +9,7 @@
 run_one <- function(model, nticks = 60L, n = 20000L, seed = 1L) {
   scenario <- data.frame(population = n, I = 50L)
   suppressWarnings(
-    run_model(scenario, model, nticks = nticks, r0 = 2.5,
+    run_model(scenario, model, nticks = nticks, beta = 2.5 / 8,
               infectious_period = 8, incubation_period = 5, immunity_period = 60, seed = seed))
 }
 
@@ -60,19 +60,19 @@ test_that("SIS returns to susceptible (no R state); SIR accumulates R", {
 
 test_that("run_model validates its inputs", {
   scen <- data.frame(population = 1000L, I = 10L)
-  expect_error(run_model(scen, "SXYZ", nticks = 10L, r0 = 2, infectious_period = 5), "must be one of")
-  expect_error(run_model(scen, "SEIR", nticks = 10L, r0 = 2, infectious_period = 5), "incubation_period")
-  expect_error(run_model(scen, "SIRS", nticks = 10L, r0 = 2, infectious_period = 5), "immunity_period")
-  expect_error(run_model(scen, "SIR", nticks = 1L, r0 = 2, infectious_period = 5), "nticks")
-  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = 2, infectious_period = 5, init = 7),
+  expect_error(run_model(scen, "SXYZ", nticks = 10L, beta = 2/5, infectious_period = 5), "must be one of")
+  expect_error(run_model(scen, "SEIR", nticks = 10L, beta = 2/5, infectious_period = 5), "incubation_period")
+  expect_error(run_model(scen, "SIRS", nticks = 10L, beta = 2/5, infectious_period = 5), "immunity_period")
+  expect_error(run_model(scen, "SIR", nticks = 1L, beta = 2/5, infectious_period = 5), "nticks")
+  expect_error(run_model(scen, "SIR", nticks = 10L, beta = 2/5, infectious_period = 5, init = 7),
                "init.*function")
-  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = -2, infectious_period = 5), "r0")
-  expect_error(run_model(scen, "SIR", nticks = 10L, r0 = NA, infectious_period = 5), "r0")
-  expect_error(run_model(data.frame(population = c(100, NA)), "SIR", nticks = 10L, r0 = 2,
+  expect_error(run_model(scen, "SIR", nticks = 10L, beta = -2, infectious_period = 5), "beta")
+  expect_error(run_model(scen, "SIR", nticks = 10L, beta = NA, infectious_period = 5), "beta")
+  expect_error(run_model(data.frame(population = c(100, NA)), "SIR", nticks = 10L, beta = 2/5,
                          infectious_period = 5), "population.*NA|NA.*population|finite")
-  expect_error(run_model(data.frame(population = 100.5), "SIR", nticks = 10L, r0 = 2,
+  expect_error(run_model(data.frame(population = 100.5), "SIR", nticks = 10L, beta = 2/5,
                          infectious_period = 5), "whole")
-  expect_error(run_model(data.frame(population = 1000L, I = NA), "SIR", nticks = 10L, r0 = 2,
+  expect_error(run_model(data.frame(population = 1000L, I = NA), "SIR", nticks = 10L, beta = 2/5,
                          infectious_period = 5), "I.*finite|finite")
 })
 
@@ -134,7 +134,7 @@ test_that("run_model fires the init and per-tick callbacks in order", {
   counters <- new.env()
   counters$enter <- 0L; counters$update <- 0L; counters$exit <- 0L
   counters$order <- character(0)
-  m <- run_model(scen, "SIR", nticks = 12L, r0 = 2, infectious_period = 6,
+  m <- run_model(scen, "SIR", nticks = 12L, beta = 2/6, infectious_period = 6,
                  init = function(model) model$nodes$inited <- TRUE,
                  step_enter  = function(model) { counters$enter  <- counters$enter  + 1L
                                                  counters$order <- c(counters$order, "enter") },
@@ -156,7 +156,7 @@ test_that("run_model seeds only states the model has (item 3)", {
   #      and those agents stay susceptible). Failure would mean states absent from the
   #      model get initialized, or present ones are skipped.
   scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
-  seir <- run_model(scen, "SEIR", nticks = 5L, r0 = 2, infectious_period = 6,
+  seir <- run_model(scen, "SEIR", nticks = 5L, beta = 2/6, infectious_period = 6,
                     incubation_period = 4, seed = 1L)
   expect_equal(seir$nodes$E$values()[1L, 1L], 30L)   # E seeded
   expect_equal(seir$nodes$I$values()[1L, 1L], 10L)
@@ -164,7 +164,7 @@ test_that("run_model seeds only states the model has (item 3)", {
   expect_equal(seir$nodes$S$values()[1L, 1L], 1000L - 10L - 30L - 5L)
 
   sir <- suppressWarnings(                            # SIR ignores the E column (warns; see below)
-    run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6, seed = 1L))
+    run_model(scen, "SIR", nticks = 5L, beta = 2/6, infectious_period = 6, seed = 1L))
   expect_null(sir$nodes$E)                            # SIR has no E census
   expect_equal(sir$nodes$S$values()[1L, 1L], 1000L - 10L - 5L)  # the 30 "E" stay S
 })
@@ -175,12 +175,12 @@ test_that("run_model warns about inputs the chosen model does not use", {
   # Then it warns (rather than silently ignoring the input) — catching typos and wrong
   #      expectations. Failure would let an ignored E column or unused period pass silently.
   scen <- data.frame(population = 1000L, I = 10L, E = 30L, R = 5L)
-  expect_warning(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6), "no E state")
+  expect_warning(run_model(scen, "SIR", nticks = 5L, beta = 2/6, infectious_period = 6), "no E state")
   expect_warning(run_model(data.frame(population = 1000L, I = 10L), "SIS",
-                           nticks = 5L, r0 = 2, infectious_period = 6, immunity_period = 30),
+                           nticks = 5L, beta = 2/6, infectious_period = 6, immunity_period = 30),
                  "immunity_period")
   expect_warning(run_model(data.frame(population = 1000L, I = 10L), "SIR",
-                           nticks = 5L, r0 = 2, infectious_period = 6, incubation_period = 4),
+                           nticks = 5L, beta = 2/6, infectious_period = 6, incubation_period = 4),
                  "incubation_period")
 })
 
@@ -190,12 +190,12 @@ test_that("run_model reserves agent-array capacity for population growth", {
   # Then the people arrays are allocated to capacity with count == n (reserved slots a
   #      callback can later activate); capacity < n is rejected. Failure would mean the
   #      closed-population allocation can't grow.
-  m <- run_model(data.frame(population = 1000L, I = 10L), "SIR", nticks = 5L, r0 = 2,
+  m <- run_model(data.frame(population = 1000L, I = 10L), "SIR", nticks = 5L, beta = 2/6,
                  infectious_period = 6, capacity = 4000L)
   expect_equal(m$people$capacity, 4000L)
   expect_equal(m$people$count, 1000L)
   expect_equal(m$people$state$length(), 4000L)          # arrays sized to capacity
-  expect_error(run_model(data.frame(population = 1000L), "SIR", nticks = 5L, r0 = 2,
+  expect_error(run_model(data.frame(population = 1000L), "SIR", nticks = 5L, beta = 2/6,
                          infectious_period = 6, capacity = 500L), "capacity")
 })
 
@@ -209,7 +209,7 @@ test_that("run_model tracks an extra M state and applies its M->S waning", {
   #      leg would otherwise cause.
   st <- laser_states()
   scen <- data.frame(population = 1000L, I = 10L)
-  m <- run_model(scen, "SIR", nticks = 20L, r0 = 2, infectious_period = 6, seed = 1L,
+  m <- run_model(scen, "SIR", nticks = 20L, beta = 2/6, infectious_period = 6, seed = 1L,
                  extra_states = "M",
                  init = function(model) {
                    s <- model$people$state$values(); s[901:1000] <- st[["M"]]; model$people$state$set(s)
@@ -224,7 +224,7 @@ test_that("run_model tracks an extra M state and applies its M->S waning", {
   expect_true(all(living == 1000L))                      # conserved (closed pop)
   expect_true(all(living == rowSums(m$nodes$N$values())))# N agrees (no within-tick vitals)
 
-  expect_error(run_model(scen, "SIR", nticks = 5L, r0 = 2, infectious_period = 6,
+  expect_error(run_model(scen, "SIR", nticks = 5L, beta = 2/6, infectious_period = 6,
                          extra_states = "I"), "states")   # can't repeat a model state
 })
 
@@ -237,7 +237,7 @@ test_that("run_model supports a user-defined vaccinated state V (no waning)", {
   #      kernels leave state V untouched), and S+I+R+V is conserved. Failure would mean a
   #      new state isn't really inert/protected, or the census desyncs.
   scen <- data.frame(population = 10000L, I = 50L)
-  m <- run_model(scen, "SIR", nticks = 30L, r0 = 2.5, infectious_period = 6, seed = 1L,
+  m <- run_model(scen, "SIR", nticks = 30L, beta = 2.5 / 6, infectious_period = 6, seed = 1L,
                  extra_states = "V",
                  step_exit = function(model) {
                    if (model$tick != 5L) return(invisible())
@@ -260,12 +260,12 @@ test_that("run_model supports a user-defined vaccinated state V (no waning)", {
 test_that("a vaccinated state V can wane back to S via step_timer_expire in step_update", {
   # Given a population vaccinated into V with a finite immunity timer, and a step_update
   #       callback running the generic step_timer_expire(V -> S) kernel each tick
-  # When run with no disease (r0 = 0) to isolate the V dynamics
+  # When run with no disease (beta = 0) to isolate the V dynamics
   # Then V fills at vaccination then drains back to S as timers expire — waning needs no new
   #      kernel and no step-kernel change, just the existing step_timer_expire. Failure would
   #      mean a user-defined state can't be given timed transitions.
   scen <- data.frame(population = 10000L, I = 0L)
-  m <- run_model(scen, "SIR", nticks = 40L, r0 = 0, infectious_period = 6, seed = 1L,
+  m <- run_model(scen, "SIR", nticks = 40L, beta = 0, infectious_period = 6, seed = 1L,
                  extra_states = "V",
                  step_exit = function(model) {           # vaccinate 4,000 at tick 2, timer 8
                    if (model$tick != 2L) return(invisible())
@@ -299,7 +299,7 @@ test_that("run_model isolates uncoupled nodes and conserves each node's populati
   #      the spatial path (per-node block seeding via `offsets`, the per-node census, and the
   #      uncoupled calc_foi); failure would mean cross-node leakage or a per-node desync.
   scen <- data.frame(population = c(5000L, 5000L), I = c(50L, 0L))
-  m <- run_model(scen, "SIR", nticks = 60L, r0 = 2.5, infectious_period = 8, seed = 1L)
+  m <- run_model(scen, "SIR", nticks = 60L, beta = 2.5 / 8, infectious_period = 8, seed = 1L)
   S <- m$nodes$S$values(); I <- m$nodes$I$values(); R <- m$nodes$R$values()
   expect_equal(ncol(S), 2L)
   expect_true(all(S + I + R == 5000L))                   # each node conserves its own pop
@@ -318,7 +318,7 @@ test_that("run_model spreads infection between nodes through the coupling networ
   #      redistribution (or the 2-D network Column wiring) is broken.
   scen <- data.frame(population = c(5000L, 5000L), I = c(50L, 0L))
   W <- matrix(0, 2, 2); W[1L, 2L] <- 0.25                # node 0 exports 25% of its FOI to node 1
-  m <- run_model(scen, "SIR", nticks = 120L, r0 = 3, infectious_period = 8, network = W, seed = 1L)
+  m <- run_model(scen, "SIR", nticks = 120L, beta = 3 / 8, infectious_period = 8, network = W, seed = 1L)
   S <- m$nodes$S$values(); I <- m$nodes$I$values(); R <- m$nodes$R$values()
   expect_true(all(S + I + R == 5000L))                   # per-node conservation holds with coupling
   expect_gt(sum(m$nodes$incidence$values()[, 2L]), 0)    # node 1 infected only via the network
@@ -328,7 +328,7 @@ test_that("run_model spreads infection between nodes through the coupling networ
 test_that("run_model grows an open population via the births kernel within reserved capacity", {
   # Given a capacity sized by calc_capacity() above the initial population, an init callback
   #       adding dob/dod Columns + a birth-rate grid, and a step_exit callback that runs the
-  #       `births` kernel each tick (newborns into the maternal state M). No disease (r0 = 0)
+  #       `births` kernel each tick (newborns into the maternal state M). No disease (beta = 0)
   #       and no mortality(), so the population only grows.
   # When run for ~4 months at a high CBR
   # Then the active agent count and the census N grow above the initial population yet stay
@@ -343,7 +343,7 @@ test_that("run_model grows an open population via the births kernel within reser
   mat_dur <- dist_normal(150, 20)                        # maternal timer ~ longer than the run
   km <- kaplan_meier_estimator(round((1 - exp(-(0:120) / 80)) * 1e6))  # long-lived life table
 
-  m <- run_model(data.frame(population = pop), "SI", nticks = nticks, r0 = 0,
+  m <- run_model(data.frame(population = pop), "SI", nticks = nticks, beta = 0,
                  infectious_period = dist_constant(7), capacity = cap,
                  extra_states = "M", seed = 1L,
                  init = function(model) {

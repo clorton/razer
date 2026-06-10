@@ -57,7 +57,10 @@
 #' @param model One of `"SI"`, `"SEI"`, `"SIS"`, `"SEIS"`, `"SIR"`, `"SEIR"`, `"SIRS"`,
 #'   `"SEIRS"` (case-insensitive).
 #' @param nticks Number of recorded daily states (dynamics run `nticks - 1` times).
-#' @param r0 Basic reproduction number; `beta = r0 / mean(infectious_period)`.
+#' @param beta Per-tick transmission coefficient: the per-node force of infection is
+#'   `beta * I / N` (modified by `seasonality` and the `network` coupling). The realized
+#'   basic reproduction number is `R0 = beta * mean(infectious_period)`, so to target a
+#'   given `R0` pass `beta = R0 / mean(infectious_period)`.
 #' @param infectious_period Infectious period in ticks (a Distribution or a number).
 #' @param incubation_period Latent/exposed period (required for the `SE*` models).
 #' @param immunity_period Waning-immunity period (required for `SIRS` / `SEIRS`).
@@ -113,12 +116,12 @@
 #' @examples
 #' \dontrun{
 #' scenario <- data.frame(population = 1e5L, I = 100L)
-#' m <- run_model(scenario, "SEIR", nticks = 200L, r0 = 2.5,
+#' m <- run_model(scenario, "SEIR", nticks = 200L, beta = 2.5 / 8,  # R0 = beta * 8 = 2.5
 #'                infectious_period = 8, incubation_period = 5, seed = 1)
 #' tail(m$nodes$I$values())
 #' }
 #' @export
-run_model <- function(scenario, model, nticks, r0, infectious_period,
+run_model <- function(scenario, model, nticks, beta, infectious_period,
                       incubation_period = NULL, immunity_period = NULL,
                       network = NULL, seasonality = 1, seed = NULL, progress = FALSE,
                       capacity = NULL, extra_states = NULL,
@@ -132,8 +135,8 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   nticks <- as.integer(nticks)
   if (length(nticks) != 1L || is.na(nticks) || nticks < 2L)
     stop("`nticks` must be an integer >= 2")
-  if (!is.numeric(r0) || length(r0) != 1L || !is.finite(r0) || r0 < 0)
-    stop("`r0` must be a single finite, non-negative number")
+  if (!is.numeric(beta) || length(beta) != 1L || !is.finite(beta) || beta < 0)
+    stop("`beta` must be a single finite, non-negative number")
   for (cb in c("init", "step_enter", "step_update", "step_exit")) {
     f <- get(cb)
     if (!is.null(f) && !is.function(f)) stop(sprintf("`%s` must be a function or NULL", cb))
@@ -196,7 +199,6 @@ run_model <- function(scenario, model, nticks, r0, infectious_period,
   inf_dist <- .as_dist(infectious_period, "infectious_period")
   inc_dist <- if (has_E) .as_dist(incubation_period, "incubation_period") else NULL
   imm_dist <- if (waning) .as_dist(immunity_period, "immunity_period") else NULL
-  beta     <- r0 / mean(inf_dist$sample_n(100000L))
 
   if (is.null(network)) network <- matrix(0, n_nodes, n_nodes)
   if (!is.matrix(network) || nrow(network) != n_nodes || ncol(network) != n_nodes)

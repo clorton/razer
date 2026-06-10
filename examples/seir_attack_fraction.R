@@ -20,7 +20,7 @@
 #
 #     R0 = beta * D
 #
-# (run_model derives beta = R0 / mean(infectious_period)). See simple_sir.R /
+# (we pass beta = R0 / mean(infectious_period) to run_model directly; R0 = beta * D). See simple_sir.R /
 # endemic_sir.R / engwal_measles.R for hand-wired loops that go beyond run_model's
 # closed-population menagerie (vital dynamics, importation, a maternal state).
 #
@@ -39,7 +39,7 @@ D  <- 10L   # infectious period in ticks
 # makes the stochastic run reproducible.
 run_seir_traj <- function(n, n_seed, r0, De, D, nticks) {
   m <- run_model(data.frame(population = n, I = n_seed), "SEIR",
-                 nticks = nticks, r0 = r0, infectious_period = D,
+                 nticks = nticks, beta = r0 / D, infectious_period = D,
                  incubation_period = De, seed = 1L)
   cbind(S = m$nodes$S$values()[, 1], E = m$nodes$E$values()[, 1],
         I = m$nodes$I$values()[, 1], R = m$nodes$R$values()[, 1])
@@ -50,7 +50,7 @@ run_seir_traj <- function(n, n_seed, r0, De, D, nticks) {
 run_to_completion_ticks <- 2000L
 final_attack_fraction <- function(n, n_seed, r0, De, D, nticks = run_to_completion_ticks) {
   m <- run_model(data.frame(population = n, I = n_seed), "SEIR",
-                 nticks = nticks, r0 = r0, infectious_period = D,
+                 nticks = nticks, beta = r0 / D, infectious_period = D,
                  incubation_period = De, seed = 1L)
   S <- m$nodes$S$values()[, 1]
   (n - S[length(S)]) / n

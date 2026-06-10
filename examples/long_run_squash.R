@@ -11,7 +11,7 @@
 # the dead slots, so the active count stays near the living count, well under capacity.
 #
 # Built on run_model(): there is no disease here, so we run the trivial model "SI" with
-# r0 = 0 (no transmission). The vital dynamics are added through run_model's callbacks:
+# beta = 0 (no transmission). The vital dynamics are added through run_model's callbacks:
 #   * `capacity` reserves the (calc_capacity_cdr) headroom births need to grow into;
 #   * `extra_states = "M"` registers the maternal-immunity state newborns enter
 #     (run_model applies the step kernel's M->S waning each tick);
@@ -66,8 +66,8 @@ track$deaths <- numeric(nticks - 1L)
 # ── run the 100-year demographic model through run_model() ──────────────────────────
 timing <- system.time(
   model <- run_model(
-    scenario = data.frame(population = N0), model = "SI", nticks = nticks, r0 = 0,
-    infectious_period = dist_constant(7),     # unused: r0 = 0 means no transmission
+    scenario = data.frame(population = N0), model = "SI", nticks = nticks, beta = 0,
+    infectious_period = dist_constant(7),     # unused: beta = 0 means no transmission
     capacity = capacity, extra_states = "M", seed = 1L, progress = TRUE,
     init = function(m) {
       cap <- m$people$capacity

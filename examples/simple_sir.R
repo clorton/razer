@@ -16,7 +16,8 @@ library(razer)
 # ── run_sir_model: build + run a spatial SIR with constant-pop vital dynamics ─────────
 # `scenario` is a data.frame with one row per patch (name, population, latitude, longitude)
 # plus optional integer `I` / `R` seed columns. `network` is the N x N coupling matrix.
-# `inf_duration` is the infectious-period Distribution. `r0` sets beta = r0 / mean(D).
+# `inf_duration` is the infectious-period Distribution. `r0` is the basic reproduction
+# number; we pass beta = r0 / mean(inf_duration) to run_model directly (R0 = beta * D).
 # `seasonality` is any values_map-broadcastable transmission modifier. `cdr` is the crude
 # death rate (annual deaths per 1,000) driving constant-population turnover; 0 disables it.
 run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonality = 1, cdr = 0) {
@@ -42,7 +43,7 @@ run_sir_model <- function(scenario, network, nticks, inf_duration, r0, seasonali
   # run_model builds the agent population from the scenario (seeding I with an infectious
   # timer and R as immune), advances the SIR kernels in the correct order, and returns the
   # `model` environment. seed = 1L makes the stochastic run reproducible.
-  m <- run_model(scenario = scenario, model = "SIR", nticks = nticks, r0 = r0,
+  m <- run_model(scenario = scenario, model = "SIR", nticks = nticks, beta = r0 / 4,  # beta = R0 / mean(inf_duration); dist_gamma(2, 2) has mean 4
                  infectious_period = inf_duration, network = network,
                  seasonality = seasonality, seed = 1L,
                  init      = if (cdr > 0) vitals_init else NULL,

@@ -56,7 +56,7 @@ sia_campaign <- function(model) {
 }
 
 # ── run ─────────────────────────────────────────────────────────────────────────────
-m <- run_model(scenario, model = "SIR", nticks = nticks, r0 = r0,
+m <- run_model(scenario, model = "SIR", nticks = nticks, beta = r0 / 8,  # beta = R0 / mean(inf_duration); dist_gamma(2, 4) has mean 8
                infectious_period = inf_duration, network = network, seed = 1L,
                extra_states = "V", step_exit = sia_campaign)
 
