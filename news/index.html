@@ -68,7 +68,7 @@
 <li>
 <strong>Realistic populations</strong> — <code>AliasedDistribution</code> / <code>aliased_distribution</code> (Walker’s alias method, O(1) per draw) sample ages from a pyramid; <code>KaplanMeierEstimator</code> / <code>kaplan_meier_estimator</code> draw a date of death conditioned on current age; <code>load_pyramid_csv</code> / <code>sample_pyramid_ages</code> wrap the laser.core pyramid format.</li>
 <li>
-<strong>Sizing the agent array</strong> — <code>calc_capacity</code> bounds the cumulative number ever born (use when slots are never reclaimed); <code>calc_capacity_cdr</code> bounds the <strong>peak living</strong> population for runs that reclaim dead slots with <code>squash</code>, so a century-long open run needs far fewer slots than one per agent ever born.</li>
+<strong>Sizing the agent array</strong> — <code>calc_capacity</code> bounds the cumulative number ever born (use when slots are never reclaimed); <code>calc_capacity_cdr</code> bounds the <strong>peak living</strong> population for runs that reclaim dead slots with <code>squash</code>, so a century-long open run needs far fewer slots than one per agent ever born. <code>calc_capacity_cdr</code> is floored at the initial population (a net-shrinking projection can’t report below the starting count), and both functions now reject <code>NA</code> / non-finite rates and populations with a clear message.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="spatial-coupling-development-version">Spatial coupling<a class="anchor" aria-label="anchor" href="#spatial-coupling-development-version"></a></h3>

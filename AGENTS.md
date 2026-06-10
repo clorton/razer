@@ -151,8 +151,6 @@ signal to write a kernel instead. See the extending article §3.
   `Rscript`, draw to the Plots pane when
   [`source()`](https://rdrr.io/r/base/source.html)d in RStudio) and
   should be **liberal with informative plots**.
-- **Ignore `worldwide/`** — it is a separate, gitignored project; never
-  read it as Razer source, never modify or commit it.
 - Internal root docs (`CLAUDE.md`, `AGENTS.md`, `writeup.md`) are
   `.Rbuildignore`d and dropped from the published pkgdown site in
   `.github/workflows/pkgdown.yaml`. If you add another, do the same.
@@ -180,9 +178,9 @@ signal to write a kernel instead. See the extending article §3.
   ⚡️ perf, 🐛 fix, 🚧 wip, 🔧 infra, 🚚 rename, 🦺 validation
   (concatenate if a commit does several). If you are an AI agent, add a
   `Co-Authored-By:` trailer identifying the assistant.
-- **Stage explicit paths, not `git add -A`** (avoids sweeping in
-  `worldwide/` or stray artifacts). Commit only when asked; **do not
-  push** — the human pushes.
+- **Stage explicit paths, not `git add -A`** (avoids sweeping in build
+  artifacts or stray files). Commit only when asked; **do not push** —
+  the human pushes.
 
 ### Before you finish, confirm
 

@@ -24,5 +24,5 @@ A `Distribution` object.
 ``` r
 d <- dist_exp(0.5)   # mean 2
 d$sample_one()
-#> [1] 1.354952
+#> [1] 3.741874
 ```

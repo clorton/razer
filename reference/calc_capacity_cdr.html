@@ -81,7 +81,9 @@ controlling how much the death rate is underestimated. <code>0</code> credits de
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A numeric vector of length <code>nnodes</code> of estimated capacities (whole-valued
-doubles). A <code>warning</code> is issued if any estimate exceeds <code>.Machine$integer.max</code>.</p>
+doubles), each at least the node's <code>initial_pop</code> (a net-shrinking projection cannot
+report below the starting population, whose peak living count occurs at <code>t = 0</code>). A
+<code>warning</code> is issued if any estimate exceeds <code>.Machine$integer.max</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -97,7 +99,8 @@ births term enters — that would defeat the point of reclaiming slots.)</p>
     <h2 id="errors">Errors<a class="anchor" aria-label="anchor" href="#errors"></a></h2>
 
 
-<p>Stops if either rate grid is not 2-D, if their shapes or node counts disagree with each
+<p>Stops if either rate grid is not 2-D or holds NA / non-finite values, if their shapes or
+node counts disagree with each
 other or with <code>length(initial_pop)</code>, if any population is negative, if any rate is
 outside <code>[0, 100]</code>, or if <code>safety_factor</code> is outside <code>[0, 6]</code>.</p>
     </div>

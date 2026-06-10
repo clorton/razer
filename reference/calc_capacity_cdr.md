@@ -48,8 +48,10 @@ calc_capacity_cdr(birthrates, deathrates, initial_pop, safety_factor = 1)
 ## Value
 
 A numeric vector of length `nnodes` of estimated capacities
-(whole-valued doubles). A `warning` is issued if any estimate exceeds
-`.Machine$integer.max`.
+(whole-valued doubles), each at least the node's `initial_pop` (a
+net-shrinking projection cannot report below the starting population,
+whose peak living count occurs at `t = 0`). A `warning` is issued if any
+estimate exceeds `.Machine$integer.max`.
 
 ## Details
 
@@ -68,10 +70,10 @@ slots.)
 
 ## Errors
 
-Stops if either rate grid is not 2-D, if their shapes or node counts
-disagree with each other or with `length(initial_pop)`, if any
-population is negative, if any rate is outside `[0, 100]`, or if
-`safety_factor` is outside `[0, 6]`.
+Stops if either rate grid is not 2-D or holds NA / non-finite values, if
+their shapes or node counts disagree with each other or with
+`length(initial_pop)`, if any population is negative, if any rate is
+outside `[0, 100]`, or if `safety_factor` is outside `[0, 6]`.
 
 ## See also
 

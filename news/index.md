@@ -99,6 +99,10 @@ SEIR attack fractions match to ~1e-3).
   `calc_capacity_cdr` bounds the **peak living** population for runs
   that reclaim dead slots with `squash`, so a century-long open run
   needs far fewer slots than one per agent ever born.
+  `calc_capacity_cdr` is floored at the initial population (a
+  net-shrinking projection can’t report below the starting count), and
+  both functions now reject `NA` / non-finite rates and populations with
+  a clear message.
 
 ### Spatial coupling
 

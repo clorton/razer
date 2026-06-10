@@ -24,5 +24,5 @@ A `Distribution` object.
 ``` r
 d <- dist_poisson(5)   # mean 5, integer-valued draws
 d$sample_one()
-#> [1] 5
+#> [1] 4
 ```
